@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/", label: "Console" },
   { href: "/flows", label: "Flows" },
   { href: "/prompts", label: "Prompts" },
+  { href: "/deployments", label: "Deployments" },
 ];
 
 export default function TopNav() {

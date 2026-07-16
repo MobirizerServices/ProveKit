@@ -116,6 +116,14 @@ export const api = {
   continueFlowStream(id: number, opts: { run_id: string; node_id: string; breakpoints?: string[]; step?: boolean }, onEvent: (e: FlowEvent) => void, signal?: AbortSignal) {
     return this._sseStream(`/api/flows/${id}/continue/stream`, { run_id: opts.run_id, node_id: opts.node_id, breakpoints: opts.breakpoints ?? [], step: !!opts.step }, onEvent, signal);
   },
+  // deployments
+  deployments: () => j<any[]>("/api/deployments"),
+  createDeployment: (flow_id: number) => j<any>("/api/deployments", { method: "POST", body: JSON.stringify({ flow_id }) }),
+  getDeployment: (slug: string) => j<any>(`/api/deployments/${slug}`),
+  deploymentRuns: (slug: string) => j<any[]>(`/api/deployments/${slug}/runs`),
+  deploymentStats: (slug: string) => j<any>(`/api/deployments/${slug}/stats`),
+  deactivateDeployment: (slug: string) => j(`/api/deployments/${slug}/deactivate`, { method: "POST" }),
+  rollbackDeployment: (slug: string, version: number) => j<any>(`/api/deployments/${slug}/rollback`, { method: "POST", body: JSON.stringify({ version }) }),
   datasets: () => j<SavedDataset[]>("/api/datasets"),
   createDataset: (name: string, rows: any[]) => j<SavedDataset>("/api/datasets", { method: "POST", body: JSON.stringify({ name, rows }) }),
   deleteDataset: (id: number) => j(`/api/datasets/${id}`, { method: "DELETE" }),

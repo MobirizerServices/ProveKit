@@ -12,6 +12,7 @@ import TopNav from "@/components/TopNav";
 import { FlowNode } from "@/components/flow/FlowNode";
 import { FlowEdge } from "@/components/flow/FlowEdge";
 import NodeInspector from "@/components/flow/NodeInspector";
+import DeployModal from "@/components/DeployModal";
 
 const nodeTypes = { fnode: FlowNode };
 const edgeTypes = { add: FlowEdge };
@@ -71,6 +72,7 @@ function Editor() {
   const [running, setRunning] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [tplPicker, setTplPicker] = useState(false);
+  const [deployOpen, setDeployOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
   const nodesRef = useRef<RFNode[]>([]); nodesRef.current = rfNodes;
@@ -265,6 +267,7 @@ function Editor() {
             <span style={{ marginLeft: "auto" }} />
             {dirty && <span className="pr-dirty">● unsaved</span>}
             <button className="btn btn-sm" title="Save (⌘S)" disabled={!dirty} onClick={save}>Save</button>
+            {activeId && <button className="btn btn-sm" title="Deploy as an API endpoint" onClick={async () => { if (dirty) await save().catch(() => {}); setDeployOpen(true); }}>▲ Deploy</button>}
           </div>
           <div className="rf-wrap">
             <ReactFlow
@@ -308,6 +311,7 @@ function Editor() {
           </div>
         </div>
       )}
+      {deployOpen && activeId && <DeployModal flowId={activeId} flowName={flows.find((f) => f.id === activeId)?.name || "flow"} onClose={() => setDeployOpen(false)} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

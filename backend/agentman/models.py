@@ -152,11 +152,29 @@ class Dataset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class Deployment(Base):
+    """A published flow snapshot, callable as a hosted endpoint. Rows share a `slug`
+    across versions; exactly one version per slug is active. The graph is frozen in
+    `snapshot` at deploy time so editing the flow never changes production."""
+    __tablename__ = "deployments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    flow_id: Mapped[int | None] = mapped_column(ForeignKey("flows.id"), nullable=True)
+    slug: Mapped[str] = mapped_column(String(80), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    name: Mapped[str] = mapped_column(String(160), default="")
+    snapshot: Mapped[dict] = mapped_column(JSON, default=dict)  # {nodes, edges}
+    api_key_hash: Mapped[str] = mapped_column(String(128))
+    active: Mapped[bool] = mapped_column(default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Run(Base):
     """A single execution + its result (for history/replay)."""
     __tablename__ = "runs"
     id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int] = _ws_fk()
+    deployment_id: Mapped[int | None] = mapped_column(ForeignKey("deployments.id"), index=True, nullable=True)
     type: Mapped[str] = mapped_column(String(16))
     label: Mapped[str] = mapped_column(String(200), default="")
     request: Mapped[dict] = mapped_column(JSON, default=dict)   # the sent request

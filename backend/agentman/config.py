@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # required for any other database.
     secret_key: str = ""
 
+    # Optional OTLP/HTTP collector to mirror AgentMan's own runs as gen_ai spans.
+    otel_export_url: str = ""
+
     # Optional: seed a Magari example connection set on first run.
     seed_examples: bool = True
     magari_backend_url: str = "http://127.0.0.1:8000"

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .database import SessionLocal, init_db
 from .models import Connection, Flow, Prompt
-from .routers import connections, flows, library, prompts, run
+from .routers import connections, flows, library, prompts, run, traces
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -152,6 +152,7 @@ app.include_router(library.router)
 app.include_router(prompts.router)
 app.include_router(flows.router)
 app.include_router(run.router)
+app.include_router(traces.router)
 
 
 @app.get("/")

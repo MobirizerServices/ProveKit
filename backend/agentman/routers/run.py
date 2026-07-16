@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..database import SessionLocal, get_db
 from ..models import Environment, Run, iso_utc
 from ..services import assertions as assertion_engine
-from ..services import dispatch
+from ..services import dispatch, otel
 from ..services.masking import mask_headers
 
 router = APIRouter(prefix="/api", tags=["run"])
@@ -90,9 +90,10 @@ def _persist(db, req, rd, asserts):
     if asserts:
         result["assertions"] = asserts
     try:
-        db.add(Run(type=req.get("type", "?"), label=_label(req), request=_sanitize(req),
-                   result=result, status=rd["status"], duration_ms=rd["duration_ms"], error=rd["error"]))
-        db.commit()
+        row = Run(type=req.get("type", "?"), label=_label(req), request=_sanitize(req),
+                  result=result, status=rd["status"], duration_ms=rd["duration_ms"], error=rd["error"])
+        db.add(row); db.commit()
+        otel.emit_run(row)  # best-effort mirror to an OTLP collector if configured
     except Exception:
         db.rollback()
 

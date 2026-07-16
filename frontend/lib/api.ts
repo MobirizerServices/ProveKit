@@ -33,7 +33,7 @@ export interface FlowEvent {
 
 async function j<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" }, ...opts,
+    credentials: "include", headers: { "Content-Type": "application/json" }, ...opts,
   });
   if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 300)}`);
   return res.status === 204 ? (undefined as T) : res.json();
@@ -93,7 +93,7 @@ export const api = {
   updateFlow: (id: number, f: Partial<FlowT>) => j<FlowT>(`/api/flows/${id}`, { method: "PUT", body: JSON.stringify(f) }),
   deleteFlow: (id: number) => j(`/api/flows/${id}`, { method: "DELETE" }),
   async _sseStream(path: string, body: any, onEvent: (e: any) => void, signal?: AbortSignal) {
-    const res = await fetch(`${BASE}${path}`, { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(`${BASE}${path}`, { method: "POST", credentials: "include", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok || !res.body) throw new Error(`stream failed (${res.status})`);
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
     try {
@@ -119,7 +119,7 @@ export const api = {
 
   async runStream(request: any, onEvent: (e: RunEvent) => void, signal?: AbortSignal): Promise<void> {
     const res = await fetch(`${BASE}/api/run/stream`, {
-      method: "POST", signal,
+      method: "POST", credentials: "include", signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ request }),
     });

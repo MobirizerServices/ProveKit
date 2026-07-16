@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .database import SessionLocal, init_db
 from .models import Connection, Flow, Prompt
-from .routers import connections, flows, library, prompts, run, traces
+from .routers import auth, connections, flows, library, prompts, run, traces
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -143,10 +143,12 @@ app = FastAPI(title="AgentMan", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
+    allow_credentials=True,  # session cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(connections.router)
 app.include_router(library.router)
 app.include_router(prompts.router)

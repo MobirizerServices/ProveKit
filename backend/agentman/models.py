@@ -38,6 +38,17 @@ class SealedJSON(TypeDecorator):
         return unseal_config(value) if isinstance(value, dict) else value
 
 
+class User(Base):
+    """An account. password_hash is null for OAuth-only users."""
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True)
+    name: Mapped[str] = mapped_column(String(160), default="")
+    password_hash: Mapped[str] = mapped_column(String(255), default="")
+    auth_provider: Mapped[str] = mapped_column(String(32), default="password")  # password | github | local
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Connection(Base):
     """A provider you can run against. kind = llm | mcp | agent."""
     __tablename__ = "connections"

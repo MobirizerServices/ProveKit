@@ -9,6 +9,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY agentman ./agentman
+COPY alembic.ini .
+COPY migrations ./migrations
 
 # Writable data dir for the SQLite db (mount a volume here).
 RUN useradd --create-home --uid 10001 appuser && mkdir /data && chown appuser /data

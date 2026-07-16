@@ -2,19 +2,35 @@
 #   OPENAI_API_KEY=sk-… docker compose up --build
 # Then open http://localhost:3001
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: agentman
+      POSTGRES_PASSWORD: agentman
+      POSTGRES_DB: agentman
+    volumes:
+      - agentman-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentman"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
     ports:
       - "8100:8100"
     environment:
-      DATABASE_URL: "sqlite:////data/agentman.db"
+      DATABASE_URL: "postgresql+psycopg://agentman:agentman@db:5432/agentman"
+      SECRET_KEY: "${SECRET_KEY:-dev-only-change-me}"
       CORS_ORIGINS: "http://localhost:3001"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       # In-container, reach host services (e.g. Magari's MCP/backend) via host.docker.internal.
       MAGARI_MCP_URL: "http://host.docker.internal:8765/mcp"
       MAGARI_BACKEND_URL: "http://host.docker.internal:8000"
-    volumes:
-      - agentman-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -29,4 +45,4 @@ services:
       - backend
 
 volumes:
-  agentman-data:
+  agentman-pg:

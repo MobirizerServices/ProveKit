@@ -24,4 +24,18 @@ def get_db():
 
 def init_db() -> None:
     from . import models  # noqa: F401
-    Base.metadata.create_all(bind=engine)
+    if settings.database_url.startswith("sqlite"):
+        # Local/dev/tests: create_all is idempotent and needs no migration tooling.
+        Base.metadata.create_all(bind=engine)
+    else:
+        # Postgres/prod: schema is owned by Alembic migrations.
+        _run_migrations()
+
+
+def _run_migrations() -> None:
+    import os
+
+    from alembic import command
+    from alembic.config import Config
+    cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+    command.upgrade(cfg, "head")

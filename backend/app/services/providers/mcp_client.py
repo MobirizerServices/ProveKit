@@ -8,6 +8,8 @@ import threading
 
 import httpx
 
+from ..netguard import guard_url
+
 _ACCEPT = "application/json, text/event-stream"
 _lock = threading.Lock()
 _id = 0
@@ -36,6 +38,7 @@ class MCPSession:
     """A short-lived MCP session against one server URL."""
 
     def __init__(self, url: str, headers: dict | None = None, timeout: float = 30):
+        guard_url(url)
         self.url = url.rstrip("/")
         self.headers = {"Content-Type": "application/json", "Accept": _ACCEPT, **(headers or {})}
         self.timeout = timeout

@@ -1,8 +1,5 @@
 """Connections (providers): llm | mcp | agent. Secrets are masked in responses and
 preserved on update when the client sends a masked/empty key."""
-import ipaddress
-from urllib.parse import urlparse
-
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -10,25 +7,19 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Connection
+from ..services.netguard import BlockedURL, guard_url
 from ..services.providers.mcp_client import MCPSession
 
 # Header keys whose values are secrets and must be masked in API responses.
 _SECRET_HEADERS = {"authorization", "x-api-key", "api-key", "cookie", "x-auth-token", "proxy-authorization"}
-_BLOCKED_HOSTS = {"metadata", "metadata.google.internal"}
 
 
 def _guard_url(url: str) -> None:
-    """Reject server-side requests to the cloud-metadata / link-local range (SSRF). This is a
-    local-dev tool that legitimately targets localhost & private IPs, so those stay allowed —
-    only the 169.254.0.0/16 link-local block (incl. 169.254.169.254 metadata) is refused."""
-    host = (urlparse(url).hostname or "").lower()
-    if host in _BLOCKED_HOSTS:
-        raise HTTPException(400, "Target host is not allowed")
+    """Shared SSRF guard (services.netguard), surfaced as a 400 for router callers."""
     try:
-        if ipaddress.ip_address(host).is_link_local:
-            raise HTTPException(400, "Link-local / metadata addresses are not allowed")
-    except ValueError:
-        pass  # not a literal IP (hostname / localhost) — allowed
+        guard_url(url)
+    except BlockedURL as exc:
+        raise HTTPException(400, str(exc))
 
 
 def _get_path(obj, path: str):

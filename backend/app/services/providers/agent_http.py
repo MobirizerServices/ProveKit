@@ -7,10 +7,13 @@ import json
 
 import httpx
 
+from ..netguard import guard_url
+
 
 def run(*, base_url: str, method: str, path: str, headers: dict | None = None,
         body=None, stream: bool = False, timeout: float = 120):
     url = base_url.rstrip("/") + "/" + path.lstrip("/") if path else base_url.rstrip("/")
+    guard_url(url)
     method = (method or "POST").upper()
     hdrs = {"Accept": "application/json, text/event-stream", **(headers or {})}
 

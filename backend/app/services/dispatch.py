@@ -82,9 +82,17 @@ def run(db, req: dict, variables: dict | None = None):
 def _run_prompt(db, req, variables):
     conn = _conn(db, req.get("connection_id"))
     cfg = (conn.config or {}) if conn else {}
-    provider = req.get("provider") or cfg.get("provider") or "openai"
-    base_url = req.get("base_url") or cfg.get("base_url") or ""
-    api_key = req.get("api_key") or cfg.get("api_key") or ""
+    if conn:
+        # A stored connection is authoritative for destination AND credentials.
+        # Honoring per-request base_url/api_key here would let any caller point the
+        # stored key at their own host (credential exfiltration).
+        provider = cfg.get("provider") or "openai"
+        base_url = cfg.get("base_url") or ""
+        api_key = cfg.get("api_key") or ""
+    else:
+        provider = req.get("provider") or "openai"
+        base_url = req.get("base_url") or ""
+        api_key = req.get("api_key") or ""
     model = req.get("model") or (cfg.get("models") or ["gpt-4o-mini"])[0]
     system = interpolate(req.get("system"), variables)
 
@@ -110,7 +118,9 @@ def _run_prompt(db, req, variables):
 
 def _run_tool(db, req, variables):
     conn = _conn(db, req.get("connection_id"))
-    url = req.get("url") or ((conn.config or {}).get("url") if conn else None)
+    # Connection wins over a per-request url: stored headers may carry auth tokens,
+    # and they must only ever be sent to the connection's own server.
+    url = ((conn.config or {}).get("url") if conn else None) or (req.get("url") if not conn else None)
     if not url:
         raise ValueError("tool run needs an MCP connection (or a url)")
     name = req.get("tool")
@@ -125,7 +135,8 @@ def _run_tool(db, req, variables):
 
 def _run_agent(db, req, variables):
     conn = _conn(db, req.get("connection_id"))
-    base = req.get("base_url") or ((conn.config or {}).get("base_url") if conn else None)
+    # Same rule as prompts/tools: stored auth headers travel only to the stored base_url.
+    base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
     if not base:
         raise ValueError("agent run needs an agent connection (or base_url)")
     headers = {**((conn.config or {}).get("headers") or {} if conn else {}), **(req.get("headers") or {})}

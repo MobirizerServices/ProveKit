@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./agentman.db"
     cors_origins: str = "http://localhost:3001,http://localhost:3000"
 
+    # Hosted mode: stricter outbound-URL guarding (block private/internal ranges).
+    # Leave false for local single-user use.
+    hosted: bool = False
+
     # Optional: seed a Magari example connection set on first run.
     seed_examples: bool = True
     magari_backend_url: str = "http://127.0.0.1:8000"

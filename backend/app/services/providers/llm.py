@@ -9,6 +9,8 @@ import time
 
 import httpx
 
+from ..netguard import guard_url
+
 
 def _mock_reply(user: str, system: str | None) -> str:
     """Canned but context-aware reply for the keyless demo agent."""
@@ -73,7 +75,9 @@ def stream(*, provider: str, base_url: str, api_key: str, model: str,
 
     if provider == "mock":
         yield from _stream_mock(system, messages)
-    elif provider == "anthropic":
+        return
+    guard_url(base)
+    if provider == "anthropic":
         yield from _stream_anthropic(base, api_key, model, system, messages, temperature, max_tokens)
     else:
         yield from _stream_openai(base, api_key, model, system, messages, temperature, max_tokens)

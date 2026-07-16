@@ -40,12 +40,13 @@ export default function ConnectionModal({ initial, onSave, onDelete, onClose, on
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState((cfg.models || []).join(", "));
   const [url, setUrl] = useState(cfg.url || "");
+  const [spec, setSpec] = useState(cfg.spec || "auto");
   const [headers, setHeaders] = useState(JSON.stringify(cfg.headers || {}, null, 2));
 
   const save = () => {
     let config: any = {};
     if (kind === "llm") config = { provider, base_url: baseUrl, api_key: apiKey, models: models.split(",").map((m: string) => m.trim()).filter(Boolean) };
-    else if (kind === "mcp") config = { url };
+    else if (kind === "mcp") config = { ...cfg, url, spec };
     else config = { base_url: baseUrl, headers: safeJson(headers) };
     onSave({ id: initial?.id, name, kind, config });
   };
@@ -73,7 +74,13 @@ export default function ConnectionModal({ initial, onSave, onDelete, onClose, on
             </>
           )}
           {kind === "mcp" && (
-            <div className="field"><label>MCP server URL</label><input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://127.0.0.1:8765/mcp" /></div>
+            <>
+              <div className="field"><label>MCP server URL</label><input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://127.0.0.1:8765/mcp" /></div>
+              <div className="field">
+                <label>Spec generation <span className="hint">test against either MCP transport generation</span></label>
+                <div className="seg">{[["auto", "auto-detect"], ["2025-11-25", "stateful"], ["2026-07-28", "stateless"]].map(([v, l]) => <button key={v} className={spec === v ? "on" : ""} onClick={() => setSpec(v)}>{l}</button>)}</div>
+              </div>
+            </>
           )}
           {kind === "agent" && (
             <>

@@ -1,9 +1,16 @@
-"""Generic MCP client — speaks MCP (JSON-RPC 2.0) over the Streamable-HTTP transport to
-ANY MCP server URL. Handles both plain-JSON and SSE responses, and the initialize +
-session-id handshake for stateful servers (also works with stateless ones)."""
+"""Generic MCP client — the best test client for Model Context Protocol servers.
+
+Transports:      Streamable HTTP  ·  stdio (spawn a local server process)
+Spec generations: stateful 2025-11-25 (initialize handshake + Mcp-Session-Id)
+                  stateless 2026-07-28 (no session, server/discover) · auto-detect
+Auth:            static bearer (via headers) · OAuth 2.1 client-credentials grant;
+                 a 401 surfaces the resource-metadata hint so the user knows what's needed.
+Discovery:       tools · resources · prompts, all cursor-paginated.
+"""
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 
 import httpx
@@ -11,6 +18,8 @@ import httpx
 from ..netguard import guard_url
 
 _ACCEPT = "application/json, text/event-stream"
+_STATEFUL = "2025-11-25"
+_STATELESS = "2026-07-28"
 _lock = threading.Lock()
 _id = 0
 
@@ -22,7 +31,100 @@ def _next_id() -> int:
         return _id
 
 
-def _parse(resp: httpx.Response) -> dict:
+class MCPError(RuntimeError):
+    pass
+
+
+def _fetch_oauth_token(oauth: dict) -> str:
+    """Exchange client credentials for a bearer token (OAuth 2.1 client_credentials).
+    Interactive auth-code/PKCE flows need a browser and are out of scope here."""
+    token_url = oauth.get("token_url")
+    if not token_url:
+        raise MCPError("oauth config needs a token_url")
+    guard_url(token_url)
+    data = {"grant_type": "client_credentials",
+            "client_id": oauth.get("client_id", ""),
+            "client_secret": oauth.get("client_secret", "")}
+    if oauth.get("scope"):
+        data["scope"] = oauth["scope"]
+    if oauth.get("resource"):  # RFC 8707 resource indicator
+        data["resource"] = oauth["resource"]
+    r = httpx.post(token_url, data=data, timeout=30)
+    r.raise_for_status()
+    tok = r.json().get("access_token")
+    if not tok:
+        raise MCPError("no access_token in the OAuth token response")
+    return tok
+
+
+class _HTTPTransport:
+    def __init__(self, url, headers, timeout, stateful: bool):
+        guard_url(url)
+        self.url = url.rstrip("/")
+        self.headers = {"Content-Type": "application/json", "Accept": _ACCEPT, **(headers or {})}
+        self.stateful = stateful
+        self.session_id: str | None = None
+        self._client = httpx.Client(timeout=timeout)
+
+    def _hdrs(self):
+        h = dict(self.headers)
+        if self.session_id:
+            h["Mcp-Session-Id"] = self.session_id
+        return h
+
+    def request(self, payload) -> dict:
+        resp = self._client.post(self.url, json=payload, headers=self._hdrs())
+        sid = resp.headers.get("mcp-session-id")
+        if sid:
+            self.session_id = sid
+        if resp.status_code == 401:
+            meta = resp.headers.get("www-authenticate", "")
+            raise MCPError(f"401 Unauthorized — server requires OAuth. {meta}".strip())
+        resp.raise_for_status()
+        return _parse_http(resp)
+
+    def notify(self, payload) -> None:
+        self._client.post(self.url, json=payload, headers=self._hdrs())
+
+    def close(self):
+        self._client.close()
+
+
+class _StdioTransport:
+    """Newline-delimited JSON-RPC over a spawned process's stdin/stdout."""
+    def __init__(self, command, args, env, timeout):
+        self.proc = subprocess.Popen(
+            [command, *(args or [])], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env)
+
+    def request(self, payload) -> dict:
+        assert self.proc.stdin and self.proc.stdout
+        self.proc.stdin.write(json.dumps(payload) + "\n")
+        self.proc.stdin.flush()
+        want = payload.get("id")
+        for line in self.proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            msg = json.loads(line)
+            if msg.get("id") == want:
+                return msg
+        raise MCPError("stdio server closed before replying")
+
+    def notify(self, payload) -> None:
+        assert self.proc.stdin
+        self.proc.stdin.write(json.dumps(payload) + "\n")
+        self.proc.stdin.flush()
+
+    def close(self):
+        try:
+            self.proc.terminate()
+            self.proc.wait(timeout=5)
+        except Exception:
+            self.proc.kill()
+
+
+def _parse_http(resp: httpx.Response) -> dict:
     ctype = resp.headers.get("content-type", "")
     if ctype.startswith("text/event-stream"):
         for line in resp.text.splitlines():
@@ -30,72 +132,100 @@ def _parse(resp: httpx.Response) -> dict:
                 chunk = json.loads(line[5:].strip())
                 if isinstance(chunk, dict) and ("result" in chunk or "error" in chunk):
                     return chunk
-        raise RuntimeError("no JSON-RPC message in SSE stream")
+        raise MCPError("no JSON-RPC message in SSE stream")
     return resp.json()
 
 
 class MCPSession:
-    """A short-lived MCP session against one server URL."""
+    """A short-lived MCP session over one transport.
 
-    def __init__(self, url: str, headers: dict | None = None, timeout: float = 30):
-        guard_url(url)
-        self.url = url.rstrip("/")
-        self.headers = {"Content-Type": "application/json", "Accept": _ACCEPT, **(headers or {})}
-        self.timeout = timeout
-        self.session_id: str | None = None
+    HTTP:  MCPSession(url, headers=..., spec="auto"|"2025-11-25"|"2026-07-28", oauth=...)
+    stdio: MCPSession(command="python", args=["server.py"], env=...)
+    """
 
-    def _rpc(self, client: httpx.Client, method: str, params: dict | None = None) -> dict:
-        headers = dict(self.headers)
-        if self.session_id:
-            headers["Mcp-Session-Id"] = self.session_id
+    def __init__(self, url: str | None = None, headers: dict | None = None, timeout: float = 30, *,
+                 command: str | None = None, args: list | None = None, env: dict | None = None,
+                 spec: str = "auto", oauth: dict | None = None):
+        headers = dict(headers or {})
+        if oauth:
+            headers.setdefault("Authorization", f"Bearer {_fetch_oauth_token(oauth)}")
+        self.spec = spec
+        self._stdio = command is not None
+        if self._stdio:
+            self._t = _StdioTransport(command, args, env, timeout)
+            self._stateful = True  # stdio is always a stateful session
+        else:
+            if not url:
+                raise MCPError("MCP session needs a url (HTTP) or command (stdio)")
+            self._stateful = spec != _STATELESS
+            self._t = _HTTPTransport(url, headers, timeout, self._stateful)
+
+    def _rpc(self, method: str, params: dict | None = None) -> dict:
         payload = {"jsonrpc": "2.0", "id": _next_id(), "method": method, "params": params or {}}
-        resp = client.post(self.url, json=payload, headers=headers)
-        sid = resp.headers.get("mcp-session-id")
-        if sid:
-            self.session_id = sid
-        resp.raise_for_status()
-        data = _parse(resp)
+        data = self._t.request(payload)
         if "error" in data:
-            raise RuntimeError(str(data["error"].get("message", "MCP error")))
+            raise MCPError(str(data["error"].get("message", "MCP error")))
         return data.get("result", {})
 
-    def _notify(self, client: httpx.Client, method: str) -> None:
-        headers = dict(self.headers)
-        if self.session_id:
-            headers["Mcp-Session-Id"] = self.session_id
-        client.post(self.url, json={"jsonrpc": "2.0", "method": method, "params": {}}, headers=headers)
-
-    def _init(self, client: httpx.Client) -> None:
+    def _init(self) -> None:
+        if not self._stateful:
+            return  # stateless generation: no handshake, no session id
         try:
-            self._rpc(client, "initialize", {
-                "protocolVersion": "2025-06-18",
+            self._rpc("initialize", {
+                "protocolVersion": _STATEFUL if self.spec == "auto" else self.spec,
                 "capabilities": {},
                 "clientInfo": {"name": "agentman", "version": "0.1.0"},
             })
-            self._notify(client, "notifications/initialized")
+            self._t.notify({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
         except Exception:
-            # Stateless servers may reject/ignore initialize — proceed anyway.
-            pass
+            # auto: a server that rejects initialize is treated as stateless.
+            if self.spec == "auto":
+                self._stateful = False
+
+    def _paginate(self, method: str, key: str) -> list[dict]:
+        items, cursor = [], None
+        while True:
+            res = self._rpc(method, {"cursor": cursor} if cursor else {})
+            items += res.get(key, [])
+            cursor = res.get("nextCursor")
+            if not cursor:
+                return items
 
     def list_tools(self) -> list[dict]:
-        with httpx.Client(timeout=self.timeout) as client:
-            self._init(client)
-            tools, cursor = [], None
-            while True:  # follow nextCursor — servers may paginate
-                res = self._rpc(client, "tools/list", {"cursor": cursor} if cursor else {})
-                tools += res.get("tools", [])
-                cursor = res.get("nextCursor")
-                if not cursor:
-                    break
+        try:
+            self._init()
+            tools = self._paginate("tools/list", "tools")
             return [{"name": t["name"], "description": t.get("description", ""),
                      "input_schema": t.get("inputSchema") or {}} for t in tools]
+        finally:
+            self._t.close()
+
+    def list_resources(self) -> list[dict]:
+        try:
+            self._init()
+            res = self._paginate("resources/list", "resources")
+            return [{"uri": r.get("uri"), "name": r.get("name", ""),
+                     "mime_type": r.get("mimeType", "")} for r in res]
+        finally:
+            self._t.close()
+
+    def list_prompts(self) -> list[dict]:
+        try:
+            self._init()
+            pr = self._paginate("prompts/list", "prompts")
+            return [{"name": p["name"], "description": p.get("description", ""),
+                     "arguments": p.get("arguments", [])} for p in pr]
+        finally:
+            self._t.close()
 
     def call_tool(self, name: str, args: dict) -> dict:
-        with httpx.Client(timeout=self.timeout) as client:
-            self._init(client)
-            res = self._rpc(client, "tools/call", {"name": name, "arguments": args or {}})
+        try:
+            self._init()
+            res = self._rpc("tools/call", {"name": name, "arguments": args or {}})
+        finally:
+            self._t.close()
         if res.get("isError"):
-            raise RuntimeError(_text(res) or f"tool '{name}' failed")
+            raise MCPError(_text(res) or f"tool '{name}' failed")
         return _unwrap(res)
 
 

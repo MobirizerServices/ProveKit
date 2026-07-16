@@ -123,19 +123,27 @@ def _run_prompt(db, req, variables):
 
 def _run_tool(db, req, variables):
     conn = _conn(db, req.get("connection_id"))
-    # Connection wins over a per-request url: stored headers may carry auth tokens,
-    # and they must only ever be sent to the connection's own server.
-    url = ((conn.config or {}).get("url") if conn else None) or (req.get("url") if not conn else None)
-    if not url:
-        raise ValueError("tool run needs an MCP connection (or a url)")
+    cfg = (conn.config or {}) if conn else {}
     name = req.get("tool")
     if not name:
         raise ValueError("tool run needs a tool name")
     args = _interp_obj(req.get("args") or {}, variables)
-    headers = (conn.config or {}).get("headers") if conn else None
-    sess = mcp_client.MCPSession(url, headers=headers)
+    sess = _mcp_session(cfg, req if not conn else {})
     result = sess.call_tool(name, args)
-    yield {"type": "result", "data": result, "meta": {"tool": name, "url": url}}
+    yield {"type": "result", "data": result, "meta": {"tool": name, "url": cfg.get("url") or req.get("url")}}
+
+
+def _mcp_session(cfg: dict, adhoc: dict):
+    """Build an MCP session from a connection config (stdio | http, spec, oauth). `adhoc`
+    supplies url only for connection-less ad-hoc runs (never carries stored secrets)."""
+    if cfg.get("command"):  # stdio transport
+        return mcp_client.MCPSession(command=cfg["command"], args=cfg.get("args"), env=cfg.get("env"),
+                                     spec=cfg.get("spec", "auto"))
+    url = cfg.get("url") or adhoc.get("url")
+    if not url:
+        raise ValueError("tool run needs an MCP connection (or a url)")
+    return mcp_client.MCPSession(url, headers=cfg.get("headers"), spec=cfg.get("spec", "auto"),
+                                 oauth=cfg.get("oauth"))
 
 
 def _run_agent(db, req, variables):

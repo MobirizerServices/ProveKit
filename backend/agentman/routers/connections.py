@@ -137,11 +137,9 @@ def test_connection(cid: int, db: Session = Depends(get_db)):
     cfg = c.config or {}
     try:
         if c.kind == "mcp":
-            url = cfg.get("url")
-            if not url:
-                return {"ok": False, "detail": "No server URL set"}
-            _guard_url(url)
-            tools = MCPSession(url, headers=cfg.get("headers")).list_tools()
+            if not cfg.get("url") and not cfg.get("command"):
+                return {"ok": False, "detail": "No server URL or command set"}
+            tools = _mcp_from_cfg(cfg).list_tools()
             return {"ok": True, "detail": f"{len(tools)} tool{'s' if len(tools) != 1 else ''} discovered"}
         if c.kind == "llm":
             provider = cfg.get("provider", "openai")
@@ -176,16 +174,26 @@ def test_connection(cid: int, db: Session = Depends(get_db)):
         return {"ok": False, "detail": f"Unreachable: {str(exc)[:120]}"}
 
 
+def _mcp_from_cfg(cfg: dict) -> MCPSession:
+    """Build an MCP session (stdio | http, spec, oauth) from a connection config."""
+    if cfg.get("command"):
+        return MCPSession(command=cfg["command"], args=cfg.get("args"), env=cfg.get("env"),
+                          spec=cfg.get("spec", "auto"))
+    _guard_url(cfg.get("url") or "")
+    return MCPSession(cfg.get("url"), headers=cfg.get("headers"),
+                      spec=cfg.get("spec", "auto"), oauth=cfg.get("oauth"))
+
+
 @router.get("/{cid}/tools")
 def list_tools(cid: int, db: Session = Depends(get_db)):
     """Discover the tools exposed by an MCP connection (for the tool request form)."""
     c = db.get(Connection, cid)
     if not c or c.kind != "mcp":
         raise HTTPException(400, "Not an MCP connection")
-    url = (c.config or {}).get("url")
-    if not url:
-        raise HTTPException(400, "MCP connection has no url")
+    cfg = c.config or {}
+    if not cfg.get("url") and not cfg.get("command"):
+        raise HTTPException(400, "MCP connection has no url or command")
     try:
-        return {"tools": MCPSession(url, headers=(c.config or {}).get("headers")).list_tools()}
+        return {"tools": _mcp_from_cfg(cfg).list_tools()}
     except Exception as exc:
         raise HTTPException(502, f"MCP error: {exc}")

@@ -6,11 +6,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Connection, iso_utc
+from ..models import Connection, Workspace, iso_utc
 from ..services.assertions import get_path
 from ..services.masking import MASK, mask_headers, mask_value
 from ..services.netguard import BlockedURL, guard_url
 from ..services.providers.mcp_client import MCPSession
+from ..services.workspace import current_workspace
 
 
 def _guard_url(url: str) -> None:
@@ -19,6 +20,14 @@ def _guard_url(url: str) -> None:
         guard_url(url)
     except BlockedURL as exc:
         raise HTTPException(400, str(exc))
+
+
+def _get(db: Session, ws: Workspace, cid: int) -> Connection:
+    """Fetch a connection scoped to the workspace (404 across workspaces)."""
+    c = db.get(Connection, cid)
+    if not c or c.workspace_id != ws.id:
+        raise HTTPException(404, "Connection not found")
+    return c
 
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
@@ -43,22 +52,20 @@ class ConnectionIn(BaseModel):
 
 
 @router.get("")
-def list_connections(db: Session = Depends(get_db)):
-    return [_public(c) for c in db.query(Connection).order_by(Connection.id).all()]
+def list_connections(db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    return [_public(c) for c in db.query(Connection).filter(Connection.workspace_id == ws.id).order_by(Connection.id).all()]
 
 
 @router.post("")
-def create_connection(payload: ConnectionIn, db: Session = Depends(get_db)):
-    c = Connection(name=payload.name, kind=payload.kind, config=payload.config or {})
+def create_connection(payload: ConnectionIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    c = Connection(workspace_id=ws.id, name=payload.name, kind=payload.kind, config=payload.config or {})
     db.add(c); db.commit(); db.refresh(c)
     return _public(c)
 
 
 @router.put("/{cid}")
-def update_connection(cid: int, payload: ConnectionIn, db: Session = Depends(get_db)):
-    c = db.get(Connection, cid)
-    if not c:
-        raise HTTPException(404, "Connection not found")
+def update_connection(cid: int, payload: ConnectionIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    c = _get(db, ws, cid)
     cfg = dict(payload.config or {})
     stored = c.config or {}
     # Preserve the stored key if the client didn't send a fresh one.
@@ -77,9 +84,9 @@ def update_connection(cid: int, payload: ConnectionIn, db: Session = Depends(get
 
 
 @router.delete("/{cid}")
-def delete_connection(cid: int, db: Session = Depends(get_db)):
+def delete_connection(cid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     c = db.get(Connection, cid)
-    if c:
+    if c and c.workspace_id == ws.id:
         db.delete(c); db.commit()
     return {"deleted": True}
 
@@ -94,12 +101,12 @@ class AuthPayload(BaseModel):
 
 
 @router.post("/{cid}/authenticate")
-def authenticate(cid: int, payload: AuthPayload, db: Session = Depends(get_db)):
+def authenticate(cid: int, payload: AuthPayload, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     """Perform a login against the agent's base URL, extract the token, and store it as a
     default header on the connection. Credentials are used transiently — only the token
     (which expires) is saved, never the username/password."""
-    c = db.get(Connection, cid)
-    if not c or c.kind != "agent":
+    c = _get(db, ws, cid)
+    if c.kind != "agent":
         raise HTTPException(400, "Not an agent connection")
     base = (c.config or {}).get("base_url")
     if not base:
@@ -128,12 +135,10 @@ DEFAULT_BASE = {"openai": "https://api.openai.com/v1", "openai-responses": "http
 
 
 @router.post("/{cid}/test")
-def test_connection(cid: int, db: Session = Depends(get_db)):
+def test_connection(cid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     """Live reachability/auth check so onboarding can confirm a connection works before use.
     llm → list models · mcp → list tools · agent → GET the base URL."""
-    c = db.get(Connection, cid)
-    if not c:
-        raise HTTPException(404, "Connection not found")
+    c = _get(db, ws, cid)
     cfg = c.config or {}
     try:
         if c.kind == "mcp":
@@ -193,10 +198,10 @@ def _mcp_from_cfg(cfg: dict) -> MCPSession:
 
 
 @router.get("/{cid}/agent-card")
-def agent_card(cid: int, db: Session = Depends(get_db)):
+def agent_card(cid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     """Fetch + validate an A2A connection's agent card (for the request form / discovery)."""
-    c = db.get(Connection, cid)
-    if not c or c.kind != "a2a":
+    c = _get(db, ws, cid)
+    if c.kind != "a2a":
         raise HTTPException(400, "Not an A2A connection")
     base = (c.config or {}).get("base_url")
     if not base:
@@ -210,10 +215,10 @@ def agent_card(cid: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{cid}/tools")
-def list_tools(cid: int, db: Session = Depends(get_db)):
+def list_tools(cid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     """Discover the tools exposed by an MCP connection (for the tool request form)."""
-    c = db.get(Connection, cid)
-    if not c or c.kind != "mcp":
+    c = _get(db, ws, cid)
+    if c.kind != "mcp":
         raise HTTPException(400, "Not an MCP connection")
     cfg = c.config or {}
     if not cfg.get("url") and not cfg.get("command"):

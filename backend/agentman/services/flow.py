@@ -131,7 +131,7 @@ def _find_trigger(graph):
     return graph["nodes"][0]["id"] if graph["nodes"] else None
 
 
-def _exec_node(db, node, ctx, variables=None):
+def _exec_node(db, node, ctx, variables=None, workspace_id=None):
     """Execute one node; return (output, branch). `variables` (the active environment)
     fill any {{name}} refs the flow context didn't resolve, matching console behavior."""
     t = node["type"]
@@ -141,20 +141,20 @@ def _exec_node(db, node, ctx, variables=None):
     if t == "prompt":
         system = cfg.get("system")
         if cfg.get("prompt_key"):  # pull the shared prompt from the registry (single source of truth)
-            reg = _registry_prompt(db, cfg["prompt_key"])
+            reg = _registry_prompt(db, cfg["prompt_key"], workspace_id)
             if reg is not None:
                 system = reg
         req = {"type": "prompt", "connection_id": cfg.get("connection_id"), "model": cfg.get("model"),
                "system": _interp(system, ctx), "user": _interp(cfg.get("user", ""), ctx),
                "temperature": cfg.get("temperature", 0.7), "max_tokens": cfg.get("max_tokens", 1024)}
-        r = dispatch.run_collect(db, req, variables)
+        r = dispatch.run_collect(db, req, variables, workspace_id)
         if r["status"] == "failed":
             raise RuntimeError(r["error"] or "prompt failed")
         return {"text": r["text"]}, None
     if t == "tool":
         req = {"type": "tool", "connection_id": cfg.get("connection_id"), "tool": cfg.get("tool"),
                "args": _interp_obj(cfg.get("args") or {}, ctx)}
-        r = dispatch.run_collect(db, req, variables)
+        r = dispatch.run_collect(db, req, variables, workspace_id)
         if r["status"] == "failed":
             raise RuntimeError(r["error"] or "tool failed")
         return r["output"], None
@@ -162,7 +162,7 @@ def _exec_node(db, node, ctx, variables=None):
         req = {"type": "agent", "connection_id": cfg.get("connection_id"), "method": cfg.get("method", "POST"),
                "path": _interp(cfg.get("path", ""), ctx), "headers": cfg.get("headers") or {},
                "body": _interp_obj(cfg.get("body"), ctx)}
-        r = dispatch.run_collect(db, req, variables)
+        r = dispatch.run_collect(db, req, variables, workspace_id)
         if r["status"] == "failed":
             raise RuntimeError(r["error"] or "agent failed")
         return r["output"], None
@@ -179,10 +179,13 @@ def _exec_node(db, node, ctx, variables=None):
     return {}, None
 
 
-def _registry_prompt(db, key: str):
-    """Resolve a Prompt Registry entry's content by key (None if missing)."""
+def _registry_prompt(db, key: str, workspace_id=None):
+    """Resolve a Prompt Registry entry's content by key within the workspace (None if missing)."""
     from ..models import Prompt
-    row = db.query(Prompt).filter(Prompt.key == key).first()
+    q = db.query(Prompt).filter(Prompt.key == key)
+    if workspace_id is not None:
+        q = q.filter(Prompt.workspace_id == workspace_id)
+    row = q.first()
     return row.content if row else None
 
 
@@ -217,7 +220,7 @@ def _compare(left, right, op):
 
 
 def run_stream(db, flow: dict, flow_input: dict, breakpoints=None, single_step=False,
-               start_at=None, ctx=None, run_id=None, variables=None):
+               start_at=None, ctx=None, run_id=None, variables=None, workspace_id=None):
     breakpoints = set(breakpoints or [])
     graph = {"nodes": flow["nodes"], "edges": flow["edges"]}
     nodes = {n["id"]: n for n in graph["nodes"]}
@@ -249,7 +252,7 @@ def run_stream(db, flow: dict, flow_input: dict, breakpoints=None, single_step=F
         yield {"type": "node", "node_id": node_id, "node_type": ntype, "title": title, "status": "running"}
         t0 = time.monotonic()
         try:
-            output, branch = _exec_node(db, node, ctx, variables)
+            output, branch = _exec_node(db, node, ctx, variables, workspace_id)
         except Exception as exc:
             _drop_run(rid)
             yield {"type": "node", "node_id": node_id, "node_type": ntype, "title": title,

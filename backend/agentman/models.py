@@ -2,10 +2,15 @@
 collections + saved requests, environments (variables), and run history."""
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, TypeDecorator
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, TypeDecorator, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
+
+
+def _ws_fk() -> Mapped[int]:
+    """Workspace FK shared by every tenant-scoped table (indexed for per-workspace queries)."""
+    return mapped_column(ForeignKey("workspaces.id"), index=True, nullable=True)
 
 
 def _now() -> datetime:
@@ -49,10 +54,29 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class Workspace(Base):
+    """A tenant boundary. Every user gets a default workspace; teams share one later."""
+    __tablename__ = "workspaces"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), default="My workspace")
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="member")  # owner | member
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_member"),)
+
+
 class Connection(Base):
     """A provider you can run against. kind = llm | mcp | agent."""
     __tablename__ = "connections"
     id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
     name: Mapped[str] = mapped_column(String(120))
     kind: Mapped[str] = mapped_column(String(16))  # llm | mcp | agent
     # config shape by kind:
@@ -66,6 +90,7 @@ class Connection(Base):
 class Collection(Base):
     __tablename__ = "collections"
     id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
     name: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
@@ -74,6 +99,7 @@ class Request(Base):
     """A saved request. type = prompt | tool | agent. payload holds the type-specific body."""
     __tablename__ = "requests"
     id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
     collection_id: Mapped[int | None] = mapped_column(ForeignKey("collections.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(160))
     type: Mapped[str] = mapped_column(String(16))
@@ -84,6 +110,7 @@ class Request(Base):
 class Environment(Base):
     __tablename__ = "environments"
     id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
     name: Mapped[str] = mapped_column(String(120))
     variables: Mapped[dict] = mapped_column(JSON, default=dict)
     is_active: Mapped[bool] = mapped_column(default=False)
@@ -93,17 +120,20 @@ class Prompt(Base):
     """A managed, reusable prompt (the generic Prompt Registry)."""
     __tablename__ = "prompts"
     id: Mapped[int] = mapped_column(primary_key=True)
-    key: Mapped[str] = mapped_column(String(80), unique=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    key: Mapped[str] = mapped_column(String(80))
     name: Mapped[str] = mapped_column(String(160))
     description: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+    __table_args__ = (UniqueConstraint("workspace_id", "key", name="uq_prompt_key"),)
 
 
 class Flow(Base):
     """A visual agent workflow: a graph of nodes + edges executed by the flow engine."""
     __tablename__ = "flows"
     id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
     name: Mapped[str] = mapped_column(String(160))
     description: Mapped[str] = mapped_column(Text, default="")
     nodes: Mapped[list] = mapped_column(JSON, default=list)
@@ -116,6 +146,7 @@ class Dataset(Base):
     [{name, variables}]. Decoupled from requests, like a shared data file."""
     __tablename__ = "datasets"
     id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
     name: Mapped[str] = mapped_column(String(160))
     rows: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
@@ -125,6 +156,7 @@ class Run(Base):
     """A single execution + its result (for history/replay)."""
     __tablename__ = "runs"
     id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
     type: Mapped[str] = mapped_column(String(16))
     label: Mapped[str] = mapped_column(String(200), default="")
     request: Mapped[dict] = mapped_column(JSON, default=dict)   # the sent request

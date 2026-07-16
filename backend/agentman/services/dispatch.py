@@ -37,15 +37,23 @@ def _interp_obj(obj, variables: dict):
     return obj
 
 
-def _conn(db, cid) -> Connection | None:
-    return db.get(Connection, cid) if cid else None
+def _conn(db, cid, workspace_id=None) -> Connection | None:
+    if not cid:
+        return None
+    c = db.get(Connection, cid)
+    # Tenancy: never resolve a connection outside the caller's workspace (prevents using
+    # another tenant's stored credentials by passing its connection_id). workspace_id=None
+    # (CLI / single-tenant) skips the check.
+    if c and workspace_id is not None and c.workspace_id != workspace_id:
+        return None
+    return c
 
 
-def run_collect(db, req: dict, variables: dict | None = None) -> dict:
+def run_collect(db, req: dict, variables: dict | None = None, workspace_id=None) -> dict:
     """Run a request to completion (non-streaming) and return the collected result —
     used by the flow engine to execute prompt/tool/agent nodes."""
     text, output, meta, status, err = [], None, {}, "completed", ""
-    for ev in run(db, req, variables):
+    for ev in run(db, req, variables, workspace_id):
         t = ev["type"]
         if t == "delta":
             text.append(ev.get("text", ""))
@@ -58,7 +66,7 @@ def run_collect(db, req: dict, variables: dict | None = None) -> dict:
     return {"text": "".join(text) or None, "output": output, "meta": meta, "status": status, "error": err}
 
 
-def run(db, req: dict, variables: dict | None = None):
+def run(db, req: dict, variables: dict | None = None, workspace_id=None):
     variables = variables or {}
     rtype = req.get("type")
     run_id = uuid.uuid4().hex[:12]
@@ -66,13 +74,13 @@ def run(db, req: dict, variables: dict | None = None):
     t0 = time.monotonic()
     try:
         if rtype == "prompt":
-            yield from _run_prompt(db, req, variables)
+            yield from _run_prompt(db, req, variables, workspace_id)
         elif rtype == "tool":
-            yield from _run_tool(db, req, variables)
+            yield from _run_tool(db, req, variables, workspace_id)
         elif rtype == "agent":
-            yield from _run_agent(db, req, variables)
+            yield from _run_agent(db, req, variables, workspace_id)
         elif rtype == "a2a":
-            yield from _run_a2a(db, req, variables)
+            yield from _run_a2a(db, req, variables, workspace_id)
         else:
             raise ValueError(f"unknown request type: {rtype!r}")
     except Exception as exc:
@@ -82,8 +90,8 @@ def run(db, req: dict, variables: dict | None = None):
     yield {"type": "done", "status": "completed", "duration_ms": round((time.monotonic() - t0) * 1000)}
 
 
-def _run_prompt(db, req, variables):
-    conn = _conn(db, req.get("connection_id"))
+def _run_prompt(db, req, variables, workspace_id=None):
+    conn = _conn(db, req.get("connection_id"), workspace_id)
     cfg = (conn.config or {}) if conn else {}
     if conn:
         # A stored connection is authoritative for destination AND credentials.
@@ -123,8 +131,8 @@ def _run_prompt(db, req, variables):
            "meta": {"provider": provider, "model": model, "usage": usage}}
 
 
-def _run_tool(db, req, variables):
-    conn = _conn(db, req.get("connection_id"))
+def _run_tool(db, req, variables, workspace_id=None):
+    conn = _conn(db, req.get("connection_id"), workspace_id)
     cfg = (conn.config or {}) if conn else {}
     name = req.get("tool")
     if not name:
@@ -148,8 +156,8 @@ def _mcp_session(cfg: dict, adhoc: dict):
                                  oauth=cfg.get("oauth"))
 
 
-def _run_agent(db, req, variables):
-    conn = _conn(db, req.get("connection_id"))
+def _run_agent(db, req, variables, workspace_id=None):
+    conn = _conn(db, req.get("connection_id"), workspace_id)
     # Same rule as prompts/tools: stored auth headers travel only to the stored base_url.
     base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
     if not base:
@@ -170,8 +178,8 @@ def _run_agent(db, req, variables):
             yield {"type": "result", "data": ev.get("data"), "meta": ev.get("meta", {})}
 
 
-def _run_a2a(db, req, variables):
-    conn = _conn(db, req.get("connection_id"))
+def _run_a2a(db, req, variables, workspace_id=None):
+    conn = _conn(db, req.get("connection_id"), workspace_id)
     base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
     if not base:
         raise ValueError("A2A run needs an A2A connection (or base_url)")

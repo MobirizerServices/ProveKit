@@ -39,8 +39,10 @@ def get_path(obj, path: str):
     return cur
 
 
-def _llm_judge(db, a: dict, text: str):
+def _llm_judge(db, a: dict, text: str, workspace_id=None):
     conn = db.get(Connection, a.get("connection_id")) if a.get("connection_id") else None
+    if conn and workspace_id is not None and conn.workspace_id != workspace_id:
+        conn = None  # tenancy: don't judge with another workspace's connection
     if not conn:
         return False, "no judge connection configured"
     cfg = conn.config or {}
@@ -59,7 +61,7 @@ def _llm_judge(db, a: dict, text: str):
     return reply.upper().startswith("PASS"), reply[:160]
 
 
-def evaluate(db, assertions: list, run: dict) -> list[dict]:
+def evaluate(db, assertions: list, run: dict, workspace_id=None) -> list[dict]:
     """run = {result:{text,output,meta}, status, duration_ms, events}."""
     result = run.get("result", {}) or {}
     text = _text_of(result)
@@ -110,7 +112,7 @@ def evaluate(db, assertions: list, run: dict) -> list[dict]:
             elif t == "latency_lt":
                 ok = dur < float(a.get("value", 0)); detail = f"{dur}ms {'<' if ok else '≥'} {a.get('value')}ms"
             elif t == "llm_judge":
-                ok, detail = _llm_judge(db, a, text)
+                ok, detail = _llm_judge(db, a, text, workspace_id)
             else:
                 detail = f"unknown assertion type: {t}"
         except Exception as exc:

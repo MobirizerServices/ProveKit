@@ -7,10 +7,18 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
-from ..models import Connection, Flow, iso_utc
+from ..models import Connection, Flow, Workspace, iso_utc
 from ..services import flow as engine
 from ..services import testfile
+from ..services.workspace import current_workspace
 from .run import _active_vars
+
+
+def _get(db, ws, fid) -> Flow:
+    f = db.get(Flow, fid)
+    if not f or f.workspace_id != ws.id:
+        raise HTTPException(404, "Flow not found")
+    return f
 
 router = APIRouter(prefix="/api/flows", tags=["flows"])
 
@@ -34,52 +42,45 @@ class FlowIn(BaseModel):
 
 
 @router.get("")
-def list_flows(db: Session = Depends(get_db)):
+def list_flows(db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     return [{"id": f.id, "name": f.name, "description": f.description,
              "updated_at": iso_utc(f.updated_at)}
-            for f in db.query(Flow).order_by(Flow.id).all()]
+            for f in db.query(Flow).filter(Flow.workspace_id == ws.id).order_by(Flow.id).all()]
 
 
 @router.post("")
-def create_flow(payload: FlowIn, db: Session = Depends(get_db)):
-    f = Flow(name=payload.name, description=payload.description, nodes=payload.nodes, edges=payload.edges)
+def create_flow(payload: FlowIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    f = Flow(workspace_id=ws.id, name=payload.name, description=payload.description, nodes=payload.nodes, edges=payload.edges)
     db.add(f); db.commit(); db.refresh(f)
     return _f(f)
 
 
 @router.get("/{fid}")
-def get_flow(fid: int, db: Session = Depends(get_db)):
-    f = db.get(Flow, fid)
-    if not f:
-        raise HTTPException(404, "Flow not found")
-    return _f(f)
+def get_flow(fid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    return _f(_get(db, ws, fid))
 
 
 @router.get("/{fid}/export", response_class=PlainTextResponse)
-def export_flow(fid: int, db: Session = Depends(get_db)):
-    f = db.get(Flow, fid)
-    if not f:
-        raise HTTPException(404, "Flow not found")
+def export_flow(fid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    f = _get(db, ws, fid)
     ids = {(n.get("config") or {}).get("connection_id") for n in (f.nodes or [])}
     ids.discard(None)
-    names = {c.id: c.name for c in db.query(Connection).filter(Connection.id.in_(ids)).all()} if ids else {}
+    names = {c.id: c.name for c in db.query(Connection).filter(Connection.workspace_id == ws.id, Connection.id.in_(ids)).all()} if ids else {}
     return testfile.dump_flow(f.name, f.description, f.nodes, f.edges, names)
 
 
 @router.put("/{fid}")
-def update_flow(fid: int, payload: FlowIn, db: Session = Depends(get_db)):
-    f = db.get(Flow, fid)
-    if not f:
-        raise HTTPException(404, "Flow not found")
+def update_flow(fid: int, payload: FlowIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    f = _get(db, ws, fid)
     f.name, f.description, f.nodes, f.edges = payload.name, payload.description, payload.nodes, payload.edges
     db.commit(); db.refresh(f)
     return _f(f)
 
 
 @router.delete("/{fid}")
-def delete_flow(fid: int, db: Session = Depends(get_db)):
+def delete_flow(fid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     f = db.get(Flow, fid)
-    if f:
+    if f and f.workspace_id == ws.id:
         db.delete(f); db.commit()
     return {"deleted": True}
 
@@ -91,18 +92,17 @@ class RunPayload(BaseModel):
 
 
 @router.post("/{fid}/run/stream")
-def run_stream(fid: int, payload: RunPayload, db: Session = Depends(get_db)):
-    f = db.get(Flow, fid)
-    if not f:
-        raise HTTPException(404, "Flow not found")
+def run_stream(fid: int, payload: RunPayload, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    f = _get(db, ws, fid)
     flow = {"nodes": f.nodes, "edges": f.edges}
-    variables = _active_vars(db)
+    variables = _active_vars(db, ws.id)
+    ws_id = ws.id
 
     def events():
         session = SessionLocal()  # request-scoped db is torn down before this generator runs
         try:
             for ev in engine.run_stream(session, flow, payload.input, breakpoints=set(payload.breakpoints),
-                                        single_step=payload.step, variables=variables):
+                                        single_step=payload.step, variables=variables, workspace_id=ws_id):
                 yield f"data: {json.dumps(ev)}\n\n"
             yield "data: [DONE]\n\n"
         finally:
@@ -120,22 +120,21 @@ class ContinuePayload(BaseModel):
 
 
 @router.post("/{fid}/continue/stream")
-def continue_stream(fid: int, payload: ContinuePayload, db: Session = Depends(get_db)):
-    f = db.get(Flow, fid)
-    if not f:
-        raise HTTPException(404, "Flow not found")
+def continue_stream(fid: int, payload: ContinuePayload, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    f = _get(db, ws, fid)
     # pop (not peek) so two concurrent /continue calls can't resume the same run and corrupt its ctx.
     ctx = engine.pop_ctx(payload.run_id)
     if ctx is None:
         raise HTTPException(409, "Run context expired or already resumed — start a fresh run.")
     flow = {"nodes": f.nodes, "edges": f.edges}
-    variables = _active_vars(db)
+    variables = _active_vars(db, ws.id)
+    ws_id = ws.id
 
     def events():
         session = SessionLocal()
         try:
             for ev in engine.run_stream(session, flow, {}, breakpoints=set(payload.breakpoints), single_step=payload.step,
-                                        start_at=payload.node_id, ctx=ctx, run_id=payload.run_id, variables=variables):
+                                        start_at=payload.node_id, ctx=ctx, run_id=payload.run_id, variables=variables, workspace_id=ws_id):
                 yield f"data: {json.dumps(ev)}\n\n"
             yield "data: [DONE]\n\n"
         finally:

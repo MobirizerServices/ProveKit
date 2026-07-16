@@ -1,0 +1,10 @@
+# AgentMan reverse proxy. Set DOMAIN (e.g. agentman.example.com) — Caddy auto-provisions
+# TLS via Let's Encrypt. /api and /v1 go to the backend; everything else to the frontend.
+{$DOMAIN} {
+	encode zstd gzip
+
+	@api path /api/* /v1/*
+	reverse_proxy @api backend:8100
+
+	reverse_proxy frontend:3001
+}

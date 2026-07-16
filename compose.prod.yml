@@ -1,0 +1,81 @@
+# Production stack: Caddy (TLS) → frontend + backend, Postgres, Redis.
+# Bring up:  DOMAIN=agentman.example.com SECRET_KEY=... docker compose -f compose.prod.yml up -d --build
+# No service ports are published except Caddy's 80/443.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: "${DOMAIN:?set DOMAIN}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agentman
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      POSTGRES_DB: agentman
+    volumes:
+      - agentman-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentman"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    command: ["uvicorn", "agentman.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "4"]
+    environment:
+      HOSTED: "true"
+      DATABASE_URL: "postgresql+psycopg://agentman:${POSTGRES_PASSWORD:?}@db:5432/agentman"
+      REDIS_URL: "redis://redis:6379/0"
+      SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY}"
+      CORS_ORIGINS: "https://${DOMAIN}"
+      PUBLIC_BASE_URL: "https://${DOMAIN}"
+      SENTRY_DSN: "${SENTRY_DSN:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/healthz').status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      API_PROXY_TARGET: "http://backend:8100"
+    depends_on:
+      - backend
+
+volumes:
+  agentman-pg:
+  caddy-data:
+  caddy-config:

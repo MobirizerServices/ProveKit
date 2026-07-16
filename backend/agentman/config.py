@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Public base URL shown in deployment endpoints (where /v1/d/{slug} is reachable).
     public_base_url: str = "http://localhost:8100"
 
+    # Optional Sentry DSN for error reporting (off when unset).
+    sentry_dsn: str = ""
+
     # Optional Redis for paused flow-run contexts (survives workers/restarts).
     # Unset → in-memory (single-process local use).
     redis_url: str = ""

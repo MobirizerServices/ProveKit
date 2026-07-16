@@ -9,10 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .database import SessionLocal, init_db
 from .models import Connection
+from .observability import RequestIDMiddleware, healthz, init_sentry, setup_logging
 from .routers import auth, connections, deployments, flows, library, prompts, run, runtime, traces
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
+setup_logging()
+init_sentry()
 
 
 def _reseal_connections(db) -> None:
@@ -38,6 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AgentMan", version="0.1.0", lifespan=lifespan)
 
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -60,3 +64,8 @@ app.include_router(runtime.router)
 @app.get("/")
 def root():
     return {"service": "AgentMan", "docs": "/docs"}
+
+
+@app.get("/healthz")
+def health():
+    return healthz()

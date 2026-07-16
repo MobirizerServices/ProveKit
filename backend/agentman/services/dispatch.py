@@ -16,7 +16,7 @@ import uuid
 
 from ..models import Connection
 from .masking import is_masked
-from .providers import agent_http, llm, mcp_client
+from .providers import a2a_client, agent_http, llm, mcp_client
 
 _VAR = re.compile(r"\{\{\s*([\w.\-]+)\s*\}\}")
 
@@ -71,6 +71,8 @@ def run(db, req: dict, variables: dict | None = None):
             yield from _run_tool(db, req, variables)
         elif rtype == "agent":
             yield from _run_agent(db, req, variables)
+        elif rtype == "a2a":
+            yield from _run_a2a(db, req, variables)
         else:
             raise ValueError(f"unknown request type: {rtype!r}")
     except Exception as exc:
@@ -166,3 +168,19 @@ def _run_agent(db, req, variables):
             yield {"type": "node", "data": ev["data"]}
         elif ev["type"] == "result":
             yield {"type": "result", "data": ev.get("data"), "meta": ev.get("meta", {})}
+
+
+def _run_a2a(db, req, variables):
+    conn = _conn(db, req.get("connection_id"))
+    base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
+    if not base:
+        raise ValueError("A2A run needs an A2A connection (or base_url)")
+    headers = (conn.config or {}).get("headers") if conn else (req.get("headers") or None)
+    text = interpolate(req.get("message") or req.get("text") or "", variables)
+    card = None
+    try:  # discover the endpoint from the agent card; fall back to base_url on failure
+        card = a2a_client.fetch_card(base, headers=headers)
+    except Exception:
+        pass
+    yield from a2a_client.run(base_url=base, text=text, headers=headers,
+                             stream=bool(req.get("stream")), card=card)

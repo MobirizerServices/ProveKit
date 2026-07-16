@@ -163,6 +163,14 @@ def test_connection(cid: int, db: Session = Depends(get_db)):
             if r.status_code in (401, 403):
                 return {"ok": False, "detail": "Key rejected (401/403) — check the API key"}
             return {"ok": False, "detail": f"Provider returned {r.status_code}"}
+        if c.kind == "a2a":
+            base = (cfg.get("base_url") or "").rstrip("/")
+            if not base:
+                return {"ok": False, "detail": "No base URL set"}
+            _guard_url(base)
+            from ..services.providers.a2a_client import fetch_card
+            card = fetch_card(base, headers=cfg.get("headers"))
+            return {"ok": True, "detail": f"Agent card: {card.get('name')} (A2A {card.get('_version')})"}
         # agent
         base = (cfg.get("base_url") or "").rstrip("/")
         if not base:
@@ -182,6 +190,23 @@ def _mcp_from_cfg(cfg: dict) -> MCPSession:
     _guard_url(cfg.get("url") or "")
     return MCPSession(cfg.get("url"), headers=cfg.get("headers"),
                       spec=cfg.get("spec", "auto"), oauth=cfg.get("oauth"))
+
+
+@router.get("/{cid}/agent-card")
+def agent_card(cid: int, db: Session = Depends(get_db)):
+    """Fetch + validate an A2A connection's agent card (for the request form / discovery)."""
+    c = db.get(Connection, cid)
+    if not c or c.kind != "a2a":
+        raise HTTPException(400, "Not an A2A connection")
+    base = (c.config or {}).get("base_url")
+    if not base:
+        raise HTTPException(400, "A2A connection has no base_url")
+    _guard_url(base)
+    try:
+        from ..services.providers.a2a_client import fetch_card
+        return {"card": fetch_card(base, headers=(c.config or {}).get("headers"))}
+    except Exception as exc:
+        raise HTTPException(502, f"A2A error: {exc}")
 
 
 @router.get("/{cid}/tools")

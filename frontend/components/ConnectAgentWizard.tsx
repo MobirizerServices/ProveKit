@@ -16,6 +16,7 @@ const PRESETS: Preset[] = [
   { id: "compatible", kind: "llm", provider: "compatible", name: "OpenAI-compatible", icon: "⌘", desc: "Ollama · vLLM · Together · any base URL", base: "", models: "", need: ["base", "key", "models"] },
   { id: "mcp", kind: "mcp", name: "MCP server", icon: "🔧", desc: "Model Context Protocol tools, by URL", need: ["url"] },
   { id: "agent", kind: "agent", name: "HTTP agent", icon: "🛰️", desc: "Any REST / SSE agent endpoint", need: ["base"] },
+  { id: "a2a", kind: "a2a", name: "A2A agent", icon: "🤝", desc: "Agent2Agent protocol (agent card + JSON-RPC)", need: ["base"] },
 ];
 
 export default function ConnectAgentWizard({ onDone, onClose }: { onDone: (c: Connection) => void; onClose: () => void }) {
@@ -37,7 +38,7 @@ export default function ConnectAgentWizard({ onDone, onClose }: { onDone: (c: Co
 
   const canConnect = !!p && !!name && (
     p.kind === "mcp" ? !!url :
-    p.kind === "agent" ? !!base :
+    (p.kind === "agent" || p.kind === "a2a") ? !!base :
     !!key && (p.provider !== "compatible" || (!!base && !!models))
   );
 
@@ -83,8 +84,8 @@ export default function ConnectAgentWizard({ onDone, onClose }: { onDone: (c: Co
         ) : (
           <div className="modal-body">
             <div className="field"><label>Name</label><input value={name} onChange={(e) => setName(e.target.value)} /></div>
-            {(p.provider === "compatible" || p.kind === "agent") && (
-              <div className="field"><label>Base URL</label><input className="mono" value={base} onChange={(e) => setBase(e.target.value)} placeholder={p.kind === "agent" ? "http://127.0.0.1:8000" : "http://localhost:11434/v1"} /></div>
+            {(p.provider === "compatible" || p.kind === "agent" || p.kind === "a2a") && (
+              <div className="field"><label>Base URL</label><input className="mono" value={base} onChange={(e) => setBase(e.target.value)} placeholder={p.kind === "agent" || p.kind === "a2a" ? "http://127.0.0.1:8000" : "http://localhost:11434/v1"} /></div>
             )}
             {p.kind === "mcp" && (
               <div className="field"><label>Server URL</label><input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://127.0.0.1:8765/mcp" /></div>

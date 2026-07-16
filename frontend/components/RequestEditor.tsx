@@ -8,6 +8,7 @@ const TYPES: { key: ReqType; label: string; kind: string }[] = [
   { key: "prompt", label: "Prompt", kind: "llm" },
   { key: "tool", label: "Tool", kind: "mcp" },
   { key: "agent", label: "Agent", kind: "agent" },
+  { key: "a2a", label: "A2A", kind: "a2a" },
 ];
 
 export default function RequestEditor({ req, setReq, connections }: {
@@ -28,6 +29,7 @@ export default function RequestEditor({ req, setReq, connections }: {
     const base: any = { type: t, connection_id: firstConn?.id ?? null };
     if (t === "prompt") setReq({ ...base, model: (firstConn?.config?.models || [""])[0] || "", system: "", user: "", temperature: 0.7, max_tokens: 1024 });
     else if (t === "tool") setReq({ ...base, tool: "", args: {} });
+    else if (t === "a2a") setReq({ ...base, message: "", stream: false });
     else setReq({ ...base, method: "POST", path: "", headers: {}, body: null });
   };
 
@@ -53,6 +55,7 @@ export default function RequestEditor({ req, setReq, connections }: {
         {type === "prompt" && <PromptForm req={req} set={set} conn={conn} />}
         {type === "tool" && <ToolForm key={req._k} req={req} set={set} conn={conn} />}
         {type === "agent" && <AgentForm key={req._k} req={req} set={set} />}
+        {type === "a2a" && <A2AForm req={req} set={set} conn={conn} />}
 
         <AssertionsEditor assertions={req.assertions || []} onChange={(a) => set({ assertions: a })} connections={connections} />
       </div>
@@ -157,6 +160,30 @@ function ArgField({ spec, value, onChange }: { spec: any; value: any; onChange: 
       onChange={(e) => { try { onChange(JSON.parse(e.target.value)); } catch { onChange(e.target.value); } }} />;
   }
   return <input value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={spec.default != null ? String(spec.default) : ""} />;
+}
+
+function A2AForm({ req, set, conn }: any) {
+  const [card, setCard] = useState<any>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { setCard(null); setErr(""); if (conn) api.agentCard(conn.id).then((r) => setCard(r.card)).catch((e) => setErr(String(e.message || e))); }, [conn?.id]);
+  return (
+    <>
+      {conn && (
+        <div className="tool-desc">
+          {card ? <><b>{card.name}</b> <span className="hint">A2A {card._version}</span>{card.description ? <div>{card.description}</div> : null}
+            {Array.isArray(card.skills) && card.skills.length ? <div className="hint">skills: {card.skills.map((s: any) => s.name || s.id).join(", ")}</div> : null}</>
+            : err ? <span className="hint" style={{ color: "var(--err)" }}>no agent card ({err})</span> : <span className="hint">discovering agent card…</span>}
+        </div>
+      )}
+      <div className="field">
+        <label>Message <span className="hint">supports {"{{variables}}"}</span></label>
+        <textarea value={req.message || ""} onChange={(e) => set({ message: e.target.value })} rows={5} placeholder="Ask the agent…" />
+      </div>
+      <div className="field">
+        <label style={{ gap: 6 }}><input type="checkbox" checked={!!req.stream} onChange={(e) => set({ stream: e.target.checked })} /> stream (message/stream)</label>
+      </div>
+    </>
+  );
 }
 
 function AgentForm({ req, set }: any) {

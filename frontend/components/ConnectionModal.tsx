@@ -5,7 +5,7 @@ import { useEscape } from "@/lib/useEscape";
 import { api, Connection, Kind } from "@/lib/api";
 
 const KINDS: { k: Kind; label: string }[] = [
-  { k: "llm", label: "LLM" }, { k: "mcp", label: "MCP server" }, { k: "agent", label: "Agent API" },
+  { k: "llm", label: "LLM" }, { k: "mcp", label: "MCP server" }, { k: "agent", label: "Agent API" }, { k: "a2a", label: "A2A" },
 ];
 
 export default function ConnectionModal({ initial, onSave, onDelete, onClose, onAuthed }: {
@@ -47,7 +47,7 @@ export default function ConnectionModal({ initial, onSave, onDelete, onClose, on
     let config: any = {};
     if (kind === "llm") config = { provider, base_url: baseUrl, api_key: apiKey, models: models.split(",").map((m: string) => m.trim()).filter(Boolean) };
     else if (kind === "mcp") config = { ...cfg, url, spec };
-    else config = { base_url: baseUrl, headers: safeJson(headers) };
+    else config = { base_url: baseUrl, headers: safeJson(headers) };  // agent + a2a
     onSave({ id: initial?.id, name, kind, config });
   };
 

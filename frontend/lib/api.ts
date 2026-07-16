@@ -1,7 +1,7 @@
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8100";
 
-export type Kind = "llm" | "mcp" | "agent";
-export type ReqType = "prompt" | "tool" | "agent";
+export type Kind = "llm" | "mcp" | "agent" | "a2a";
+export type ReqType = "prompt" | "tool" | "agent" | "a2a";
 
 export interface Connection {
   id: number; name: string; kind: Kind; config: Record<string, any>; created_at?: string;
@@ -59,6 +59,7 @@ export const api = {
   tools: (id: number) => j<{ tools: ToolDef[] }>(`/api/connections/${id}/tools`),
   testConnection: (id: number) => j<{ ok: boolean; detail: string }>(`/api/connections/${id}/test`, { method: "POST" }),
   authenticate: (id: number, payload: any) => j<{ ok: boolean; header: string; token: string }>(`/api/connections/${id}/authenticate`, { method: "POST", body: JSON.stringify(payload) }),
+  agentCard: (id: number) => j<{ card: Record<string, any> }>(`/api/connections/${id}/agent-card`),
   // library
   collections: () => j<{ collections: CollectionT[]; loose: SavedRequest[] }>("/api/collections"),
   createCollection: (name: string) => j<CollectionT>("/api/collections", { method: "POST", body: JSON.stringify({ name }) }),

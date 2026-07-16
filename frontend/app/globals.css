@@ -160,7 +160,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .conn-item:hover, .req-item:hover, .run-item:hover { background: var(--panel-2); }
 .conn-item.on, .req-item.on { background: var(--panel-2); border-color: var(--border); }
 .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
-.dot.llm { background: var(--prompt); } .dot.mcp { background: var(--tool); } .dot.agent { background: var(--agent); }
+.dot.llm { background: var(--prompt); } .dot.mcp { background: var(--tool); } .dot.agent { background: var(--agent); } .dot.a2a { background: var(--accent-2); }
 .dot.prompt { background: var(--prompt); } .dot.tool { background: var(--tool); }
 .conn-item .ci-main, .req-item .ri-main { min-width: 0; flex: 1; }
 .conn-item .ci-name, .req-item .ri-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -175,7 +175,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .run-item .rn-label { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .run-item .rn-meta { display: flex; gap: 7px; align-items: center; flex: none; }
 .tag { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 4px; background: var(--panel-2); color: var(--muted); }
-.tag.prompt { color: var(--prompt); } .tag.tool { color: var(--tool); } .tag.agent { color: var(--agent); }
+.tag.prompt { color: var(--prompt); } .tag.tool { color: var(--tool); } .tag.agent { color: var(--agent); } .tag.a2a { color: var(--accent-2); }
 .tag.ok { color: var(--ok); } .tag.failed, .tag.error { color: var(--err); }
 
 /* ---------- Request pane ---------- */

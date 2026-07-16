@@ -1,0 +1,29 @@
+[project]
+name = "agentman"
+version = "0.1.0"
+description = "The open-source universal agent client — test, debug, and evaluate any AI agent."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "sqlalchemy==2.0.36",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.1",
+    "httpx==0.28.1",
+    "jsonschema==4.23.0",
+    "cryptography==49.0.0",
+    "pyyaml==6.0.3",
+]
+
+[project.scripts]
+agentman = "agentman.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agentman", "agentman.routers", "agentman.services", "agentman.services.providers"]

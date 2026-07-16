@@ -59,6 +59,30 @@ Console ─ single-shot runner    Flows ─ visual node canvas     Prompts ─ r
   `extract.json`, …) with name/description/body. Edit once; every flow prompt node bound to
   that key uses the new content on its next run.
 
+## CLI — run tests in CI
+
+Export any saved request or flow to a plain-text, git-diffable `.agentman` file
+(see [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md)), commit it, and run the whole suite
+headless — locally or in CI:
+
+```bash
+pip install -e backend            # provides the `agentman` command
+agentman run .agentman/tests/                     # pretty output, non-zero exit on failure
+agentman run .agentman/tests/ --format junit -o results.xml
+agentman import-promptfoo promptfooconfig.yaml -o .agentman/tests/   # migrate from promptfoo
+```
+
+Connections resolve by name from `.agentman/connections.yaml` (secrets via `${ENV_VAR}`),
+so credentials never touch the test files:
+
+```yaml
+connections:
+  OpenAI (prod):
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    models: [gpt-4o-mini]
+```
+
 ## Run it
 
 ### Docker (both services)
@@ -79,7 +103,7 @@ cd backend
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env          # optional: set OPENAI_API_KEY to prefill the example
-uvicorn app.main:app --port 8100
+uvicorn agentman.main:app --port 8100
 
 # frontend (port 3001)
 cd frontend

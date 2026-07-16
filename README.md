@@ -1,9 +1,23 @@
-# AgentMan — Postman for agents
+# AgentMan — the open-source universal agent client
 
-A generic workspace to **create, run, and debug** prompts, MCP tools, agent APIs, and
-multi-step **agent flows** across **any provider** — OpenAI, Anthropic, any
-OpenAI-compatible base URL, any MCP server URL, any HTTP agent endpoint. Standalone (not
-tied to any one app); Magari ships as an example connection set.
+**Test, debug, and evaluate any AI agent — any provider, any protocol, no SDK required.**
+Point it at an LLM API, an MCP server, an HTTP agent, or an A2A agent; chat and stream
+with it; step-debug it; freeze a session into assertions and a regression suite; run
+them in CI. *The place where you prove your agent works.*
+
+Unlike the observability platforms, AgentMan is a **client** you point at a deployed
+endpoint — no SDK to instrument, no code to change. Unlike the visual builders, it
+doesn't ask you to rebuild your agent in its canvas; it tests the agent you already have,
+wherever it runs.
+
+> **Open source, local-first, forever.** Every product feature is MIT-licensed and runs
+> fully offline on your machine — no account, no cloud, no telemetry. That's a promise in
+> writing, not a trial.
+
+**Speaks:** OpenAI Chat Completions · OpenAI Responses / Open Responses (vLLM · Ollama ·
+OpenRouter) · Anthropic Messages · MCP (stdio + Streamable HTTP, OAuth 2.1, both the
+2025-11-25 and 2026-07-28 spec generations) · A2A agent cards · OpenTelemetry GenAI
+trace ingest.
 
 Three surfaces, one nav:
 

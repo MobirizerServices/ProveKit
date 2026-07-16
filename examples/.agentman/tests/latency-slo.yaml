@@ -1,0 +1,13 @@
+version: 1
+kind: test
+name: Chat endpoint meets latency SLO
+connection: OpenAI
+request:
+  type: prompt
+  model: gpt-4o-mini
+  user: "Reply with a single word: ok"
+assertions:
+  - type: contains
+    value: ok
+  - type: latency_lt
+    value: 3000

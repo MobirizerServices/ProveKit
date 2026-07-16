@@ -1,0 +1,15 @@
+version: 1
+kind: test
+name: Smoke test the agent answers on-topic
+connection: My HTTP agent
+request:
+  type: agent
+  method: POST
+  path: /chat
+  body: { message: "{{q}}" }
+assertions:
+  - type: regex
+    value: "(?i)refund|return|order"
+dataset:
+  - name: order question
+    variables: { q: "Where is my order?" }

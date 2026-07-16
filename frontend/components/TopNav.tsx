@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, EnvironmentT } from "@/lib/api";
+import { api, EnvironmentT, Me } from "@/lib/api";
 import EnvironmentModal from "./EnvironmentModal";
 
 const LINKS = [
@@ -15,10 +15,16 @@ const LINKS = [
 
 export default function TopNav() {
   const path = usePathname();
+  const router = useRouter();
   const [envs, setEnvs] = useState<EnvironmentT[]>([]);
   const [envModal, setEnvModal] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
+  const [menu, setMenu] = useState(false);
   const load = () => api.environments().then(setEnvs).catch(() => {});
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api.me().then(setMe).catch(() => {}); }, []);
+
+  const logout = async () => { try { await api.logout(); } catch {} router.push("/login"); };
+  const isLocal = me?.auth_provider === "local";
 
   const active = envs.find((e) => e.is_active);
   const setActive = async (id: string) => {
@@ -46,6 +52,17 @@ export default function TopNav() {
         </select>
         <button className="btn btn-ghost btn-sm" onClick={() => setEnvModal(true)}>⚙</button>
       </div>
+      {me && !isLocal && (
+        <div className="tb-user" onClick={() => setMenu((m) => !m)}>
+          <span className="tb-avatar" title={me.email}>{(me.name || me.email)[0]?.toUpperCase()}</span>
+          {menu && (
+            <div className="tb-menu" onMouseLeave={() => setMenu(false)}>
+              <div className="tb-menu-email">{me.email}</div>
+              <button onClick={logout}>Sign out</button>
+            </div>
+          )}
+        </div>
+      )}
       {envModal && <EnvironmentModal environments={envs} onChanged={load} onClose={() => setEnvModal(false)} />}
     </div>
   );

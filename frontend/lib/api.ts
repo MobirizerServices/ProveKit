@@ -34,16 +34,24 @@ export interface FlowEvent {
   branch?: string | null; input?: any; output?: any; duration_ms?: number; error?: string; reason?: string;
 }
 
-async function j<T>(path: string, opts?: RequestInit): Promise<T> {
+// Redirect to /login on an unexpected 401 (hosted mode, expired session). Auth calls opt
+// out via `noAuthRedirect` so the login page can surface "invalid credentials" itself.
+async function j<T>(path: string, opts?: RequestInit & { noAuthRedirect?: boolean }): Promise<T> {
+  const { noAuthRedirect, ...init } = opts || {};
   const res = await fetch(`${BASE}${path}`, {
-    credentials: "include", headers: { "Content-Type": "application/json" }, ...opts,
+    credentials: "include", headers: { "Content-Type": "application/json" }, ...init,
   });
   if (!res.ok) {
+    if (res.status === 401 && !noAuthRedirect && typeof window !== "undefined" && !location.pathname.startsWith("/login")) {
+      location.href = "/login?next=" + encodeURIComponent(location.pathname);
+    }
     if (res.status === 429) throw new Error("Rate limit reached — wait a moment and try again.");
     throw new Error(`${res.status}: ${(await res.text()).slice(0, 300)}`);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
+
+export interface Me { id: number; email: string; name: string; auth_provider: string; }
 
 // Parse one SSE event block (may contain multiple `data:` lines per the spec). Returns true on [DONE].
 function _emitSSE(block: string, onEvent: (e: any) => void): boolean {
@@ -57,6 +65,11 @@ function _emitSSE(block: string, onEvent: (e: any) => void): boolean {
 
 export const api = {
   base: BASE,
+  // auth
+  me: () => j<Me>("/api/auth/me", { noAuthRedirect: true }),
+  login: (email: string, password: string) => j<Me>("/api/auth/login", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ email, password }) }),
+  register: (email: string, password: string, name = "") => j<Me>("/api/auth/register", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ email, password, name }) }),
+  logout: () => j("/api/auth/logout", { method: "POST", noAuthRedirect: true }),
   // connections
   connections: () => j<Connection[]>("/api/connections"),
   createConnection: (c: Partial<Connection>) => j<Connection>("/api/connections", { method: "POST", body: JSON.stringify(c) }),

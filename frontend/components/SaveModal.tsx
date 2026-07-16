@@ -16,8 +16,8 @@ export default function SaveModal({ collections, req, onSaved, onClose }: {
     let collection_id: number | null = null;
     if (colId === "new" && newCol.trim()) collection_id = (await api.createCollection(newCol.trim())).id;
     else if (colId !== "none" && colId !== "new") collection_id = +colId;
-    const { type, ...payload } = req;
-    await api.saveRequest({ name: name || "request", type, payload: req, collection_id });
+    const { _k, ...payload } = req;  // drop the internal remount key from the saved payload
+    await api.saveRequest({ name: name || "request", type: req.type, payload, collection_id });
     onSaved(); onClose();
   };
 

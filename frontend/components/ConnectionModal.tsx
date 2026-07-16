@@ -44,7 +44,7 @@ export default function ConnectionModal({ initial, onSave, onDelete, onClose, on
 
   const save = () => {
     let config: any = {};
-    if (kind === "llm") config = { provider, base_url: baseUrl, api_key: apiKey, models: models.split(",").map((m) => m.trim()).filter(Boolean) };
+    if (kind === "llm") config = { provider, base_url: baseUrl, api_key: apiKey, models: models.split(",").map((m: string) => m.trim()).filter(Boolean) };
     else if (kind === "mcp") config = { url };
     else config = { base_url: baseUrl, headers: safeJson(headers) };
     onSave({ id: initial?.id, name, kind, config });

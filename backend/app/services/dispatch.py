@@ -101,7 +101,11 @@ def _run_prompt(db, req, variables):
     for turn in req.get("messages") or []:
         role = "assistant" if turn.get("role") == "assistant" else "user"
         messages.append({"role": role, "content": interpolate(turn.get("content", ""), variables)})
-    messages.append({"role": "user", "content": interpolate(req.get("user", ""), variables)})
+    user = interpolate(req.get("user", ""), variables)
+    # Anthropic rejects empty content blocks — when a messages[] history is supplied,
+    # only append the final user turn if it actually says something.
+    if user or not messages:
+        messages.append({"role": "user", "content": user})
 
     parts, usage = [], {}
     for ev in llm.stream(provider=provider, base_url=base_url, api_key=api_key, model=model,

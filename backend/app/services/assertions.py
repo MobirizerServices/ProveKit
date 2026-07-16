@@ -22,7 +22,7 @@ def _text_of(result: dict) -> str:
     return json.dumps(out) if out is not None else ""
 
 
-def _get_path(obj, path: str):
+def get_path(obj, path: str):
     cur = obj
     for part in str(path).split("."):
         if part == "":
@@ -76,14 +76,14 @@ def evaluate(db, assertions: list, run: dict) -> list[dict]:
                 ok = str(a.get("value", "")) in text
                 detail = f"output {'contains' if ok else 'missing'} “{a.get('value')}”"
             elif t == "equals":
-                target = _get_path(output, a["path"]) if a.get("path") else text
+                target = get_path(output, a["path"]) if a.get("path") else text
                 ok = str(target) == str(a.get("value"))
                 detail = f"{target!r} {'==' if ok else '!='} {a.get('value')!r}"
             elif t == "regex":
                 ok = re.search(a.get("value", ""), text) is not None
                 detail = f"/{a.get('value')}/ {'matched' if ok else 'no match'}"
             elif t == "json_path":
-                val = _get_path(output, a.get("path", ""))
+                val = get_path(output, a.get("path", ""))
                 if a.get("value", "") != "":
                     ok = str(val) == str(a["value"]); detail = f"{a.get('path')} = {val!r}"
                 else:
@@ -95,8 +95,17 @@ def evaluate(db, assertions: list, run: dict) -> list[dict]:
                 except ValidationError as ve:
                     ok = False; detail = str(ve.message)[:140]
             elif t == "tool_called":
+                # Match structured fields only — substring-matching the raw event JSON
+                # passed whenever the name appeared anywhere (e.g. inside prompt text).
                 name = a.get("value", "")
-                ok = name == meta.get("tool") or any(name in json.dumps(e) for e in events)
+                called = {meta.get("tool")}
+                for e in events:
+                    if isinstance(e, dict):
+                        called.update(str(e[k]) for k in ("tool", "tool_name", "name") if e.get(k))
+                        for tc in e.get("tool_calls") or []:
+                            if isinstance(tc, dict):
+                                called.add(str(tc.get("name") or (tc.get("function") or {}).get("name")))
+                ok = name in {c for c in called if c}
                 detail = f"tool '{name}' {'called' if ok else 'not called'}"
             elif t == "latency_lt":
                 ok = dur < float(a.get("value", 0)); detail = f"{dur}ms {'<' if ok else '≥'} {a.get('value')}ms"

@@ -6,9 +6,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..database import get_db
-from ..models import Flow
+from ..database import SessionLocal, get_db
+from ..models import Flow, iso_utc
 from ..services import flow as engine
+from .run import _active_vars
 
 router = APIRouter(prefix="/api/flows", tags=["flows"])
 
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/api/flows", tags=["flows"])
 def _f(f: Flow) -> dict:
     return {"id": f.id, "name": f.name, "description": f.description,
             "nodes": f.nodes, "edges": f.edges,
-            "updated_at": f.updated_at.isoformat() if f.updated_at else None}
+            "updated_at": iso_utc(f.updated_at)}
 
 
 @router.get("/node-types")
@@ -34,7 +35,7 @@ class FlowIn(BaseModel):
 @router.get("")
 def list_flows(db: Session = Depends(get_db)):
     return [{"id": f.id, "name": f.name, "description": f.description,
-             "updated_at": f.updated_at.isoformat() if f.updated_at else None}
+             "updated_at": iso_utc(f.updated_at)}
             for f in db.query(Flow).order_by(Flow.id).all()]
 
 
@@ -83,11 +84,17 @@ def run_stream(fid: int, payload: RunPayload, db: Session = Depends(get_db)):
     if not f:
         raise HTTPException(404, "Flow not found")
     flow = {"nodes": f.nodes, "edges": f.edges}
+    variables = _active_vars(db)
 
     def events():
-        for ev in engine.run_stream(db, flow, payload.input, breakpoints=set(payload.breakpoints), single_step=payload.step):
-            yield f"data: {json.dumps(ev)}\n\n"
-        yield "data: [DONE]\n\n"
+        session = SessionLocal()  # request-scoped db is torn down before this generator runs
+        try:
+            for ev in engine.run_stream(session, flow, payload.input, breakpoints=set(payload.breakpoints),
+                                        single_step=payload.step, variables=variables):
+                yield f"data: {json.dumps(ev)}\n\n"
+            yield "data: [DONE]\n\n"
+        finally:
+            session.close()
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -110,12 +117,17 @@ def continue_stream(fid: int, payload: ContinuePayload, db: Session = Depends(ge
     if ctx is None:
         raise HTTPException(409, "Run context expired or already resumed — start a fresh run.")
     flow = {"nodes": f.nodes, "edges": f.edges}
+    variables = _active_vars(db)
 
     def events():
-        for ev in engine.run_stream(db, flow, {}, breakpoints=set(payload.breakpoints), single_step=payload.step,
-                                    start_at=payload.node_id, ctx=ctx, run_id=payload.run_id):
-            yield f"data: {json.dumps(ev)}\n\n"
-        yield "data: [DONE]\n\n"
+        session = SessionLocal()
+        try:
+            for ev in engine.run_stream(session, flow, {}, breakpoints=set(payload.breakpoints), single_step=payload.step,
+                                        start_at=payload.node_id, ctx=ctx, run_id=payload.run_id, variables=variables):
+                yield f"data: {json.dumps(ev)}\n\n"
+            yield "data: [DONE]\n\n"
+        finally:
+            session.close()
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Connection
+from ..models import Connection, iso_utc
+from ..services.assertions import get_path
 from ..services.masking import MASK, mask_headers, mask_value
 from ..services.netguard import BlockedURL, guard_url
 from ..services.providers.mcp_client import MCPSession
@@ -20,16 +21,6 @@ def _guard_url(url: str) -> None:
         raise HTTPException(400, str(exc))
 
 
-def _get_path(obj, path: str):
-    cur = obj
-    for part in str(path).split("."):
-        if part == "":
-            continue
-        cur = cur.get(part) if isinstance(cur, dict) else None
-        if cur is None:
-            return None
-    return cur
-
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
 
@@ -42,7 +33,7 @@ def _public(c: Connection) -> dict:
     if isinstance(hdrs, dict) and hdrs:
         cfg["headers"] = mask_headers(hdrs)
     return {"id": c.id, "name": c.name, "kind": c.kind, "config": cfg,
-            "created_at": c.created_at.isoformat() if c.created_at else None}
+            "created_at": iso_utc(c.created_at)}
 
 
 class ConnectionIn(BaseModel):
@@ -121,7 +112,7 @@ def authenticate(cid: int, payload: AuthPayload, db: Session = Depends(get_db)):
         data = r.json()
     except Exception as exc:
         raise HTTPException(502, f"Login failed: {exc}")
-    token = _get_path(data, payload.token_path)
+    token = get_path(data, payload.token_path)
     if not token:
         raise HTTPException(400, f"No token found at '{payload.token_path}' in the login response")
     headers = dict((c.config or {}).get("headers") or {})

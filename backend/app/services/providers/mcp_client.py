@@ -80,7 +80,13 @@ class MCPSession:
     def list_tools(self) -> list[dict]:
         with httpx.Client(timeout=self.timeout) as client:
             self._init(client)
-            tools = self._rpc(client, "tools/list").get("tools", [])
+            tools, cursor = [], None
+            while True:  # follow nextCursor — servers may paginate
+                res = self._rpc(client, "tools/list", {"cursor": cursor} if cursor else {})
+                tools += res.get("tools", [])
+                cursor = res.get("nextCursor")
+                if not cursor:
+                    break
             return [{"name": t["name"], "description": t.get("description", ""),
                      "input_schema": t.get("inputSchema") or {}} for t in tools]
 

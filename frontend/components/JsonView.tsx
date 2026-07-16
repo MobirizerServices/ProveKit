@@ -39,6 +39,5 @@ export default function JsonView({ data }: { data: any }) {
     (typeof data === "object" && !Array.isArray(data) && Object.keys(data).length === 0) ||
     (Array.isArray(data) && data.length === 0);
   if (empty) return <div className="jv-empty">— empty —</div>;
-  if (typeof data !== "object") return <div className="jv"><Node v={data} depth={0} /></div>;
   return <div className="jv"><Node v={data} depth={0} /></div>;
 }

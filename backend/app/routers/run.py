@@ -7,8 +7,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..database import get_db
-from ..models import Environment, Run
+from ..database import SessionLocal, get_db
+from ..models import Environment, Run, iso_utc
 from ..services import assertions as assertion_engine
 from ..services import dispatch
 from ..services.masking import mask_headers
@@ -52,7 +52,9 @@ def _sanitize(req: dict) -> dict:
 
 
 def _new_acc():
-    return {"parts": [], "output": None, "meta": {}, "events": [], "status": "completed", "dur": 0, "err": ""}
+    # status starts as "interrupted" — only a `done` event sets the real outcome, so a
+    # client disconnect mid-stream persists honestly instead of as "completed".
+    return {"parts": [], "output": None, "meta": {}, "events": [], "status": "interrupted", "dur": 0, "err": ""}
 
 
 def _apply(acc, ev):
@@ -102,17 +104,27 @@ def run_stream(payload: RunPayload, db: Session = Depends(get_db)):
     assertions = req.get("assertions") or []
 
     def live():
+        # Fresh session: FastAPI tears down the request's Depends(get_db) before this
+        # generator runs (dependencies-with-yield exit when the endpoint returns).
+        session = SessionLocal()
         acc = _new_acc()
-        for ev in dispatch.run(db, req, variables):
-            _apply(acc, ev)
-            yield f"data: {json.dumps(ev)}\n\n"
-        rd = _run_dict(acc)
-        asserts = assertion_engine.evaluate(db, assertions, rd) if assertions else []
-        if asserts:
-            yield f"data: {json.dumps({'type': 'assert', 'results': asserts})}\n\n"
-        yield "data: [DONE]\n\n"
-        if payload.save:
-            _persist(db, req, rd, asserts)
+        asserts: list = []
+        try:
+            for ev in dispatch.run(session, req, variables):
+                _apply(acc, ev)
+                yield f"data: {json.dumps(ev)}\n\n"
+            rd = _run_dict(acc)
+            asserts = assertion_engine.evaluate(session, assertions, rd) if assertions else []
+            if asserts:
+                yield f"data: {json.dumps({'type': 'assert', 'results': asserts})}\n\n"
+            yield "data: [DONE]\n\n"
+        finally:
+            # Runs also on client disconnect (GeneratorExit) — history keeps the partial run.
+            try:
+                if payload.save:
+                    _persist(session, req, _run_dict(acc), asserts)
+            finally:
+                session.close()
 
     return StreamingResponse(live(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -150,7 +162,7 @@ def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db)):
 def list_runs(limit: int = 30, db: Session = Depends(get_db)):
     rows = db.query(Run).order_by(Run.id.desc()).limit(limit).all()
     return [{"id": r.id, "type": r.type, "label": r.label, "status": r.status,
-             "duration_ms": r.duration_ms, "created_at": r.created_at.isoformat() if r.created_at else None}
+             "duration_ms": r.duration_ms, "created_at": iso_utc(r.created_at)}
             for r in rows]
 
 
@@ -161,4 +173,4 @@ def get_run(rid: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Run not found")
     return {"id": r.id, "type": r.type, "label": r.label, "request": r.request,
             "result": r.result, "status": r.status, "duration_ms": r.duration_ms,
-            "error": r.error, "created_at": r.created_at.isoformat() if r.created_at else None}
+            "error": r.error, "created_at": iso_utc(r.created_at)}

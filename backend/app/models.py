@@ -12,6 +12,17 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def iso_utc(dt: datetime | None) -> str | None:
+    """Serialize a stored timestamp as ISO-8601 with an explicit UTC offset. Timestamps
+    are written in UTC (_now), but SQLite hands them back naive — without the offset the
+    browser would parse them as local time."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 class SealedJSON(TypeDecorator):
     """JSON column whose secret fields (api_key, auth headers) are encrypted at rest.
     Application code always sees plaintext; the database file never does."""

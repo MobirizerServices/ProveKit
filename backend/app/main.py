@@ -113,6 +113,16 @@ def _seed_demo(db) -> None:
         logging.getLogger("agentman").info("seeded demo agent + flows")
 
 
+def _reseal_connections(db) -> None:
+    """Upgrade plaintext secrets from older databases to encrypted-at-rest: force each
+    config back through SealedJSON's bind processor (flag_modified beats SQLAlchemy's
+    equal-value change suppression). Idempotent — already-sealed values stay sealed."""
+    from sqlalchemy.orm.attributes import flag_modified
+    for c in db.query(Connection).all():
+        flag_modified(c, "config")
+    db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -122,6 +132,7 @@ async def lifespan(app: FastAPI):
         _seed_prompts(db)
         _seed_flows(db)
         _seed_demo(db)
+        _reseal_connections(db)
     finally:
         db.close()
     yield

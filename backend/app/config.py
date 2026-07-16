@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     # Leave false for local single-user use.
     hosted: bool = False
 
+    # Encryption key for secrets at rest (any string; derived to a Fernet key).
+    # Optional for local SQLite (a key file is auto-generated next to the db);
+    # required for any other database.
+    secret_key: str = ""
+
     # Optional: seed a Magari example connection set on first run.
     seed_examples: bool = True
     magari_backend_url: str = "http://127.0.0.1:8000"

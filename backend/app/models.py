@@ -2,7 +2,7 @@
 collections + saved requests, environments (variables), and run history."""
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -10,6 +10,21 @@ from .database import Base
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class SealedJSON(TypeDecorator):
+    """JSON column whose secret fields (api_key, auth headers) are encrypted at rest.
+    Application code always sees plaintext; the database file never does."""
+    impl = JSON
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        from .services.sealing import seal_config
+        return seal_config(value) if isinstance(value, dict) else value
+
+    def process_result_value(self, value, dialect):
+        from .services.sealing import unseal_config
+        return unseal_config(value) if isinstance(value, dict) else value
 
 
 class Connection(Base):
@@ -22,7 +37,7 @@ class Connection(Base):
     #   llm   -> {provider: openai|anthropic|compatible, base_url, api_key, models: [str]}
     #   mcp   -> {url}
     #   agent -> {base_url, headers: {}}
-    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    config: Mapped[dict] = mapped_column(SealedJSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

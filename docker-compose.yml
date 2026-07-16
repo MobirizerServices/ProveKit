@@ -16,12 +16,21 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
     ports:
       - "8100:8100"
     environment:
       DATABASE_URL: "postgresql+psycopg://agentman:agentman@db:5432/agentman"
+      REDIS_URL: "redis://redis:6379/0"
       SECRET_KEY: "${SECRET_KEY:-dev-only-change-me}"
       CORS_ORIGINS: "http://localhost:3001"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
@@ -30,6 +39,8 @@ services:
       MAGARI_BACKEND_URL: "http://host.docker.internal:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"

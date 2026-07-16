@@ -11,29 +11,12 @@ import time
 import uuid
 
 from . import dispatch
+from .runstore import drop_ctx as _drop_run
+from .runstore import get_ctx, pop_ctx
+from .runstore import store_ctx as _store_run
 
 MAX_STEPS = 100
 _REF = re.compile(r"\{\{\s*([\w.\-]+)\s*\}\}")
-_RUNS: dict[str, dict] = {}       # run_id -> ctx (for pause/continue debugging)
-_RUN_TS: dict[str, float] = {}    # run_id -> last-touch monotonic time
-_RUN_TTL = 1800                   # evict paused runs abandoned for 30 min
-_RUN_MAX = 200                    # hard cap on retained paused runs
-
-
-def _store_run(rid: str, ctx: dict) -> None:
-    """Retain a paused run's context, evicting expired and excess entries (bounded memory)."""
-    now = time.monotonic()
-    _RUNS[rid] = ctx
-    _RUN_TS[rid] = now
-    for k in [k for k, t in list(_RUN_TS.items()) if now - t > _RUN_TTL]:
-        _RUNS.pop(k, None); _RUN_TS.pop(k, None)
-    if len(_RUNS) > _RUN_MAX:
-        for k in sorted(_RUN_TS, key=_RUN_TS.get)[: len(_RUNS) - _RUN_MAX]:
-            _RUNS.pop(k, None); _RUN_TS.pop(k, None)
-
-
-def _drop_run(rid: str) -> None:
-    _RUNS.pop(rid, None); _RUN_TS.pop(rid, None)
 
 # Catalog served to the frontend palette + inspector.
 NODE_TYPES = {
@@ -277,11 +260,6 @@ def run_stream(db, flow: dict, flow_input: dict, breakpoints=None, single_step=F
     yield {"type": "done", "status": "completed", "output": _trim({k: v for k, v in (ctx.get("nodes") or {}).items()})}
 
 
-def get_ctx(run_id: str) -> dict | None:
-    return _RUNS.get(run_id)
-
-
-def pop_ctx(run_id: str) -> dict | None:
-    """Atomically take a paused run's context so a concurrent /continue can't resume it twice."""
-    _RUN_TS.pop(run_id, None)
-    return _RUNS.pop(run_id, None)
+# get_ctx / pop_ctx are re-exported from runstore (imported above) so callers keep using
+# engine.pop_ctx — GETDEL-atomic under Redis so a concurrent /continue can't resume twice.
+__all__ = ["run_stream", "get_ctx", "pop_ctx", "NODE_TYPES"]

@@ -9,7 +9,7 @@ function fmt(v: any): string {
   return String(v);
 }
 
-function Node({ k, v, depth }: { k?: string; v: any; depth: number }) {
+function Node({ k, v, depth, path, onPick }: { k?: string; v: any; depth: number; path: string; onPick?: (path: string, value: any) => void }) {
   const [open, setOpen] = useState(depth < 3);
   const isObj = v && typeof v === "object";
   if (!isObj) {
@@ -18,6 +18,7 @@ function Node({ k, v, depth }: { k?: string; v: any; depth: number }) {
       <div className="jv-row" style={{ paddingLeft: 4 + depth * 14 }}>
         {k !== undefined && <span className="jv-key">{k}:</span>}
         <span className={`jv-val ${t}`}>{fmt(v)}</span>
+        {onPick && path && <button className="jv-pick" title="Assert this field" onClick={(e) => { e.stopPropagation(); onPick(path, v); }}>+ assert</button>}
       </div>
     );
   }
@@ -29,15 +30,15 @@ function Node({ k, v, depth }: { k?: string; v: any; depth: number }) {
         {k !== undefined && <span className="jv-key">{k}:</span>}
         <span className="jv-meta">{Array.isArray(v) ? `[${entries.length}]` : `{${entries.length}}`}</span>
       </div>
-      {open && entries.map(([kk, vv]) => <Node key={kk} k={kk} v={vv} depth={depth + 1} />)}
+      {open && entries.map(([kk, vv]) => <Node key={kk} k={kk} v={vv} depth={depth + 1} path={path ? `${path}.${kk}` : kk} onPick={onPick} />)}
     </div>
   );
 }
 
-export default function JsonView({ data }: { data: any }) {
+export default function JsonView({ data, onPick }: { data: any; onPick?: (path: string, value: any) => void }) {
   const empty = data === undefined || data === null ||
     (typeof data === "object" && !Array.isArray(data) && Object.keys(data).length === 0) ||
     (Array.isArray(data) && data.length === 0);
   if (empty) return <div className="jv-empty">— empty —</div>;
-  return <div className="jv"><Node v={data} depth={0} /></div>;
+  return <div className="jv"><Node v={data} depth={0} path="" onPick={onPick} /></div>;
 }

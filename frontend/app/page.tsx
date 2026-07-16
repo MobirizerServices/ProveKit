@@ -227,7 +227,8 @@ export default function Console() {
           </div>
         </section>
 
-        <ResponsePanel run={run} onboarding={{ connected, canRun, onConnect: () => setWizard(true), onExample: insertExample, onRun: doRun }} />
+        <ResponsePanel run={run} onboarding={{ connected, canRun, onConnect: () => setWizard(true), onExample: insertExample, onRun: doRun }}
+          onAddAssertion={(a) => { setReq((r: any) => ({ ...r, assertions: [...(r.assertions || []), a] })); flash(`Added ${a.type} assertion — run again to check`); }} />
       </div>
 
       {wizard && <ConnectAgentWizard onDone={onWizardDone} onClose={() => setWizard(false)} />}

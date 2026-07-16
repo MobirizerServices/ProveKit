@@ -256,6 +256,13 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .jv-val.string { color: var(--tool); white-space: pre-wrap; word-break: break-word; }
 .jv-val.number { color: var(--agent); } .jv-val.boolean { color: var(--prompt); } .jv-val.null { color: var(--faint); }
 .jv-empty { color: var(--faint); font-style: italic; padding: 8px 0; }
+.jv-pick { opacity: 0; font-size: 10.5px; color: var(--accent-2); background: transparent; border: none; cursor: pointer; padding: 0 4px; white-space: nowrap; }
+.jv-row:hover .jv-pick { opacity: 0.75; } .jv-pick:hover { opacity: 1 !important; text-decoration: underline; }
+
+/* session → assertion affordances */
+.resp-assert-bar { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.ra-btn { font-size: 11.5px; font-weight: 500; color: var(--accent-2); background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.ra-btn:hover { border-color: var(--accent); color: var(--text); }
 
 /* ---------- Modal ---------- */
 .overlay { position: fixed; inset: 0; background: rgba(8,8,10,0.6); backdrop-filter: blur(2px); display: grid; place-items: center; z-index: 50; animation: fadeIn .14s var(--ease); }

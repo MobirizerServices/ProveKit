@@ -23,13 +23,23 @@ function usageTokens(usage: any): string | null {
 
 export interface Onboarding { connected: boolean; canRun: boolean; onConnect: () => void; onExample: () => void; onRun: () => void; }
 
-export default function ResponsePanel({ run, onboarding }: { run: RunState; onboarding?: Onboarding }) {
+export default function ResponsePanel({ run, onboarding, onAddAssertion }: { run: RunState; onboarding?: Onboarding; onAddAssertion?: (a: any) => void }) {
   const [tab, setTab] = useState<"output" | "raw" | "events" | "assert">("output");
   const { status, text, output, meta, error, events, assertResults } = run;
   const hasStream = !!text;
   const tok = usageTokens(meta?.usage);
   const asserts = assertResults || [];
   const passed = asserts.filter((a) => a.ok).length;
+  const done = status === "completed" || status === "failed";
+
+  // Turn the actual run into an assertion — the conversion loop from "I ran it" to "it's a test".
+  const assertContains = () => {
+    const sel = typeof window !== "undefined" ? String(window.getSelection() || "") : "";
+    const value = sel.trim() || (text || (typeof output === "string" ? output : "")).trim().slice(0, 40);
+    if (value) onAddAssertion?.({ type: "contains", value });
+  };
+  const assertLatency = () => onAddAssertion?.({ type: "latency_lt", value: String(Math.ceil((run.durationMs || 100) * 1.5)) });
+  const pickJson = (path: string, value: any) => onAddAssertion?.({ type: "json_path", path, value: value == null ? "" : String(value) });
 
   return (
     <div className="response-pane">
@@ -50,6 +60,12 @@ export default function ResponsePanel({ run, onboarding }: { run: RunState; onbo
         <button className={tab === "raw" ? "on" : ""} onClick={() => setTab("raw")}>Raw</button>
         {asserts.length > 0 && <button className={tab === "assert" ? "on" : ""} onClick={() => setTab("assert")}>Assertions ({passed}/{asserts.length})</button>}
         {events.length > 0 && <button className={tab === "events" ? "on" : ""} onClick={() => setTab("events")}>Events ({events.length})</button>}
+        {done && onAddAssertion && !error && (hasStream || output != null) && (
+          <div className="resp-assert-bar">
+            {(hasStream || typeof output === "string") && <button className="ra-btn" title="Assert the output contains the selected text (or start of the reply)" onClick={assertContains}>+ contains</button>}
+            <button className="ra-btn" title="Assert latency below ~1.5× this run" onClick={assertLatency}>+ latency</button>
+          </div>
+        )}
       </div>
 
       <div className="resp-body">
@@ -90,7 +106,7 @@ export default function ResponsePanel({ run, onboarding }: { run: RunState; onbo
         ) : hasStream ? (
           <div className="stream-text">{text}{status === "running" && <span className="caret">&nbsp;</span>}</div>
         ) : output != null ? (
-          typeof output === "string" ? <div className="stream-text">{output}</div> : <JsonView data={output} />
+          typeof output === "string" ? <div className="stream-text">{output}</div> : <JsonView data={output} onPick={done && onAddAssertion ? pickJson : undefined} />
         ) : status === "running" ? (
           <div className="resp-empty">running…</div>
         ) : (

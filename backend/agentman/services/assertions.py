@@ -51,13 +51,11 @@ def _llm_judge(db, a: dict, text: str, workspace_id=None):
               "satisfies the criteria. Reply with exactly PASS or FAIL on the first line, "
               "then a one-sentence reason.")
     user = f"CRITERIA:\n{a.get('criteria', '')}\n\nOUTPUT:\n{text[:4000]}"
-    parts = []
-    for ev in llm.stream(provider=cfg.get("provider", "openai"), base_url=cfg.get("base_url", ""),
-                         api_key=cfg.get("api_key", ""), model=model, system=system,
-                         messages=[{"role": "user", "content": user}], temperature=0, max_tokens=200):
-        if ev["type"] == "delta":
-            parts.append(ev["text"])
-    reply = "".join(parts).strip()
+    # Sync bridge (asyncio.run): evaluate() runs in a worker thread from async endpoints
+    # and directly in the CLI — both have no running loop, so this is safe.
+    reply = llm.collect_text_sync(provider=cfg.get("provider", "openai"), base_url=cfg.get("base_url", ""),
+                                  api_key=cfg.get("api_key", ""), model=model, system=system,
+                                  messages=[{"role": "user", "content": user}], temperature=0, max_tokens=200).strip()
     return reply.upper().startswith("PASS"), reply[:160]
 
 

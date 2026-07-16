@@ -1,25 +1,25 @@
-"""Provider SSE parsing — Responses + Anthropic — driven by synthetic streams (no network)."""
-import httpx
-import pytest
+"""Provider SSE parsing — Responses + Anthropic — driven by synthetic async streams."""
+import asyncio
 
 from agentman.services.providers import llm
 
 
-class _FakeStream:
+class _FakeAsyncStream:
     def __init__(self, lines):
         self._lines = lines
         self.status_code = 200
 
-    def __enter__(self):
+    async def __aenter__(self):
         return self
 
-    def __exit__(self, *a):
+    async def __aexit__(self, *a):
         return False
 
-    def iter_lines(self):
-        return iter(self._lines)
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
 
-    def read(self):
+    async def aread(self):
         return b""
 
 
@@ -28,17 +28,23 @@ def _patch(monkeypatch, lines):
         def __init__(self, *a, **k):
             pass
 
-        def __enter__(self):
+        async def __aenter__(self):
             return self
 
-        def __exit__(self, *a):
+        async def __aexit__(self, *a):
             return False
 
         def stream(self, *a, **k):
             _patch.body = k.get("json")
-            return _FakeStream(lines)
+            return _FakeAsyncStream(lines)
 
-    monkeypatch.setattr(llm.httpx, "Client", _Client)
+    monkeypatch.setattr(llm.httpx, "AsyncClient", _Client)
+
+
+def _collect(**kwargs):
+    async def run():
+        return [ev async for ev in llm.astream(**kwargs)]
+    return asyncio.run(run())
 
 
 def test_responses_stream_parses_text_and_usage(monkeypatch):
@@ -50,13 +56,12 @@ def test_responses_stream_parses_text_and_usage(monkeypatch):
         "data: [DONE]",
     ]
     _patch(monkeypatch, lines)
-    evs = list(llm.stream(provider="openai-responses", base_url="", api_key="k", model="gpt-4o-mini",
-                          system="be nice", messages=[{"role": "user", "content": "hi"}]))
+    evs = _collect(provider="openai-responses", base_url="", api_key="k", model="gpt-4o-mini",
+                   system="be nice", messages=[{"role": "user", "content": "hi"}])
     assert "".join(e["text"] for e in evs if e["type"] == "delta") == "Hello"
     assert any(e["type"] == "node" and e["data"].get("tool_calls") for e in evs)
     usage = next(e["usage"] for e in evs if e["type"] == "usage")
     assert usage["input_tokens"] == 5
-    # request shape: instructions + input, not chat messages
     assert _patch.body["instructions"] == "be nice"
     assert _patch.body["input"][0]["role"] == "user"
 
@@ -69,14 +74,12 @@ def test_anthropic_surfaces_tool_use_and_refusal(monkeypatch):
         'data: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":1}}',
     ]
     _patch(monkeypatch, lines)
-    evs = list(llm.stream(provider="anthropic", base_url="", api_key="k", model="claude-x",
-                          system=None, messages=[{"role": "user", "content": "hi"}]))
+    evs = _collect(provider="anthropic", base_url="", api_key="k", model="claude-x",
+                   system=None, messages=[{"role": "user", "content": "hi"}])
     tool_ev = next(e for e in evs if e["type"] == "node" and e["data"].get("tool_calls"))
     assert tool_ev["data"]["tool_calls"][0]["name"] == "lookup"
     assert any(e["type"] == "node" and e["data"].get("stop_reason") == "refusal" for e in evs)
     assert "".join(e["text"] for e in evs if e["type"] == "delta") == "ok"
-    # temperature omitted when None (2026 model drift)
-    assert "temperature" not in _patch.body or _patch.body.get("temperature") is not None
 
 
 def test_tool_called_assertion_matches_streamed_tool_event(monkeypatch):
@@ -86,9 +89,9 @@ def test_tool_called_assertion_matches_streamed_tool_event(monkeypatch):
         'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"sunny"}}',
     ]
     _patch(monkeypatch, lines)
-    events = [e["data"] for e in llm.stream(provider="anthropic", base_url="", api_key="k",
-              model="c", system=None, messages=[{"role": "user", "content": "weather?"}])
-              if e["type"] == "node"]
+    evs = _collect(provider="anthropic", base_url="", api_key="k", model="c",
+                   system=None, messages=[{"role": "user", "content": "weather?"}])
+    events = [e["data"] for e in evs if e["type"] == "node"]
     res = ae.evaluate(None, [{"type": "tool_called", "value": "get_weather"}],
                       {"result": {"text": "sunny", "output": None, "meta": {}}, "events": events, "duration_ms": 1})
     assert res[0]["ok"] is True

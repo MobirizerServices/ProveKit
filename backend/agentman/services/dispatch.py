@@ -14,6 +14,8 @@ import re
 import time
 import uuid
 
+import anyio
+
 from ..models import Connection
 from .masking import is_masked
 from .providers import a2a_client, agent_http, llm, mcp_client
@@ -49,11 +51,11 @@ def _conn(db, cid, workspace_id=None) -> Connection | None:
     return c
 
 
-def run_collect(db, req: dict, variables: dict | None = None, workspace_id=None) -> dict:
+async def run_collect(db, req: dict, variables: dict | None = None, workspace_id=None) -> dict:
     """Run a request to completion (non-streaming) and return the collected result —
     used by the flow engine to execute prompt/tool/agent nodes."""
-    text, output, meta, status, err = [], None, {}, "completed", ""
-    for ev in run(db, req, variables, workspace_id):
+    text, output, meta, status, err, dur = [], None, {}, "completed", "", 0
+    async for ev in run(db, req, variables, workspace_id):
         t = ev["type"]
         if t == "delta":
             text.append(ev.get("text", ""))
@@ -62,11 +64,17 @@ def run_collect(db, req: dict, variables: dict | None = None, workspace_id=None)
         elif t == "error":
             err = ev.get("error", "")
         elif t == "done":
-            status = ev.get("status", "completed")
-    return {"text": "".join(text) or None, "output": output, "meta": meta, "status": status, "error": err}
+            status, dur = ev.get("status", "completed"), ev.get("duration_ms", 0)
+    return {"text": "".join(text) or None, "output": output, "meta": meta, "status": status,
+            "error": err, "duration_ms": dur}
 
 
-def run(db, req: dict, variables: dict | None = None, workspace_id=None):
+def run_collect_sync(db, req: dict, variables: dict | None = None, workspace_id=None) -> dict:
+    """Sync bridge for the CLI: drive the async run to completion. Never call from a loop."""
+    return anyio.run(run_collect, db, req, variables, workspace_id)
+
+
+async def run(db, req: dict, variables: dict | None = None, workspace_id=None):
     variables = variables or {}
     rtype = req.get("type")
     run_id = uuid.uuid4().hex[:12]
@@ -74,15 +82,17 @@ def run(db, req: dict, variables: dict | None = None, workspace_id=None):
     t0 = time.monotonic()
     try:
         if rtype == "prompt":
-            yield from _run_prompt(db, req, variables, workspace_id)
+            gen = _run_prompt(db, req, variables, workspace_id)
         elif rtype == "tool":
-            yield from _run_tool(db, req, variables, workspace_id)
+            gen = _run_tool(db, req, variables, workspace_id)
         elif rtype == "agent":
-            yield from _run_agent(db, req, variables, workspace_id)
+            gen = _run_agent(db, req, variables, workspace_id)
         elif rtype == "a2a":
-            yield from _run_a2a(db, req, variables, workspace_id)
+            gen = _run_a2a(db, req, variables, workspace_id)
         else:
             raise ValueError(f"unknown request type: {rtype!r}")
+        async for ev in gen:
+            yield ev
     except Exception as exc:
         yield {"type": "error", "error": str(exc)[:600]}
         yield {"type": "done", "status": "failed", "duration_ms": round((time.monotonic() - t0) * 1000)}
@@ -90,7 +100,7 @@ def run(db, req: dict, variables: dict | None = None, workspace_id=None):
     yield {"type": "done", "status": "completed", "duration_ms": round((time.monotonic() - t0) * 1000)}
 
 
-def _run_prompt(db, req, variables, workspace_id=None):
+async def _run_prompt(db, req, variables, workspace_id=None):
     conn = _conn(db, req.get("connection_id"), workspace_id)
     cfg = (conn.config or {}) if conn else {}
     if conn:
@@ -118,20 +128,22 @@ def _run_prompt(db, req, variables, workspace_id=None):
         messages.append({"role": "user", "content": user})
 
     parts, usage = [], {}
-    for ev in llm.stream(provider=provider, base_url=base_url, api_key=api_key, model=model,
-                         system=system, messages=messages,
-                         temperature=float(req.get("temperature", 0.7)),
-                         max_tokens=int(req.get("max_tokens", 1024))):
+    async for ev in llm.astream(provider=provider, base_url=base_url, api_key=api_key, model=model,
+                                system=system, messages=messages,
+                                temperature=float(req.get("temperature", 0.7)),
+                                max_tokens=int(req.get("max_tokens", 1024))):
         if ev["type"] == "delta":
             parts.append(ev["text"])
             yield {"type": "delta", "text": ev["text"]}
+        elif ev["type"] == "node":
+            yield ev  # tool-call / stop_reason events
         elif ev["type"] == "usage":
             usage = ev["usage"]
     yield {"type": "result", "data": {"text": "".join(parts)},
            "meta": {"provider": provider, "model": model, "usage": usage}}
 
 
-def _run_tool(db, req, variables, workspace_id=None):
+async def _run_tool(db, req, variables, workspace_id=None):
     conn = _conn(db, req.get("connection_id"), workspace_id)
     cfg = (conn.config or {}) if conn else {}
     name = req.get("tool")
@@ -139,7 +151,9 @@ def _run_tool(db, req, variables, workspace_id=None):
         raise ValueError("tool run needs a tool name")
     args = _interp_obj(req.get("args") or {}, variables)
     sess = _mcp_session(cfg, req if not conn else {})
-    result = sess.call_tool(name, args)
+    # MCP is a one-shot blocking call (incl. a possible stdio subprocess) — offload to a
+    # thread so the event loop isn't blocked for its duration.
+    result = await anyio.to_thread.run_sync(sess.call_tool, name, args)
     yield {"type": "result", "data": result, "meta": {"tool": name, "url": cfg.get("url") or req.get("url")}}
 
 
@@ -156,7 +170,7 @@ def _mcp_session(cfg: dict, adhoc: dict):
                                  oauth=cfg.get("oauth"))
 
 
-def _run_agent(db, req, variables, workspace_id=None):
+async def _run_agent(db, req, variables, workspace_id=None):
     conn = _conn(db, req.get("connection_id"), workspace_id)
     # Same rule as prompts/tools: stored auth headers travel only to the stored base_url.
     base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
@@ -167,9 +181,9 @@ def _run_agent(db, req, variables, workspace_id=None):
     req_headers = {k: v for k, v in (req.get("headers") or {}).items() if not is_masked(v)}
     headers = {**((conn.config or {}).get("headers") or {} if conn else {}), **req_headers}
     body = _interp_obj(req.get("body"), variables)
-    for ev in agent_http.run(base_url=base, method=req.get("method", "POST"),
-                             path=interpolate(req.get("path", ""), variables),
-                             headers=headers, body=body, stream=bool(req.get("stream"))):
+    async for ev in agent_http.arun(base_url=base, method=req.get("method", "POST"),
+                                    path=interpolate(req.get("path", ""), variables),
+                                    headers=headers, body=body, stream=bool(req.get("stream"))):
         if ev["type"] == "delta":
             yield {"type": "delta", "text": ev["text"]}
         elif ev["type"] == "event":
@@ -178,7 +192,7 @@ def _run_agent(db, req, variables, workspace_id=None):
             yield {"type": "result", "data": ev.get("data"), "meta": ev.get("meta", {})}
 
 
-def _run_a2a(db, req, variables, workspace_id=None):
+async def _run_a2a(db, req, variables, workspace_id=None):
     conn = _conn(db, req.get("connection_id"), workspace_id)
     base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
     if not base:
@@ -187,8 +201,9 @@ def _run_a2a(db, req, variables, workspace_id=None):
     text = interpolate(req.get("message") or req.get("text") or "", variables)
     card = None
     try:  # discover the endpoint from the agent card; fall back to base_url on failure
-        card = a2a_client.fetch_card(base, headers=headers)
+        card = await a2a_client.fetch_card(base, headers=headers)
     except Exception:
         pass
-    yield from a2a_client.run(base_url=base, text=text, headers=headers,
-                             stream=bool(req.get("stream")), card=card)
+    async for ev in a2a_client.arun(base_url=base, text=text, headers=headers,
+                                    stream=bool(req.get("stream")), card=card):
+        yield ev

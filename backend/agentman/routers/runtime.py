@@ -9,6 +9,7 @@ This executes user-defined outbound calls, so it depends on the P0 safeguards
 import json
 import time
 
+import anyio
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
@@ -62,9 +63,9 @@ async def invoke(slug: str, request: Request, stream: bool = False,
         raise
 
     if stream:
-        def gen():
+        async def gen():
             try:
-                for ev in deploy.run_snapshot(session, snapshot, body, ws_id):
+                async for ev in deploy.run_snapshot(session, snapshot, body, ws_id):
                     yield f"data: {json.dumps(ev)}\n\n"
                 yield "data: [DONE]\n\n"
             finally:
@@ -74,14 +75,17 @@ async def invoke(slug: str, request: Request, stream: bool = False,
 
     try:
         t0 = time.monotonic()
-        events = list(deploy.run_snapshot(session, snapshot, body, ws_id))
+        events = [ev async for ev in deploy.run_snapshot(session, snapshot, body, ws_id)]
         result = deploy.collect_output(events)
         dur = round((time.monotonic() - t0) * 1000)
-        session.add(Run(workspace_id=ws_id, deployment_id=dep_id, type="deployment",
-                        label=f"deploy {slug}", request={"input": body},
-                        result={"output": result["output"]}, status=result["status"],
-                        duration_ms=dur, error=result["error"]))
-        session.commit()
+
+        def _save():
+            session.add(Run(workspace_id=ws_id, deployment_id=dep_id, type="deployment",
+                            label=f"deploy {slug}", request={"input": body},
+                            result={"output": result["output"]}, status=result["status"],
+                            duration_ms=dur, error=result["error"]))
+            session.commit()
+        await anyio.to_thread.run_sync(_save)  # keep the blocking write off the loop
         return {"output": result["output"], "status": result["status"],
                 "run_id": result["run_id"], "duration_ms": dur}
     finally:

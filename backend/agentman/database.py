@@ -1,13 +1,33 @@
 """SQLAlchemy engine + session (SQLite)."""
-from sqlalchemy import MetaData, create_engine
+from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import get_settings
 
 settings = get_settings()
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, connect_args=connect_args)
+_is_sqlite = settings.database_url.startswith("sqlite")
+connect_args = {"check_same_thread": False} if _is_sqlite else {}
+# A concurrent stream holds a pooled connection for its lifetime; if the pool is exhausted,
+# the next (synchronous) checkout blocks the event loop. Size the pool to the stream
+# concurrency so checkouts never block the loop.
+if _is_sqlite and ":memory:" in settings.database_url:
+    _pool = {}
+else:
+    _pool = {"pool_size": 20, "max_overflow": max(10, settings.thread_pool_size)}
+    if not _is_sqlite:
+        _pool["pool_pre_ping"] = True  # Postgres: drop stale connections (harmful w/ SQLite WAL pragma)
+engine = create_engine(settings.database_url, connect_args=connect_args, **_pool)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+if _is_sqlite:
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):
+        # WAL lets readers and a writer coexist; busy_timeout makes a contended write wait
+        # briefly instead of erroring — important now that many async streams write runs.
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.close()
 
 # Named constraints so Alembic's SQLite batch mode (ALTER via table-rebuild) can re-add them.
 _NAMING = {

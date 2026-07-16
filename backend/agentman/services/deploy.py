@@ -33,12 +33,13 @@ def slugify(name: str) -> str:
     return s or "flow"
 
 
-def run_snapshot(session, snapshot: dict, flow_input: dict, workspace_id: int, stream=False):
+async def run_snapshot(session, snapshot: dict, flow_input: dict, workspace_id: int, stream=False):
     """Execute a deployment's frozen flow. Yields the engine's events; the caller collects
     the terminal output (output-node values) or passes events through for streaming."""
-    yield from engine.run_stream(session, {"nodes": snapshot.get("nodes", []),
-                                           "edges": snapshot.get("edges", [])},
-                                 flow_input or {}, workspace_id=workspace_id)
+    async for ev in engine.run_stream(session, {"nodes": snapshot.get("nodes", []),
+                                                "edges": snapshot.get("edges", [])},
+                                      flow_input or {}, workspace_id=workspace_id):
+        yield ev
 
 
 def collect_output(events: list[dict]) -> dict:

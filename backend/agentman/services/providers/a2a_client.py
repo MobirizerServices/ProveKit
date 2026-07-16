@@ -17,15 +17,15 @@ from ..netguard import guard_url
 _CARD_PATHS = ["/.well-known/agent-card.json", "/.well-known/agent.json"]  # v1.0, then v0.3
 
 
-def fetch_card(base_url: str, headers: dict | None = None, timeout: float = 15) -> dict:
+async def fetch_card(base_url: str, headers: dict | None = None, timeout: float = 15) -> dict:
     """Fetch + lightly validate an agent card. Tries the v1.0 path then the v0.3 path."""
     base = base_url.rstrip("/")
     guard_url(base)
     last = None
-    with httpx.Client(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         for path in _CARD_PATHS:
             try:
-                r = client.get(base + path, headers=headers or None)
+                r = await client.get(base + path, headers=headers or None)
                 if r.status_code == 200:
                     card = r.json()
                     if not isinstance(card, dict) or not card.get("name"):
@@ -62,8 +62,8 @@ def _endpoint(base_url: str, card: dict | None) -> str:
     return (card or {}).get("url") or base_url.rstrip("/")
 
 
-def run(*, base_url: str, text: str, headers: dict | None = None, stream: bool = False,
-        card: dict | None = None, timeout: float = 120):
+async def arun(*, base_url: str, text: str, headers: dict | None = None, stream: bool = False,
+               card: dict | None = None, timeout: float = 120):
     """Send one message to an A2A agent; yield unified events (delta/result)."""
     endpoint = _endpoint(base_url, card)
     guard_url(endpoint)
@@ -74,13 +74,13 @@ def run(*, base_url: str, text: str, headers: dict | None = None, stream: bool =
                "params": {"message": message}}
     hdrs = {"Content-Type": "application/json", **(headers or {})}
 
-    with httpx.Client(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         if stream:
             collected = ""
-            with client.stream("POST", endpoint, json=payload, headers=hdrs) as resp:
+            async with client.stream("POST", endpoint, json=payload, headers=hdrs) as resp:
                 if resp.status_code >= 400:
-                    raise RuntimeError(f"A2A error {resp.status_code}: {resp.read().decode()[:300]}")
-                for line in resp.iter_lines():
+                    raise RuntimeError(f"A2A error {resp.status_code}: {(await resp.aread()).decode()[:300]}")
+                async for line in resp.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue
                     try:
@@ -96,7 +96,7 @@ def run(*, base_url: str, text: str, headers: dict | None = None, stream: bool =
                    "meta": {"protocol": "a2a", "streamed": True}}
             return
 
-        resp = client.post(endpoint, json=payload, headers=hdrs)
+        resp = await client.post(endpoint, json=payload, headers=hdrs)
         if resp.status_code >= 400:
             raise RuntimeError(f"A2A error {resp.status_code}: {resp.text[:300]}")
         data = resp.json()

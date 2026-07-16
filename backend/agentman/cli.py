@@ -78,19 +78,10 @@ def _run_case(reg, request, variables):
 
 
 def _collect(reg, req, variables):
-    text, output, meta, status, err, dur = [], None, {}, "interrupted", "", 0
-    for ev in dispatch.run(reg, req, variables):
-        t = ev["type"]
-        if t == "delta":
-            text.append(ev.get("text", ""))
-        elif t == "result":
-            output, meta = ev.get("data"), ev.get("meta", {})
-        elif t == "error":
-            err = ev.get("error", "")
-        elif t == "done":
-            status, dur = ev.get("status", "completed"), ev.get("duration_ms", 0)
-    return {"result": {"text": "".join(text) or None, "output": output, "meta": meta},
-            "status": status, "error": err, "duration_ms": dur}
+    # dispatch is async; the CLI is sync, so drive it via the sync bridge (its own loop).
+    r = dispatch.run_collect_sync(reg, req, variables)
+    return {"result": {"text": r["text"], "output": r["output"], "meta": r["meta"]},
+            "status": r["status"], "error": r["error"], "duration_ms": r.get("duration_ms", 0)}
 
 
 def _resolve_request(doc, reg) -> tuple[dict, str | None]:

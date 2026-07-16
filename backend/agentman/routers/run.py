@@ -2,6 +2,7 @@
 assertions, and persisting to history. Also batch datasets (run over N input rows)."""
 import json
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -82,11 +83,25 @@ def _run_dict(acc):
     return {"result": result, "status": acc["status"], "duration_ms": acc["dur"], "events": acc["events"], "error": acc["err"]}
 
 
-def _collect(db, req, variables, ws_id):
+async def _collect(db, req, variables, ws_id):
     acc = _new_acc()
-    for ev in dispatch.run(db, req, variables, ws_id):
+    async for ev in dispatch.run(db, req, variables, ws_id):
         _apply(acc, ev)
     return _run_dict(acc)
+
+
+async def _evaluate(db, assertions, rd, ws_id):
+    """Offload assertion evaluation to a thread — the llm_judge assertion runs its own
+    event loop (asyncio.run), which can't happen inside this request's loop."""
+    if not assertions:
+        return []
+    return await anyio.to_thread.run_sync(assertion_engine.evaluate, db, assertions, rd, ws_id)
+
+
+async def _persist_async(db, req, rd, asserts, ws_id):
+    """Persist off the event loop — a blocking DB commit (esp. a contended SQLite write)
+    must not stall every other in-flight stream sharing this loop."""
+    await anyio.to_thread.run_sync(_persist, db, req, rd, asserts, ws_id)
 
 
 def _persist(db, req, rd, asserts, ws_id):
@@ -111,18 +126,18 @@ def run_stream(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace
     assertions = req.get("assertions") or []
     ws_id = ws.id
 
-    def live():
+    async def live():
         # Fresh session: FastAPI tears down the request's Depends(get_db) before this
         # generator runs (dependencies-with-yield exit when the endpoint returns).
         session = SessionLocal()
         acc = _new_acc()
         asserts: list = []
         try:
-            for ev in dispatch.run(session, req, variables, ws_id):
+            async for ev in dispatch.run(session, req, variables, ws_id):
                 _apply(acc, ev)
                 yield f"data: {json.dumps(ev)}\n\n"
             rd = _run_dict(acc)
-            asserts = assertion_engine.evaluate(session, assertions, rd, ws_id) if assertions else []
+            asserts = await _evaluate(session, assertions, rd, ws_id)
             if asserts:
                 yield f"data: {json.dumps({'type': 'assert', 'results': asserts})}\n\n"
             yield "data: [DONE]\n\n"
@@ -130,7 +145,7 @@ def run_stream(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace
             # Runs also on client disconnect (GeneratorExit) — history keeps the partial run.
             try:
                 if payload.save:
-                    _persist(session, req, _run_dict(acc), asserts, ws_id)
+                    await _persist_async(session, req, _run_dict(acc), asserts, ws_id)
             finally:
                 session.close()
 
@@ -139,18 +154,18 @@ def run_stream(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace
 
 
 @router.post("/run")
-def run_once(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace = Depends(check_rate)):
+async def run_once(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace = Depends(check_rate)):
     clamp_max_tokens(payload.request)
     variables = {**_active_vars(db, ws.id), **(payload.variables or {})}
-    rd = _collect(db, payload.request, variables, ws.id)
-    asserts = assertion_engine.evaluate(db, payload.request.get("assertions") or [], rd, ws.id)
+    rd = await _collect(db, payload.request, variables, ws.id)
+    asserts = await _evaluate(db, payload.request.get("assertions") or [], rd, ws.id)
     if payload.save:
-        _persist(db, payload.request, rd, asserts, ws.id)
+        await _persist_async(db, payload.request, rd, asserts, ws.id)
     return {"result": rd["result"], "status": rd["status"], "duration_ms": rd["duration_ms"], "assertions": asserts}
 
 
 @router.post("/dataset/run")
-def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db), ws: Workspace = Depends(check_rate)):
+async def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db), ws: Workspace = Depends(check_rate)):
     enforce_dataset_size(len(payload.rows))
     clamp_max_tokens(payload.request)
     assertions = payload.request.get("assertions") or []
@@ -158,8 +173,8 @@ def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db), ws: Work
     rows = []
     for i, row in enumerate(payload.rows):
         variables = {**base, **(row.get("variables") or {})}
-        rd = _collect(db, payload.request, variables, ws.id)
-        asserts = assertion_engine.evaluate(db, assertions, rd, ws.id) if assertions else []
+        rd = await _collect(db, payload.request, variables, ws.id)
+        asserts = await _evaluate(db, assertions, rd, ws.id)
         passed = all(a["ok"] for a in asserts) if asserts else rd["status"] == "completed"
         rows.append({
             "name": row.get("name") or f"row {i + 1}", "status": rd["status"],

@@ -107,11 +107,11 @@ def run_stream(fid: int, payload: RunPayload, db: Session = Depends(get_db), ws:
     variables = _active_vars(db, ws.id)
     ws_id = ws.id
 
-    def events():
+    async def events():
         session = SessionLocal()  # request-scoped db is torn down before this generator runs
         try:
-            for ev in engine.run_stream(session, flow, payload.input, breakpoints=set(payload.breakpoints),
-                                        single_step=payload.step, variables=variables, workspace_id=ws_id):
+            async for ev in engine.run_stream(session, flow, payload.input, breakpoints=set(payload.breakpoints),
+                                              single_step=payload.step, variables=variables, workspace_id=ws_id):
                 yield f"data: {json.dumps(ev)}\n\n"
             yield "data: [DONE]\n\n"
         finally:
@@ -139,11 +139,11 @@ def continue_stream(fid: int, payload: ContinuePayload, db: Session = Depends(ge
     variables = _active_vars(db, ws.id)
     ws_id = ws.id
 
-    def events():
+    async def events():
         session = SessionLocal()
         try:
-            for ev in engine.run_stream(session, flow, {}, breakpoints=set(payload.breakpoints), single_step=payload.step,
-                                        start_at=payload.node_id, ctx=ctx, run_id=payload.run_id, variables=variables, workspace_id=ws_id):
+            async for ev in engine.run_stream(session, flow, {}, breakpoints=set(payload.breakpoints), single_step=payload.step,
+                                              start_at=payload.node_id, ctx=ctx, run_id=payload.run_id, variables=variables, workspace_id=ws_id):
                 yield f"data: {json.dumps(ev)}\n\n"
             yield "data: [DONE]\n\n"
         finally:

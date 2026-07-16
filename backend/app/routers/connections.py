@@ -7,11 +7,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Connection
+from ..services.masking import MASK, mask_headers, mask_value
 from ..services.netguard import BlockedURL, guard_url
 from ..services.providers.mcp_client import MCPSession
-
-# Header keys whose values are secrets and must be masked in API responses.
-_SECRET_HEADERS = {"authorization", "x-api-key", "api-key", "cookie", "x-auth-token", "proxy-authorization"}
 
 
 def _guard_url(url: str) -> None:
@@ -34,18 +32,15 @@ def _get_path(obj, path: str):
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
-MASK = "••••••"
-
 
 def _public(c: Connection) -> dict:
     cfg = dict(c.config or {})
     if cfg.get("api_key"):
-        key = cfg["api_key"]
-        cfg["api_key"] = MASK + key[-4:] if len(key) > 4 else MASK
+        cfg["api_key"] = mask_value(cfg["api_key"])
         cfg["has_key"] = True
     hdrs = cfg.get("headers")
     if isinstance(hdrs, dict) and hdrs:
-        cfg["headers"] = {k: (MASK + str(v)[-4:] if k.lower() in _SECRET_HEADERS and v else v) for k, v in hdrs.items()}
+        cfg["headers"] = mask_headers(hdrs)
     return {"id": c.id, "name": c.name, "kind": c.kind, "config": cfg,
             "created_at": c.created_at.isoformat() if c.created_at else None}
 

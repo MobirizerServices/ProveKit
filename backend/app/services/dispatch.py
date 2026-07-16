@@ -15,6 +15,7 @@ import time
 import uuid
 
 from ..models import Connection
+from .masking import is_masked
 from .providers import agent_http, llm, mcp_client
 
 _VAR = re.compile(r"\{\{\s*([\w.\-]+)\s*\}\}")
@@ -139,7 +140,10 @@ def _run_agent(db, req, variables):
     base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
     if not base:
         raise ValueError("agent run needs an agent connection (or base_url)")
-    headers = {**((conn.config or {}).get("headers") or {} if conn else {}), **(req.get("headers") or {})}
+    # Drop masked values (e.g. a run replayed from history) so the connection's real
+    # header wins instead of being overwritten by "••••1234".
+    req_headers = {k: v for k, v in (req.get("headers") or {}).items() if not is_masked(v)}
+    headers = {**((conn.config or {}).get("headers") or {} if conn else {}), **req_headers}
     body = _interp_obj(req.get("body"), variables)
     for ev in agent_http.run(base_url=base, method=req.get("method", "POST"),
                              path=interpolate(req.get("path", ""), variables),

@@ -11,6 +11,7 @@ from ..database import get_db
 from ..models import Environment, Run
 from ..services import assertions as assertion_engine
 from ..services import dispatch
+from ..services.masking import mask_headers
 
 router = APIRouter(prefix="/api", tags=["run"])
 
@@ -43,7 +44,11 @@ def _label(req: dict) -> str:
 
 
 def _sanitize(req: dict) -> dict:
-    return {k: v for k, v in req.items() if k != "api_key"}
+    """Strip/mask secrets before persisting to run history (returned by GET /runs/{id})."""
+    out = {k: v for k, v in req.items() if k != "api_key"}
+    if isinstance(out.get("headers"), dict):
+        out["headers"] = mask_headers(out["headers"])
+    return out
 
 
 def _new_acc():

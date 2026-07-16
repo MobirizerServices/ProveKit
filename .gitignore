@@ -1,0 +1,9 @@
+# Secrets & local state — never commit.
+**/.env
+**/.DS_Store
+**/agentman.db
+**/venv/
+**/node_modules/
+**/.next/
+*.pyc
+__pycache__/

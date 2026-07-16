@@ -1,0 +1,98 @@
+"""AgentMan data model. Everything the console persists: connections (providers),
+collections + saved requests, environments (variables), and run history."""
+from datetime import datetime, timezone
+
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .database import Base
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Connection(Base):
+    """A provider you can run against. kind = llm | mcp | agent."""
+    __tablename__ = "connections"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(16))  # llm | mcp | agent
+    # config shape by kind:
+    #   llm   -> {provider: openai|anthropic|compatible, base_url, api_key, models: [str]}
+    #   mcp   -> {url}
+    #   agent -> {base_url, headers: {}}
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Collection(Base):
+    __tablename__ = "collections"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Request(Base):
+    """A saved request. type = prompt | tool | agent. payload holds the type-specific body."""
+    __tablename__ = "requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    collection_id: Mapped[int | None] = mapped_column(ForeignKey("collections.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String(160))
+    type: Mapped[str] = mapped_column(String(16))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class Environment(Base):
+    __tablename__ = "environments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    variables: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(default=False)
+
+
+class Prompt(Base):
+    """A managed, reusable prompt (the generic Prompt Registry)."""
+    __tablename__ = "prompts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(80), unique=True)
+    name: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text, default="")
+    content: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class Flow(Base):
+    """A visual agent workflow: a graph of nodes + edges executed by the flow engine."""
+    __tablename__ = "flows"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text, default="")
+    nodes: Mapped[list] = mapped_column(JSON, default=list)
+    edges: Mapped[list] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class Dataset(Base):
+    """A reusable, named set of input rows — run any request over it. rows =
+    [{name, variables}]. Decoupled from requests, like a shared data file."""
+    __tablename__ = "datasets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    rows: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Run(Base):
+    """A single execution + its result (for history/replay)."""
+    __tablename__ = "runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    type: Mapped[str] = mapped_column(String(16))
+    label: Mapped[str] = mapped_column(String(200), default="")
+    request: Mapped[dict] = mapped_column(JSON, default=dict)   # the sent request
+    result: Mapped[dict] = mapped_column(JSON, default=dict)    # {output, meta, events?}
+    status: Mapped[str] = mapped_column(String(16), default="completed")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

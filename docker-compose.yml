@@ -1,0 +1,32 @@
+# AgentMan — run backend + frontend together.
+#   OPENAI_API_KEY=sk-… docker compose up --build
+# Then open http://localhost:3001
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8100:8100"
+    environment:
+      DATABASE_URL: "sqlite:////data/agentman.db"
+      CORS_ORIGINS: "http://localhost:3001"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      # In-container, reach host services (e.g. Magari's MCP/backend) via host.docker.internal.
+      MAGARI_MCP_URL: "http://host.docker.internal:8765/mcp"
+      MAGARI_BACKEND_URL: "http://host.docker.internal:8000"
+    volumes:
+      - agentman-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE: "http://localhost:8100"
+    ports:
+      - "3001:3001"
+    depends_on:
+      - backend
+
+volumes:
+  agentman-data:

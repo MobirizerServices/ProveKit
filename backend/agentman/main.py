@@ -30,6 +30,13 @@ def _reseal_connections(db) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Raise the threadpool ceiling: streaming responses run their sync generators here, so
+    # the default ~40 tokens caps concurrent streams. This lifts it without an async rewrite.
+    try:
+        import anyio
+        anyio.to_thread.current_default_thread_limiter().total_tokens = settings.thread_pool_size
+    except Exception:
+        pass
     init_db()
     db = SessionLocal()
     try:

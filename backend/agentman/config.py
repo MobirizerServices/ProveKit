@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # Unset → in-memory (single-process local use).
     redis_url: str = ""
 
+    # Max concurrent sync workers (streams run in this threadpool). Lifts Starlette's
+    # ~40-token default so many more streams run at once without an async rewrite.
+    thread_pool_size: int = 200
+
     # Quotas (protect shared infra). 0 disables a given limit.
     rate_limit_per_min: int = 120     # run requests per workspace per minute
     dataset_max_rows: int = 200       # rows per dataset run

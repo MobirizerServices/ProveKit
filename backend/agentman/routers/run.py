@@ -11,6 +11,7 @@ from ..database import SessionLocal, get_db
 from ..models import Environment, Run, Workspace, iso_utc
 from ..services import assertions as assertion_engine
 from ..services import dispatch, otel
+from ..services.limits import check_rate, clamp_max_tokens, enforce_dataset_size, prune_runs
 from ..services.masking import mask_headers
 from ..services.workspace import current_workspace
 
@@ -95,14 +96,16 @@ def _persist(db, req, rd, asserts, ws_id):
                   result=result, status=rd["status"], duration_ms=rd["duration_ms"], error=rd["error"])
         db.add(row); db.commit()
         otel.emit_run(row)  # best-effort mirror to an OTLP collector if configured
+        prune_runs(db, ws_id)
     except Exception:
         db.rollback()
 
 
 @router.post("/run/stream")
-def run_stream(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+def run_stream(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace = Depends(check_rate)):
     variables = {**_active_vars(db, ws.id), **(payload.variables or {})}
     req = payload.request
+    clamp_max_tokens(req)
     assertions = req.get("assertions") or []
     ws_id = ws.id
 
@@ -134,7 +137,8 @@ def run_stream(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace
 
 
 @router.post("/run")
-def run_once(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+def run_once(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace = Depends(check_rate)):
+    clamp_max_tokens(payload.request)
     variables = {**_active_vars(db, ws.id), **(payload.variables or {})}
     rd = _collect(db, payload.request, variables, ws.id)
     asserts = assertion_engine.evaluate(db, payload.request.get("assertions") or [], rd, ws.id)
@@ -144,7 +148,9 @@ def run_once(payload: RunPayload, db: Session = Depends(get_db), ws: Workspace =
 
 
 @router.post("/dataset/run")
-def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db), ws: Workspace = Depends(check_rate)):
+    enforce_dataset_size(len(payload.rows))
+    clamp_max_tokens(payload.request)
     assertions = payload.request.get("assertions") or []
     base = _active_vars(db, ws.id)
     rows = []

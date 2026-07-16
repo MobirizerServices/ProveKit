@@ -35,7 +35,10 @@ async function j<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include", headers: { "Content-Type": "application/json" }, ...opts,
   });
-  if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    if (res.status === 429) throw new Error("Rate limit reached — wait a moment and try again.");
+    throw new Error(`${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
   return res.status === 204 ? (undefined as T) : res.json();
 }
 

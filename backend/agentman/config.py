@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Unset → in-memory (single-process local use).
     redis_url: str = ""
 
+    # Quotas (protect shared infra). 0 disables a given limit.
+    rate_limit_per_min: int = 120     # run requests per workspace per minute
+    dataset_max_rows: int = 200       # rows per dataset run
+    max_tokens_cap: int = 0           # hard cap on prompt max_tokens (0 = no cap)
+    runs_retention: int = 1000        # keep last N runs per workspace
+
     # Optional: seed a Magari example connection set on first run.
     seed_examples: bool = True
     magari_backend_url: str = "http://127.0.0.1:8000"

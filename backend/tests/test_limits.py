@@ -57,3 +57,19 @@ def test_prune_runs_keeps_last_n(client, monkeypatch):
     for _ in range(6):
         client.post("/api/run", json={"request": _mock_req(conn["id"]), "save": True})
     assert len(client.get("/api/runs?limit=100").json()) <= 3
+
+
+def test_agent_body_secrets_masked_in_history(client):
+    from agentman.routers.run import _sanitize
+    req = {"type": "agent", "path": "/x", "body": {"user": "ada", "password": "hunter2secret", "nested": {"token": "abc123xyz"}}}
+    out = _sanitize(req)
+    assert out["body"]["password"].startswith("••••") and "hunter2secret" not in str(out)
+    assert out["body"]["nested"]["token"].startswith("••••")
+    assert out["body"]["user"] == "ada"  # non-secret preserved
+
+
+def test_flow_node_cap(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "max_flow_nodes", 2)
+    big = [{"id": f"n{i}", "type": "input", "position": {"x": 0, "y": 0}, "data": {}, "config": {}} for i in range(5)]
+    r = client.post("/api/flows", json={"name": "big", "nodes": big, "edges": []})
+    assert r.status_code == 400 and "too large" in r.json()["detail"]

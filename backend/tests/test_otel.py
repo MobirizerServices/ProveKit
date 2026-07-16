@@ -94,3 +94,22 @@ def test_ingest_endpoint_persists_and_shows_in_history():
         runs = client.get("/api/runs?limit=100").json()
         assert len(runs) == before + 1
         assert runs[0]["type"] == "trace"
+
+
+def test_ingest_with_bearer_key():
+    """Real OTLP exporters authenticate with a Bearer ingest key (no cookies)."""
+    from agentman.config import get_settings
+    with TestClient(app) as client:
+        # mint a key for the (local) workspace
+        key = client.post("/api/workspace/ingest-key").json()["ingest_key"]
+        assert key.startswith("agm_")
+        # a fresh client with NO cookie but the bearer key can push traces
+        import httpx
+        bare = TestClient(app)
+        bare.cookies.clear()
+        span = _span({"gen_ai.request.model": "gpt-4o", "gen_ai.completion": "hi"})
+        r = bare.post("/v1/traces", json=_otlp(span), headers={"Authorization": f"Bearer {key}"})
+        assert r.status_code == 200 and "partialSuccess" in r.json()
+        # wrong key rejected
+        bad = bare.post("/v1/traces", json=_otlp(span), headers={"Authorization": "Bearer agm_wrong"})
+        assert bad.status_code == 403

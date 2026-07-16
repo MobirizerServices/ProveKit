@@ -3,7 +3,7 @@
 Sessions are httpOnly cookies carrying a signed token. GitHub OAuth is a planned
 provider; the User model + session layer are provider-agnostic so it slots in later.
 """
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import User
 from ..services import auth
+from ..services.limits import check_login_rate
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -44,7 +45,9 @@ def register(body: Credentials, response: Response, db: Session = Depends(get_db
 
 
 @router.post("/login")
-def login(body: Credentials, response: Response, db: Session = Depends(get_db)):
+def login(body: Credentials, request: Request, response: Response, db: Session = Depends(get_db)):
+    client = request.client.host if request.client else "?"
+    check_login_rate(f"{body.email}:{client}")  # brute-force throttle
     u = db.query(User).filter(User.email == body.email).first()
     if not u or not u.password_hash or not auth.verify_password(body.password, u.password_hash):
         raise HTTPException(401, "Invalid email or password")

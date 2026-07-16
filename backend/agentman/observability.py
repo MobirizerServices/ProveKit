@@ -63,6 +63,16 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject oversized request bodies (declared Content-Length) with 413."""
+    async def dispatch(self, request: Request, call_next):
+        cl = request.headers.get("content-length")
+        if cl and cl.isdigit() and int(cl) > get_settings().max_body_bytes:
+            from starlette.responses import JSONResponse as _JR
+            return _JR({"detail": "Request body too large"}, status_code=413)
+        return await call_next(request)
+
+
 def healthz() -> JSONResponse:
     """Liveness+readiness: DB reachable, and Redis if configured."""
     checks = {"db": False, "redis": None}

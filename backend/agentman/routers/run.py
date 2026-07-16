@@ -12,7 +12,7 @@ from ..models import Environment, Run, Workspace, iso_utc
 from ..services import assertions as assertion_engine
 from ..services import dispatch, otel
 from ..services.limits import check_rate, clamp_max_tokens, enforce_dataset_size, prune_runs
-from ..services.masking import mask_headers
+from ..services.masking import mask_body, mask_headers
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/api", tags=["run"])
@@ -50,6 +50,8 @@ def _sanitize(req: dict) -> dict:
     out = {k: v for k, v in req.items() if k != "api_key"}
     if isinstance(out.get("headers"), dict):
         out["headers"] = mask_headers(out["headers"])
+    if out.get("body") is not None:  # agent bodies can carry tokens/passwords
+        out["body"] = mask_body(out["body"])
     return out
 
 

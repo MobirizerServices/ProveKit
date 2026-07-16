@@ -48,8 +48,16 @@ def list_flows(db: Session = Depends(get_db), ws: Workspace = Depends(current_wo
             for f in db.query(Flow).filter(Flow.workspace_id == ws.id).order_by(Flow.id).all()]
 
 
+def _check_nodes(nodes: list) -> None:
+    from ..config import get_settings
+    cap = get_settings().max_flow_nodes
+    if cap and len(nodes or []) > cap:
+        raise HTTPException(400, f"Flow too large: {len(nodes)} nodes (max {cap}).")
+
+
 @router.post("")
 def create_flow(payload: FlowIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    _check_nodes(payload.nodes)
     f = Flow(workspace_id=ws.id, name=payload.name, description=payload.description, nodes=payload.nodes, edges=payload.edges)
     db.add(f); db.commit(); db.refresh(f)
     return _f(f)
@@ -71,6 +79,7 @@ def export_flow(fid: int, db: Session = Depends(get_db), ws: Workspace = Depends
 
 @router.put("/{fid}")
 def update_flow(fid: int, payload: FlowIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    _check_nodes(payload.nodes)
     f = _get(db, ws, fid)
     f.name, f.description, f.nodes, f.edges = payload.name, payload.description, payload.nodes, payload.edges
     db.commit(); db.refresh(f)

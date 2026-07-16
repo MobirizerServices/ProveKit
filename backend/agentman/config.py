@@ -38,9 +38,12 @@ class Settings(BaseSettings):
 
     # Quotas (protect shared infra). 0 disables a given limit.
     rate_limit_per_min: int = 120     # run requests per workspace per minute
+    login_attempts_per_min: int = 10  # login attempts per email+IP per minute
     dataset_max_rows: int = 200       # rows per dataset run
     max_tokens_cap: int = 0           # hard cap on prompt max_tokens (0 = no cap)
     runs_retention: int = 1000        # keep last N runs per workspace
+    max_body_bytes: int = 2_000_000   # reject request bodies larger than this
+    max_flow_nodes: int = 200         # cap nodes per flow
 
     # Optional: seed a Magari example connection set on first run.
     seed_examples: bool = True

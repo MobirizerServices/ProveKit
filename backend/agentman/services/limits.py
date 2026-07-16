@@ -66,6 +66,17 @@ def check_rate(ws: Workspace = Depends(current_workspace)) -> Workspace:
     return ws
 
 
+def check_login_rate(ident: str) -> None:
+    """Throttle login attempts per identifier (email+IP) to blunt brute force."""
+    limit = get_settings().login_attempts_per_min
+    if limit <= 0:
+        return
+    key = f"login:{ident}:{_now() // 60}"
+    if _window().hit(key, 60) > limit:
+        raise HTTPException(429, "Too many login attempts — wait a minute.",
+                            headers={"Retry-After": str(60 - (_now() % 60))})
+
+
 def enforce_dataset_size(n_rows: int) -> None:
     cap = get_settings().dataset_max_rows
     if cap and n_rows > cap:

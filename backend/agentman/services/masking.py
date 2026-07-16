@@ -18,3 +18,18 @@ def mask_headers(headers: dict) -> dict:
 
 def is_masked(v) -> bool:
     return isinstance(v, str) and v.startswith(MASK)
+
+
+# Body fields whose values look like secrets — masked before persisting to history.
+_SECRET_FIELDS = {"api_key", "apikey", "token", "access_token", "refresh_token", "password",
+                  "secret", "client_secret", "authorization"}
+
+
+def mask_body(obj):
+    """Recursively mask secret-looking fields in a request/response body for storage."""
+    if isinstance(obj, dict):
+        return {k: (mask_value(v) if k.lower() in _SECRET_FIELDS and v and isinstance(v, str)
+                    else mask_body(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [mask_body(x) for x in obj]
+    return obj

@@ -60,6 +60,8 @@ class Workspace(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160), default="My workspace")
     owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    # Bearer token for unattended OTLP trace ingest (exporters can't send cookies).
+    ingest_key_hash: Mapped[str] = mapped_column(String(128), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

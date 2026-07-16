@@ -1,4 +1,7 @@
-const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8100";
+// Same-origin by default: /api and /v1 are proxied to the backend (Next.js rewrites in
+// dev, the reverse proxy in prod), so one frontend build works in every environment and
+// session cookies are first-party. Set NEXT_PUBLIC_API_BASE only for a split-domain setup.
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 export type Kind = "llm" | "mcp" | "agent" | "a2a";
 export type ReqType = "prompt" | "tool" | "agent" | "a2a";

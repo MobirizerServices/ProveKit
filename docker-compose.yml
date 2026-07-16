@@ -48,8 +48,9 @@ services:
   frontend:
     build:
       context: ./frontend
-      args:
-        NEXT_PUBLIC_API_BASE: "http://localhost:8100"
+    environment:
+      # Same-origin: the Next server proxies /api and /v1 to the backend service.
+      API_PROXY_TARGET: "http://backend:8100"
     ports:
       - "3001:3001"
     depends_on:

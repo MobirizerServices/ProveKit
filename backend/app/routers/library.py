@@ -1,10 +1,12 @@
-"""Collections, saved requests, and environments (variables)."""
+"""Collections, saved requests, environments (variables), and .agentman import/export."""
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Collection, Dataset, Environment, Request
+from ..models import Collection, Connection, Dataset, Environment, Flow, Request
+from ..services import testfile
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -91,6 +93,71 @@ def delete_request(rid: int, db: Session = Depends(get_db)):
 def _req(r: Request) -> dict:
     return {"id": r.id, "name": r.name, "type": r.type, "payload": r.payload,
             "collection_id": r.collection_id}
+
+
+# ---- .agentman file import/export (the git-diffable test format) ----
+@router.get("/requests/{rid}/export", response_class=PlainTextResponse)
+def export_request(rid: int, db: Session = Depends(get_db)):
+    r = db.get(Request, rid)
+    if not r:
+        raise HTTPException(404, "Request not found")
+    payload = dict(r.payload or {})
+    conn = db.get(Connection, payload.get("connection_id")) if payload.get("connection_id") else None
+    return testfile.dump_test(r.name, payload, conn.name if conn else None)
+
+
+class ImportIn(BaseModel):
+    content: str
+    collection_id: int | None = None
+
+
+@router.post("/import")
+def import_file(payload: ImportIn, db: Session = Depends(get_db)):
+    """Import an .agentman document (test or flow). Connection names resolve against
+    this workspace; an unresolved name imports fine but needs a connection re-pick."""
+    try:
+        doc = testfile.load(payload.content)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    def _resolve(name: str | None) -> int | None:
+        if not name:
+            return None
+        c = db.query(Connection).filter(Connection.name == name).first()
+        return c.id if c else None
+
+    if doc["kind"] == "test":
+        req = dict(doc["request"])
+        cid = _resolve(doc.get("connection"))
+        if cid:
+            req["connection_id"] = cid
+        if doc.get("assertions"):
+            req["assertions"] = doc["assertions"]
+        r = Request(name=doc.get("name") or "imported", type=req.get("type"),
+                    payload=req, collection_id=payload.collection_id)
+        db.add(r)
+        d = None
+        if doc.get("dataset"):
+            d = Dataset(name=doc.get("name") or "imported", rows=doc["dataset"])
+            db.add(d)
+        db.commit(); db.refresh(r)
+        return {"kind": "test", "request": _req(r),
+                "dataset_id": d.id if d else None,
+                "connection_resolved": bool(cid) or not doc.get("connection")}
+
+    nodes = []
+    unresolved = 0
+    for n in doc["nodes"]:
+        cfg = dict(n.get("config") or {})
+        cname = cfg.pop("connection", None)
+        if cname:
+            cfg["connection_id"] = _resolve(cname)
+            unresolved += cfg["connection_id"] is None
+        nodes.append({**n, "config": cfg})
+    f = Flow(name=doc.get("name") or "imported", description=doc.get("description") or "",
+             nodes=nodes, edges=doc["edges"])
+    db.add(f); db.commit(); db.refresh(f)
+    return {"kind": "flow", "flow_id": f.id, "connection_resolved": unresolved == 0}
 
 
 # ---- environments ----

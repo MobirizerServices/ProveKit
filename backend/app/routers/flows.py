@@ -2,13 +2,14 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
-from ..models import Flow, iso_utc
+from ..models import Connection, Flow, iso_utc
 from ..services import flow as engine
+from ..services import testfile
 from .run import _active_vars
 
 router = APIRouter(prefix="/api/flows", tags=["flows"])
@@ -52,6 +53,17 @@ def get_flow(fid: int, db: Session = Depends(get_db)):
     if not f:
         raise HTTPException(404, "Flow not found")
     return _f(f)
+
+
+@router.get("/{fid}/export", response_class=PlainTextResponse)
+def export_flow(fid: int, db: Session = Depends(get_db)):
+    f = db.get(Flow, fid)
+    if not f:
+        raise HTTPException(404, "Flow not found")
+    ids = {(n.get("config") or {}).get("connection_id") for n in (f.nodes or [])}
+    ids.discard(None)
+    names = {c.id: c.name for c in db.query(Connection).filter(Connection.id.in_(ids)).all()} if ids else {}
+    return testfile.dump_flow(f.name, f.description, f.nodes, f.edges, names)
 
 
 @router.put("/{fid}")

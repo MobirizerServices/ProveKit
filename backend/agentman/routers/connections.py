@@ -123,7 +123,8 @@ def authenticate(cid: int, payload: AuthPayload, db: Session = Depends(get_db)):
     return {"ok": True, "header": payload.header, "token": (tok[:6] + "…" + tok[-4:]) if len(tok) > 12 else "••••"}
 
 
-DEFAULT_BASE = {"openai": "https://api.openai.com/v1", "anthropic": "https://api.anthropic.com/v1"}
+DEFAULT_BASE = {"openai": "https://api.openai.com/v1", "openai-responses": "https://api.openai.com/v1",
+                "anthropic": "https://api.anthropic.com/v1"}
 
 
 @router.post("/{cid}/test")

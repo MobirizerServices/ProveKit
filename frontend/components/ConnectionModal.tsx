@@ -65,7 +65,7 @@ export default function ConnectionModal({ initial, onSave, onDelete, onClose, on
             <>
               <div className="field">
                 <label>Provider</label>
-                <div className="seg">{["openai", "anthropic", "compatible"].map((p) => <button key={p} className={provider === p ? "on" : ""} onClick={() => setProvider(p)}>{p}</button>)}</div>
+                <div className="seg">{["openai", "openai-responses", "anthropic", "compatible"].map((p) => <button key={p} className={provider === p ? "on" : ""} onClick={() => setProvider(p)}>{p}</button>)}</div>
               </div>
               <div className="field"><label>Base URL <span className="hint">optional — for compatible/self-hosted</span></label><input className="mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" /></div>
               <div className="field"><label>API key {initial && <span className="hint">leave blank to keep existing</span>}</label><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={initial?.config?.has_key ? "•••••• (stored)" : "sk-…"} /></div>

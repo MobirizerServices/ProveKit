@@ -11,6 +11,7 @@ type Preset = {
 
 const PRESETS: Preset[] = [
   { id: "openai", kind: "llm", provider: "openai", name: "OpenAI", icon: "⚡", desc: "GPT-4o, GPT-4.1, o-series", base: "https://api.openai.com/v1", models: "gpt-4o-mini, gpt-4o, gpt-4.1-mini", need: ["key"] },
+  { id: "openai-responses", kind: "llm", provider: "openai-responses", name: "OpenAI Responses", icon: "◎", desc: "Responses API · vLLM · Ollama · OpenRouter", base: "https://api.openai.com/v1", models: "gpt-4o-mini, gpt-4.1", need: ["key"] },
   { id: "anthropic", kind: "llm", provider: "anthropic", name: "Anthropic", icon: "◈", desc: "Claude Opus, Sonnet, Haiku", base: "https://api.anthropic.com/v1", models: "claude-opus-4-1, claude-sonnet-4-5, claude-haiku-4-5", need: ["key"] },
   { id: "compatible", kind: "llm", provider: "compatible", name: "OpenAI-compatible", icon: "⌘", desc: "Ollama · vLLM · Together · any base URL", base: "", models: "", need: ["base", "key", "models"] },
   { id: "mcp", kind: "mcp", name: "MCP server", icon: "🔧", desc: "Model Context Protocol tools, by URL", need: ["url"] },

@@ -48,9 +48,15 @@ def _stream_mock(system, messages):
 
 DEFAULT_BASE = {
     "openai": "https://api.openai.com/v1",
+    "openai-responses": "https://api.openai.com/v1",
     "compatible": "http://localhost:11434/v1",
     "anthropic": "https://api.anthropic.com/v1",
 }
+
+# Some 2026 models reject sampling params — send temperature only when it's meaningful.
+def _maybe_temp(body: dict, temperature: float) -> None:
+    if temperature is not None:
+        body["temperature"] = temperature
 
 
 def _iter_sse(resp: httpx.Response):
@@ -79,6 +85,8 @@ def stream(*, provider: str, base_url: str, api_key: str, model: str,
     guard_url(base)
     if provider == "anthropic":
         yield from _stream_anthropic(base, api_key, model, system, messages, temperature, max_tokens)
+    elif provider == "openai-responses":
+        yield from _stream_responses(base, api_key, model, system, messages, temperature, max_tokens)
     else:
         yield from _stream_openai(base, api_key, model, system, messages, temperature, max_tokens)
 
@@ -106,11 +114,42 @@ def _stream_openai(base, api_key, model, system, messages, temperature, max_toke
                     yield {"type": "usage", "usage": obj["usage"]}
 
 
+def _stream_responses(base, api_key, model, system, messages, temperature, max_tokens):
+    """OpenAI Responses API / 'Open Responses' (also served by vLLM, Ollama, HF, OpenRouter).
+    Stateless request; parses the semantic SSE event stream (response.output_text.delta,
+    tool-call events, response.completed) into our unified event schema."""
+    input_items = [{"role": ("assistant" if m.get("role") == "assistant" else "user"),
+                    "content": m.get("content", "")} for m in messages]
+    body = {"model": model, "input": input_items, "stream": True, "max_output_tokens": max_tokens}
+    if system:
+        body["instructions"] = system
+    _maybe_temp(body, temperature)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    with httpx.Client(timeout=120) as client:
+        with client.stream("POST", f"{base}/responses", json=body, headers=headers) as resp:
+            if resp.status_code >= 400:
+                raise RuntimeError(f"LLM error {resp.status_code}: {resp.read().decode()[:400]}")
+            for obj in _iter_sse(resp):
+                et = obj.get("type", "")
+                if et == "response.output_text.delta" and obj.get("delta"):
+                    yield {"type": "delta", "text": obj["delta"]}
+                elif et in ("response.function_call_arguments.done", "response.output_item.added"):
+                    item = obj.get("item") or {}
+                    if item.get("type") == "function_call":
+                        yield {"type": "node", "data": {"tool_calls": [{"name": item.get("name")}]}}
+                elif et in ("response.completed", "response.incomplete"):
+                    usage = (obj.get("response") or {}).get("usage")
+                    if usage:
+                        yield {"type": "usage", "usage": usage}
+
+
 def _stream_anthropic(base, api_key, model, system, messages, temperature, max_tokens):
     # Anthropic wants system separate and only user/assistant turns.
     conv = [m for m in messages if m.get("role") in ("user", "assistant")]
-    body = {"model": model, "messages": conv, "stream": True,
-            "max_tokens": max_tokens, "temperature": temperature}
+    body = {"model": model, "messages": conv, "stream": True, "max_tokens": max_tokens}
+    _maybe_temp(body, temperature)
     if system:
         body["system"] = system
     headers = {"Content-Type": "application/json", "anthropic-version": "2023-06-01"}
@@ -120,16 +159,26 @@ def _stream_anthropic(base, api_key, model, system, messages, temperature, max_t
         with client.stream("POST", f"{base}/messages", json=body, headers=headers) as resp:
             if resp.status_code >= 400:
                 raise RuntimeError(f"LLM error {resp.status_code}: {resp.read().decode()[:400]}")
-            usage = {}
+            usage, tool = {}, None
             for obj in _iter_sse(resp):
                 t = obj.get("type")
-                if t == "content_block_delta":
+                if t == "content_block_start":
+                    blk = obj.get("content_block") or {}
+                    if blk.get("type") == "tool_use":  # surface tool calls as events (tool_called assertions)
+                        tool = blk.get("name")
+                        yield {"type": "node", "data": {"tool_calls": [{"name": tool}]}}
+                elif t == "content_block_delta":
                     d = obj.get("delta") or {}
                     if d.get("type") == "text_delta" and d.get("text"):
                         yield {"type": "delta", "text": d["text"]}
                 elif t == "message_start":
                     usage = (obj.get("message") or {}).get("usage", {}) or usage
-                elif t == "message_delta" and obj.get("usage"):
-                    usage = {**usage, **obj["usage"]}
+                elif t == "message_delta":
+                    if obj.get("usage"):
+                        usage = {**usage, **obj["usage"]}
+                    stop = (obj.get("delta") or {}).get("stop_reason")
+                    if stop and stop not in ("end_turn", "stop_sequence"):
+                        # refusal / pause_turn / max_tokens — surface so it's visible, not silent.
+                        yield {"type": "node", "data": {"stop_reason": stop}}
             if usage:
                 yield {"type": "usage", "usage": usage}

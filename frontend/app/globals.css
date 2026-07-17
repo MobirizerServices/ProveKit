@@ -259,6 +259,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .jv-pick { opacity: 0; font-size: 10.5px; color: var(--accent-2); background: transparent; border: none; cursor: pointer; padding: 0 4px; white-space: nowrap; }
 .jv-row:hover .jv-pick { opacity: 0.75; } .jv-pick:hover { opacity: 1 !important; text-decoration: underline; }
 
+/* error boundary + backend-down banner */
+.err-page { min-height: 100vh; display: grid; place-items: center; background: var(--bg); padding: 24px; }
+.err-card { text-align: center; max-width: 440px; background: var(--panel); border: 1px solid var(--border-2); border-radius: var(--r-xl); padding: 32px; }
+.err-icon { font-size: 40px; }
+.err-card h2 { margin: 8px 0; } .err-card p { color: var(--muted); font-size: 13.5px; word-break: break-word; }
+.err-actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+.down-banner { background: #3a1d1d; color: #ffb4b4; border-bottom: 1px solid rgba(255,107,107,.3); font-size: 12.5px; text-align: center; padding: 6px 12px; }
+
 /* auth */
 .auth-wrap { min-height: 100vh; display: grid; place-items: center; background: var(--bg); padding: 24px; }
 .auth-card { width: 360px; max-width: 100%; background: var(--panel); border: 1px solid var(--border-2); border-radius: var(--r-xl); box-shadow: var(--sh-3); padding: 28px 26px; display: grid; gap: 12px; }

@@ -20,8 +20,16 @@ export default function TopNav() {
   const [envModal, setEnvModal] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [menu, setMenu] = useState(false);
+  const [down, setDown] = useState(false);
   const load = () => api.environments().then(setEnvs).catch(() => {});
   useEffect(() => { load(); api.me().then(setMe).catch(() => {}); }, []);
+  // Poll backend health so a dropped API surfaces a banner instead of silent failures.
+  useEffect(() => {
+    let alive = true;
+    const check = () => api.health().then((ok) => alive && setDown(!ok));
+    check(); const t = setInterval(check, 10000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
 
   const logout = async () => { try { await api.logout(); } catch {} router.push("/login"); };
   const isLocal = me?.auth_provider === "local";
@@ -36,6 +44,8 @@ export default function TopNav() {
   const is = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
   return (
+    <>
+    {down && <div className="down-banner" role="status">⚠ Can’t reach the AgentMan backend. Retrying… — check that it’s running on the API port.</div>}
     <div className="topbar">
       <div className="brand"><span className="logo">◇</span>Agent<b>Man</b></div>
       <nav className="topnav">
@@ -65,5 +75,6 @@ export default function TopNav() {
       )}
       {envModal && <EnvironmentModal environments={envs} onChanged={load} onClose={() => setEnvModal(false)} />}
     </div>
+    </>
   );
 }

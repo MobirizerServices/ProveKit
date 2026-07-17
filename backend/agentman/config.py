@@ -28,6 +28,18 @@ class Settings(BaseSettings):
     # Optional Sentry DSN for error reporting (off when unset).
     sentry_dsn: str = ""
 
+    # Web app base URL (for links in emails). Same-origin in prod.
+    web_base_url: str = "http://localhost:3001"
+
+    # Email (account recovery/verification). No SMTP host → links are logged, not sent.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+    require_email_verification: bool = False
+
     # Optional Redis for paused flow-run contexts (survives workers/restarts).
     # Unset → in-memory (single-process local use).
     redis_url: str = ""

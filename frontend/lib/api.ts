@@ -70,6 +70,9 @@ export const api = {
   login: (email: string, password: string) => j<Me>("/api/auth/login", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string, name = "") => j<Me>("/api/auth/register", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ email, password, name }) }),
   logout: () => j("/api/auth/logout", { method: "POST", noAuthRedirect: true }),
+  forgotPassword: (email: string) => j("/api/auth/forgot", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, password: string) => j("/api/auth/reset", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ token, password }) }),
+  verifyEmail: (token: string) => j<Me>("/api/auth/verify", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ token }) }),
   // connections
   connections: () => j<Connection[]>("/api/connections"),
   createConnection: (c: Partial<Connection>) => j<Connection>("/api/connections", { method: "POST", body: JSON.stringify(c) }),

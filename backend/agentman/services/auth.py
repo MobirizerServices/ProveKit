@@ -60,16 +60,17 @@ def verify_password(pw: str, stored: str) -> bool:
         return False
 
 
-# ---- session tokens (compact HS256 JWT) ----
-def make_token(uid: int, ttl: int = _TTL) -> str:
+# ---- signed tokens (compact HS256 JWT). purpose separates sessions from reset/verify. ----
+def make_token(uid: int, ttl: int = _TTL, purpose: str = "session") -> str:
     header = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-    payload = _b64(json.dumps({"uid": uid, "exp": int(time.time()) + ttl}, separators=(",", ":")).encode())
+    payload = _b64(json.dumps({"uid": uid, "exp": int(time.time()) + ttl, "p": purpose},
+                              separators=(",", ":")).encode())
     signing_input = f"{header}.{payload}".encode()
     sig = _b64(hmac.new(_secret(), signing_input, hashlib.sha256).digest())
     return f"{header}.{payload}.{sig}"
 
 
-def read_token(token: str) -> int | None:
+def read_token(token: str, purpose: str = "session") -> int | None:
     try:
         header, payload, sig = token.split(".")
         expected = _b64(hmac.new(_secret(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
@@ -77,6 +78,8 @@ def read_token(token: str) -> int | None:
             return None
         data = json.loads(_unb64(payload))
         if data.get("exp", 0) < time.time():
+            return None
+        if data.get("p", "session") != purpose:  # a reset token can't be used as a session
             return None
         return int(data["uid"])
     except (ValueError, KeyError, json.JSONDecodeError):

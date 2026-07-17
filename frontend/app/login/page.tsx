@@ -42,6 +42,7 @@ function LoginForm() {
         <button className="btn btn-run" type="submit" disabled={busy} style={{ width: "100%", marginTop: 4 }}>{busy ? "…" : mode === "login" ? "Sign in" : "Create account"}</button>
         <div className="auth-switch">
           {mode === "login" ? <>No account? <a onClick={() => { setMode("signup"); setErr(""); }}>Sign up</a></> : <>Have an account? <a onClick={() => { setMode("login"); setErr(""); }}>Sign in</a></>}
+          {mode === "login" && <> · <a href="/forgot">Forgot password?</a></>}
         </div>
       </form>
     </div>

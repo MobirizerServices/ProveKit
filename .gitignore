@@ -6,6 +6,7 @@
 **/venv/
 **/node_modules/
 **/.next/
+**/*.tsbuildinfo
 *.pyc
 __pycache__/
 *.egg-info/

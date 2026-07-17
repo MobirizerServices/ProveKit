@@ -1,14 +1,32 @@
-# AgentMan — the open-source universal agent client
+<div align="center">
 
-**Test, debug, and evaluate any AI agent — any provider, any protocol, no SDK required.**
-Point it at an LLM API, an MCP server, an HTTP agent, or an A2A agent; chat and stream
-with it; step-debug it; freeze a session into assertions and a regression suite; run
-them in CI. *The place where you prove your agent works.*
+# ◇ AgentMan
+
+### The open-source universal agent client
+
+**Test, debug, and evaluate any AI agent — any provider, any protocol, no SDK.**
+Point it at an LLM API, an MCP server, an HTTP agent, or an A2A agent; run it with live
+streaming; turn a run into a regression test in one click; run the suite in CI.
+
+[![CI](https://github.com/OWNER/agentman/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/agentman/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.13](https://img.shields.io/badge/python-3.13-3776ab.svg)
+![Next.js 14](https://img.shields.io/badge/next.js-14-black.svg)
+
+[Quickstart](#quickstart) · [Docs](docs/README.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+
+<!-- Replace with the exported demo GIF (see docs/launch/DEMO_SCRIPT.md).
+     The 15s run → +assert → ✓ passed loop is the whole value prop. -->
+<img src="docs/launch/demo.gif" alt="AgentMan: run an agent, turn the run into a test, run it in CI" width="760">
+
+</div>
+
+---
 
 Unlike the observability platforms, AgentMan is a **client** you point at a deployed
-endpoint — no SDK to instrument, no code to change. Unlike the visual builders, it
-doesn't ask you to rebuild your agent in its canvas; it tests the agent you already have,
-wherever it runs.
+endpoint — no SDK to instrument, no code to change. Unlike the visual builders, it doesn't
+ask you to rebuild your agent in its canvas; it tests the agent you already have, wherever
+it runs.
 
 > **Open source, local-first, forever.** Every product feature is MIT-licensed and runs
 > fully offline on your machine — no account, no cloud, no telemetry. That's a promise in
@@ -22,14 +40,25 @@ trace ingest.
 ## Quickstart
 
 ```bash
+git clone https://github.com/OWNER/agentman && cd agentman
 make setup      # backend venv + deps, frontend deps  (needs Python 3.13, Node 20)
 make backend    # API on :8100     (terminal 1)
 make frontend   # web app on :3001 (terminal 2)
 ```
 
-Open http://localhost:3001 — no login, no API key needed; the seeded mock agent runs
-offline. Full docs: [docs/](docs/README.md) · [contributing](CONTRIBUTING.md) ·
-[security](SECURITY.md).
+Open http://localhost:3001 — **no login, no API key needed**; the seeded mock agent runs
+offline. Then: hit **Run**, click **+ contains** on the result, hit **Run** again to see
+the assertion pass. That's the loop.
+
+Run your tests headless in CI:
+
+```bash
+agentman run .agentman/tests/     # plain-text, git-diffable, no secrets in the files
+```
+
+Full docs: [docs/](docs/README.md) · [contributing](CONTRIBUTING.md) · [security](SECURITY.md).
+
+> ⭐ If this is useful, a star helps other agent builders find it — and tells me to keep going.
 
 Three surfaces, one nav:
 

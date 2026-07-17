@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import SessionLocal, get_db
 from ..models import Connection, Flow, Workspace, iso_utc
 from ..services import flow as engine
-from ..services import testfile
+from ..services import templates, testfile
 from ..services.workspace import current_workspace
 from .run import _active_vars
 
@@ -32,6 +32,39 @@ def _f(f: Flow) -> dict:
 @router.get("/node-types")
 def node_types():
     return engine.NODE_TYPES
+
+
+@router.get("/templates")
+def list_templates(q: str = "", limit: int = 60):
+    """Searchable gallery of bundled flow templates (name/description/category)."""
+    return {"total": templates.total(), "categories": templates.categories(),
+            "items": templates.search(q, limit)}
+
+
+class FromTemplateIn(BaseModel):
+    slug: str
+
+
+@router.post("/from-template")
+def create_from_template(payload: FromTemplateIn, db: Session = Depends(get_db),
+                         ws: Workspace = Depends(current_workspace)):
+    """Instantiate a bundled template as a new flow in this workspace, resolving the
+    template's connection names against the workspace."""
+    doc = templates.load(payload.slug)
+    if not doc or doc.get("kind") != "flow":
+        raise HTTPException(404, "Template not found")
+    nodes = []
+    for n in doc["nodes"]:
+        cfg = dict(n.get("config") or {})
+        cname = cfg.pop("connection", None)
+        if cname:
+            c = db.query(Connection).filter(Connection.workspace_id == ws.id, Connection.name == cname).first()
+            cfg["connection_id"] = c.id if c else None
+        nodes.append({**n, "config": cfg})
+    f = Flow(workspace_id=ws.id, name=doc.get("name") or "New flow",
+             description=doc.get("description") or "", nodes=nodes, edges=doc["edges"])
+    db.add(f); db.commit(); db.refresh(f)
+    return _f(f)
 
 
 class FlowIn(BaseModel):

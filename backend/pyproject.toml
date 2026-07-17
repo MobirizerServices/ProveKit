@@ -27,3 +27,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["agentman", "agentman.routers", "agentman.services", "agentman.services.providers"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+# ship the bundled flow-template gallery (served by the New-flow picker)
+agentman = ["templates/flows/*.yaml", "templates/flows/_manifest.json"]

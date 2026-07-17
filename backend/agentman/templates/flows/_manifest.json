@@ -1,0 +1,2594 @@
+[
+  {
+    "slug": "banking-faq-match-answer",
+    "name": "Banking \u00b7 FAQ match & answer",
+    "description": "Match a request to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "banking-action-items",
+    "name": "Banking \u00b7 action items",
+    "description": "Turn a request into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "banking-answer",
+    "name": "Banking \u00b7 answer",
+    "description": "Read a request, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "banking-classify-intent",
+    "name": "Banking \u00b7 classify intent",
+    "description": "Classify a request into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "banking-draft-critique-revise",
+    "name": "Banking \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "banking-extract-to-json",
+    "name": "Banking \u00b7 extract to JSON",
+    "description": "Extract structured fields from a request as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "banking-keyword-extract",
+    "name": "Banking \u00b7 keyword extract",
+    "description": "Pull the top keywords from a request as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "banking-language-route",
+    "name": "Banking \u00b7 language route",
+    "description": "Detect the language of a request; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "banking-moderation-gate",
+    "name": "Banking \u00b7 moderation gate",
+    "description": "Check a request for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "banking-redact-summarize",
+    "name": "Banking \u00b7 redact & summarize",
+    "description": "Redact personal data from a request, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "banking-score-gate",
+    "name": "Banking \u00b7 score & gate",
+    "description": "Score a request 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "banking-sentiment-route",
+    "name": "Banking \u00b7 sentiment route",
+    "description": "Detect sentiment of a request, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "banking-severity-tiers",
+    "name": "Banking \u00b7 severity tiers",
+    "description": "Classify severity of a request, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "banking-summarize-then-decide",
+    "name": "Banking \u00b7 summarize then decide",
+    "description": "Summarize a request, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "banking-tag-enrich",
+    "name": "Banking \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a request.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "banking-tone-rewrite",
+    "name": "Banking \u00b7 tone rewrite",
+    "description": "Rewrite a request in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "banking-translate-reply",
+    "name": "Banking \u00b7 translate & reply",
+    "description": "Translate a request to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "banking-triage-route",
+    "name": "Banking \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "community-forum-faq-match-answer",
+    "name": "Community Forum \u00b7 FAQ match & answer",
+    "description": "Match a post to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "community-forum-action-items",
+    "name": "Community Forum \u00b7 action items",
+    "description": "Turn a post into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "community-forum-answer",
+    "name": "Community Forum \u00b7 answer",
+    "description": "Read a post, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "community-forum-classify-intent",
+    "name": "Community Forum \u00b7 classify intent",
+    "description": "Classify a post into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "community-forum-draft-critique-revise",
+    "name": "Community Forum \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "community-forum-extract-to-json",
+    "name": "Community Forum \u00b7 extract to JSON",
+    "description": "Extract structured fields from a post as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "community-forum-keyword-extract",
+    "name": "Community Forum \u00b7 keyword extract",
+    "description": "Pull the top keywords from a post as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "community-forum-language-route",
+    "name": "Community Forum \u00b7 language route",
+    "description": "Detect the language of a post; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "community-forum-moderation-gate",
+    "name": "Community Forum \u00b7 moderation gate",
+    "description": "Check a post for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "community-forum-redact-summarize",
+    "name": "Community Forum \u00b7 redact & summarize",
+    "description": "Redact personal data from a post, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "community-forum-score-gate",
+    "name": "Community Forum \u00b7 score & gate",
+    "description": "Score a post 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "community-forum-sentiment-route",
+    "name": "Community Forum \u00b7 sentiment route",
+    "description": "Detect sentiment of a post, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "community-forum-severity-tiers",
+    "name": "Community Forum \u00b7 severity tiers",
+    "description": "Classify severity of a post, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "community-forum-summarize-then-decide",
+    "name": "Community Forum \u00b7 summarize then decide",
+    "description": "Summarize a post, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "community-forum-tag-enrich",
+    "name": "Community Forum \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a post.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "community-forum-tone-rewrite",
+    "name": "Community Forum \u00b7 tone rewrite",
+    "description": "Rewrite a post in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "community-forum-translate-reply",
+    "name": "Community Forum \u00b7 translate & reply",
+    "description": "Translate a post to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "community-forum-triage-route",
+    "name": "Community Forum \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "content-moderation-faq-match-answer",
+    "name": "Content Moderation \u00b7 FAQ match & answer",
+    "description": "Match a text to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "content-moderation-action-items",
+    "name": "Content Moderation \u00b7 action items",
+    "description": "Turn a text into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "content-moderation-answer",
+    "name": "Content Moderation \u00b7 answer",
+    "description": "Read a text, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "content-moderation-classify-intent",
+    "name": "Content Moderation \u00b7 classify intent",
+    "description": "Classify a text into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "content-moderation-draft-critique-revise",
+    "name": "Content Moderation \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "content-moderation-extract-to-json",
+    "name": "Content Moderation \u00b7 extract to JSON",
+    "description": "Extract structured fields from a text as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "content-moderation-keyword-extract",
+    "name": "Content Moderation \u00b7 keyword extract",
+    "description": "Pull the top keywords from a text as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "content-moderation-language-route",
+    "name": "Content Moderation \u00b7 language route",
+    "description": "Detect the language of a text; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "content-moderation-moderation-gate",
+    "name": "Content Moderation \u00b7 moderation gate",
+    "description": "Check a text for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "content-moderation-redact-summarize",
+    "name": "Content Moderation \u00b7 redact & summarize",
+    "description": "Redact personal data from a text, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "content-moderation-score-gate",
+    "name": "Content Moderation \u00b7 score & gate",
+    "description": "Score a text 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "content-moderation-sentiment-route",
+    "name": "Content Moderation \u00b7 sentiment route",
+    "description": "Detect sentiment of a text, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "content-moderation-severity-tiers",
+    "name": "Content Moderation \u00b7 severity tiers",
+    "description": "Classify severity of a text, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "content-moderation-summarize-then-decide",
+    "name": "Content Moderation \u00b7 summarize then decide",
+    "description": "Summarize a text, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "content-moderation-tag-enrich",
+    "name": "Content Moderation \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a text.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "content-moderation-tone-rewrite",
+    "name": "Content Moderation \u00b7 tone rewrite",
+    "description": "Rewrite a text in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "content-moderation-translate-reply",
+    "name": "Content Moderation \u00b7 translate & reply",
+    "description": "Translate a text to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "content-moderation-triage-route",
+    "name": "Content Moderation \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "customer-support-faq-match-answer",
+    "name": "Customer Support \u00b7 FAQ match & answer",
+    "description": "Match a message to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "customer-support-action-items",
+    "name": "Customer Support \u00b7 action items",
+    "description": "Turn a message into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "customer-support-answer",
+    "name": "Customer Support \u00b7 answer",
+    "description": "Read a message, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "customer-support-classify-intent",
+    "name": "Customer Support \u00b7 classify intent",
+    "description": "Classify a message into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "customer-support-draft-critique-revise",
+    "name": "Customer Support \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "customer-support-extract-to-json",
+    "name": "Customer Support \u00b7 extract to JSON",
+    "description": "Extract structured fields from a message as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "customer-support-keyword-extract",
+    "name": "Customer Support \u00b7 keyword extract",
+    "description": "Pull the top keywords from a message as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "customer-support-language-route",
+    "name": "Customer Support \u00b7 language route",
+    "description": "Detect the language of a message; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "customer-support-moderation-gate",
+    "name": "Customer Support \u00b7 moderation gate",
+    "description": "Check a message for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "customer-support-redact-summarize",
+    "name": "Customer Support \u00b7 redact & summarize",
+    "description": "Redact personal data from a message, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "customer-support-score-gate",
+    "name": "Customer Support \u00b7 score & gate",
+    "description": "Score a message 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "customer-support-sentiment-route",
+    "name": "Customer Support \u00b7 sentiment route",
+    "description": "Detect sentiment of a message, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "customer-support-severity-tiers",
+    "name": "Customer Support \u00b7 severity tiers",
+    "description": "Classify severity of a message, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "customer-support-summarize-then-decide",
+    "name": "Customer Support \u00b7 summarize then decide",
+    "description": "Summarize a message, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "customer-support-tag-enrich",
+    "name": "Customer Support \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a message.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "customer-support-tone-rewrite",
+    "name": "Customer Support \u00b7 tone rewrite",
+    "description": "Rewrite a message in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "customer-support-translate-reply",
+    "name": "Customer Support \u00b7 translate & reply",
+    "description": "Translate a message to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "customer-support-triage-route",
+    "name": "Customer Support \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "developer-tooling-faq-match-answer",
+    "name": "Developer Tooling \u00b7 FAQ match & answer",
+    "description": "Match a issue to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "developer-tooling-action-items",
+    "name": "Developer Tooling \u00b7 action items",
+    "description": "Turn a issue into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "developer-tooling-answer",
+    "name": "Developer Tooling \u00b7 answer",
+    "description": "Read a issue, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "developer-tooling-classify-intent",
+    "name": "Developer Tooling \u00b7 classify intent",
+    "description": "Classify a issue into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "developer-tooling-draft-critique-revise",
+    "name": "Developer Tooling \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "developer-tooling-extract-to-json",
+    "name": "Developer Tooling \u00b7 extract to JSON",
+    "description": "Extract structured fields from a issue as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "developer-tooling-keyword-extract",
+    "name": "Developer Tooling \u00b7 keyword extract",
+    "description": "Pull the top keywords from a issue as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "developer-tooling-language-route",
+    "name": "Developer Tooling \u00b7 language route",
+    "description": "Detect the language of a issue; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "developer-tooling-moderation-gate",
+    "name": "Developer Tooling \u00b7 moderation gate",
+    "description": "Check a issue for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "developer-tooling-redact-summarize",
+    "name": "Developer Tooling \u00b7 redact & summarize",
+    "description": "Redact personal data from a issue, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "developer-tooling-score-gate",
+    "name": "Developer Tooling \u00b7 score & gate",
+    "description": "Score a issue 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "developer-tooling-sentiment-route",
+    "name": "Developer Tooling \u00b7 sentiment route",
+    "description": "Detect sentiment of a issue, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "developer-tooling-severity-tiers",
+    "name": "Developer Tooling \u00b7 severity tiers",
+    "description": "Classify severity of a issue, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "developer-tooling-summarize-then-decide",
+    "name": "Developer Tooling \u00b7 summarize then decide",
+    "description": "Summarize a issue, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "developer-tooling-tag-enrich",
+    "name": "Developer Tooling \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a issue.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "developer-tooling-tone-rewrite",
+    "name": "Developer Tooling \u00b7 tone rewrite",
+    "description": "Rewrite a issue in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "developer-tooling-translate-reply",
+    "name": "Developer Tooling \u00b7 translate & reply",
+    "description": "Translate a issue to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "developer-tooling-triage-route",
+    "name": "Developer Tooling \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "devrel-faq-match-answer",
+    "name": "Devrel \u00b7 FAQ match & answer",
+    "description": "Match a question to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "devrel-action-items",
+    "name": "Devrel \u00b7 action items",
+    "description": "Turn a question into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "devrel-answer",
+    "name": "Devrel \u00b7 answer",
+    "description": "Read a question, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "devrel-classify-intent",
+    "name": "Devrel \u00b7 classify intent",
+    "description": "Classify a question into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "devrel-draft-critique-revise",
+    "name": "Devrel \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "devrel-extract-to-json",
+    "name": "Devrel \u00b7 extract to JSON",
+    "description": "Extract structured fields from a question as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "devrel-keyword-extract",
+    "name": "Devrel \u00b7 keyword extract",
+    "description": "Pull the top keywords from a question as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "devrel-language-route",
+    "name": "Devrel \u00b7 language route",
+    "description": "Detect the language of a question; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "devrel-moderation-gate",
+    "name": "Devrel \u00b7 moderation gate",
+    "description": "Check a question for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "devrel-redact-summarize",
+    "name": "Devrel \u00b7 redact & summarize",
+    "description": "Redact personal data from a question, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "devrel-score-gate",
+    "name": "Devrel \u00b7 score & gate",
+    "description": "Score a question 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "devrel-sentiment-route",
+    "name": "Devrel \u00b7 sentiment route",
+    "description": "Detect sentiment of a question, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "devrel-severity-tiers",
+    "name": "Devrel \u00b7 severity tiers",
+    "description": "Classify severity of a question, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "devrel-summarize-then-decide",
+    "name": "Devrel \u00b7 summarize then decide",
+    "description": "Summarize a question, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "devrel-tag-enrich",
+    "name": "Devrel \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a question.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "devrel-tone-rewrite",
+    "name": "Devrel \u00b7 tone rewrite",
+    "description": "Rewrite a question in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "devrel-translate-reply",
+    "name": "Devrel \u00b7 translate & reply",
+    "description": "Translate a question to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "devrel-triage-route",
+    "name": "Devrel \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "e-commerce-faq-match-answer",
+    "name": "E-Commerce \u00b7 FAQ match & answer",
+    "description": "Match a review to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "e-commerce-action-items",
+    "name": "E-Commerce \u00b7 action items",
+    "description": "Turn a review into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "e-commerce-answer",
+    "name": "E-Commerce \u00b7 answer",
+    "description": "Read a review, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "e-commerce-classify-intent",
+    "name": "E-Commerce \u00b7 classify intent",
+    "description": "Classify a review into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "e-commerce-draft-critique-revise",
+    "name": "E-Commerce \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "e-commerce-extract-to-json",
+    "name": "E-Commerce \u00b7 extract to JSON",
+    "description": "Extract structured fields from a review as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "e-commerce-keyword-extract",
+    "name": "E-Commerce \u00b7 keyword extract",
+    "description": "Pull the top keywords from a review as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "e-commerce-language-route",
+    "name": "E-Commerce \u00b7 language route",
+    "description": "Detect the language of a review; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "e-commerce-moderation-gate",
+    "name": "E-Commerce \u00b7 moderation gate",
+    "description": "Check a review for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "e-commerce-redact-summarize",
+    "name": "E-Commerce \u00b7 redact & summarize",
+    "description": "Redact personal data from a review, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "e-commerce-score-gate",
+    "name": "E-Commerce \u00b7 score & gate",
+    "description": "Score a review 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "e-commerce-sentiment-route",
+    "name": "E-Commerce \u00b7 sentiment route",
+    "description": "Detect sentiment of a review, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "e-commerce-severity-tiers",
+    "name": "E-Commerce \u00b7 severity tiers",
+    "description": "Classify severity of a review, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "e-commerce-summarize-then-decide",
+    "name": "E-Commerce \u00b7 summarize then decide",
+    "description": "Summarize a review, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "e-commerce-tag-enrich",
+    "name": "E-Commerce \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a review.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "e-commerce-tone-rewrite",
+    "name": "E-Commerce \u00b7 tone rewrite",
+    "description": "Rewrite a review in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "e-commerce-translate-reply",
+    "name": "E-Commerce \u00b7 translate & reply",
+    "description": "Translate a review to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "e-commerce-triage-route",
+    "name": "E-Commerce \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "education-faq-match-answer",
+    "name": "Education \u00b7 FAQ match & answer",
+    "description": "Match a question to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "education-action-items",
+    "name": "Education \u00b7 action items",
+    "description": "Turn a question into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "education-answer",
+    "name": "Education \u00b7 answer",
+    "description": "Read a question, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "education-classify-intent",
+    "name": "Education \u00b7 classify intent",
+    "description": "Classify a question into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "education-draft-critique-revise",
+    "name": "Education \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "education-extract-to-json",
+    "name": "Education \u00b7 extract to JSON",
+    "description": "Extract structured fields from a question as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "education-keyword-extract",
+    "name": "Education \u00b7 keyword extract",
+    "description": "Pull the top keywords from a question as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "education-language-route",
+    "name": "Education \u00b7 language route",
+    "description": "Detect the language of a question; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "education-moderation-gate",
+    "name": "Education \u00b7 moderation gate",
+    "description": "Check a question for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "education-redact-summarize",
+    "name": "Education \u00b7 redact & summarize",
+    "description": "Redact personal data from a question, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "education-score-gate",
+    "name": "Education \u00b7 score & gate",
+    "description": "Score a question 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "education-sentiment-route",
+    "name": "Education \u00b7 sentiment route",
+    "description": "Detect sentiment of a question, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "education-severity-tiers",
+    "name": "Education \u00b7 severity tiers",
+    "description": "Classify severity of a question, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "education-summarize-then-decide",
+    "name": "Education \u00b7 summarize then decide",
+    "description": "Summarize a question, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "education-tag-enrich",
+    "name": "Education \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a question.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "education-tone-rewrite",
+    "name": "Education \u00b7 tone rewrite",
+    "description": "Rewrite a question in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "education-translate-reply",
+    "name": "Education \u00b7 translate & reply",
+    "description": "Translate a question to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "education-triage-route",
+    "name": "Education \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "finance-faq-match-answer",
+    "name": "Finance \u00b7 FAQ match & answer",
+    "description": "Match a transaction to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "finance-action-items",
+    "name": "Finance \u00b7 action items",
+    "description": "Turn a transaction into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "finance-answer",
+    "name": "Finance \u00b7 answer",
+    "description": "Read a transaction, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "finance-classify-intent",
+    "name": "Finance \u00b7 classify intent",
+    "description": "Classify a transaction into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "finance-draft-critique-revise",
+    "name": "Finance \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "finance-extract-to-json",
+    "name": "Finance \u00b7 extract to JSON",
+    "description": "Extract structured fields from a transaction as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "finance-keyword-extract",
+    "name": "Finance \u00b7 keyword extract",
+    "description": "Pull the top keywords from a transaction as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "finance-language-route",
+    "name": "Finance \u00b7 language route",
+    "description": "Detect the language of a transaction; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "finance-moderation-gate",
+    "name": "Finance \u00b7 moderation gate",
+    "description": "Check a transaction for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "finance-redact-summarize",
+    "name": "Finance \u00b7 redact & summarize",
+    "description": "Redact personal data from a transaction, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "finance-score-gate",
+    "name": "Finance \u00b7 score & gate",
+    "description": "Score a transaction 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "finance-sentiment-route",
+    "name": "Finance \u00b7 sentiment route",
+    "description": "Detect sentiment of a transaction, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "finance-severity-tiers",
+    "name": "Finance \u00b7 severity tiers",
+    "description": "Classify severity of a transaction, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "finance-summarize-then-decide",
+    "name": "Finance \u00b7 summarize then decide",
+    "description": "Summarize a transaction, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "finance-tag-enrich",
+    "name": "Finance \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a transaction.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "finance-tone-rewrite",
+    "name": "Finance \u00b7 tone rewrite",
+    "description": "Rewrite a transaction in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "finance-translate-reply",
+    "name": "Finance \u00b7 translate & reply",
+    "description": "Translate a transaction to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "finance-triage-route",
+    "name": "Finance \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "food-delivery-faq-match-answer",
+    "name": "Food Delivery \u00b7 FAQ match & answer",
+    "description": "Match a complaint to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "food-delivery-action-items",
+    "name": "Food Delivery \u00b7 action items",
+    "description": "Turn a complaint into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "food-delivery-answer",
+    "name": "Food Delivery \u00b7 answer",
+    "description": "Read a complaint, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "food-delivery-classify-intent",
+    "name": "Food Delivery \u00b7 classify intent",
+    "description": "Classify a complaint into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "food-delivery-draft-critique-revise",
+    "name": "Food Delivery \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "food-delivery-extract-to-json",
+    "name": "Food Delivery \u00b7 extract to JSON",
+    "description": "Extract structured fields from a complaint as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "food-delivery-keyword-extract",
+    "name": "Food Delivery \u00b7 keyword extract",
+    "description": "Pull the top keywords from a complaint as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "food-delivery-language-route",
+    "name": "Food Delivery \u00b7 language route",
+    "description": "Detect the language of a complaint; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "food-delivery-moderation-gate",
+    "name": "Food Delivery \u00b7 moderation gate",
+    "description": "Check a complaint for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "food-delivery-redact-summarize",
+    "name": "Food Delivery \u00b7 redact & summarize",
+    "description": "Redact personal data from a complaint, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "food-delivery-score-gate",
+    "name": "Food Delivery \u00b7 score & gate",
+    "description": "Score a complaint 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "food-delivery-sentiment-route",
+    "name": "Food Delivery \u00b7 sentiment route",
+    "description": "Detect sentiment of a complaint, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "food-delivery-severity-tiers",
+    "name": "Food Delivery \u00b7 severity tiers",
+    "description": "Classify severity of a complaint, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "food-delivery-summarize-then-decide",
+    "name": "Food Delivery \u00b7 summarize then decide",
+    "description": "Summarize a complaint, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "food-delivery-tag-enrich",
+    "name": "Food Delivery \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a complaint.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "food-delivery-tone-rewrite",
+    "name": "Food Delivery \u00b7 tone rewrite",
+    "description": "Rewrite a complaint in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "food-delivery-translate-reply",
+    "name": "Food Delivery \u00b7 translate & reply",
+    "description": "Translate a complaint to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "food-delivery-triage-route",
+    "name": "Food Delivery \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "gaming-support-faq-match-answer",
+    "name": "Gaming Support \u00b7 FAQ match & answer",
+    "description": "Match a report to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "gaming-support-action-items",
+    "name": "Gaming Support \u00b7 action items",
+    "description": "Turn a report into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "gaming-support-answer",
+    "name": "Gaming Support \u00b7 answer",
+    "description": "Read a report, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "gaming-support-classify-intent",
+    "name": "Gaming Support \u00b7 classify intent",
+    "description": "Classify a report into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "gaming-support-draft-critique-revise",
+    "name": "Gaming Support \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "gaming-support-extract-to-json",
+    "name": "Gaming Support \u00b7 extract to JSON",
+    "description": "Extract structured fields from a report as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "gaming-support-keyword-extract",
+    "name": "Gaming Support \u00b7 keyword extract",
+    "description": "Pull the top keywords from a report as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "gaming-support-language-route",
+    "name": "Gaming Support \u00b7 language route",
+    "description": "Detect the language of a report; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "gaming-support-moderation-gate",
+    "name": "Gaming Support \u00b7 moderation gate",
+    "description": "Check a report for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "gaming-support-redact-summarize",
+    "name": "Gaming Support \u00b7 redact & summarize",
+    "description": "Redact personal data from a report, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "gaming-support-score-gate",
+    "name": "Gaming Support \u00b7 score & gate",
+    "description": "Score a report 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "gaming-support-sentiment-route",
+    "name": "Gaming Support \u00b7 sentiment route",
+    "description": "Detect sentiment of a report, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "gaming-support-severity-tiers",
+    "name": "Gaming Support \u00b7 severity tiers",
+    "description": "Classify severity of a report, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "gaming-support-summarize-then-decide",
+    "name": "Gaming Support \u00b7 summarize then decide",
+    "description": "Summarize a report, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "gaming-support-tag-enrich",
+    "name": "Gaming Support \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a report.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "gaming-support-tone-rewrite",
+    "name": "Gaming Support \u00b7 tone rewrite",
+    "description": "Rewrite a report in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "gaming-support-translate-reply",
+    "name": "Gaming Support \u00b7 translate & reply",
+    "description": "Translate a report to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "gaming-support-triage-route",
+    "name": "Gaming Support \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "healthcare-intake-faq-match-answer",
+    "name": "Healthcare Intake \u00b7 FAQ match & answer",
+    "description": "Match a note to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "healthcare-intake-action-items",
+    "name": "Healthcare Intake \u00b7 action items",
+    "description": "Turn a note into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "healthcare-intake-answer",
+    "name": "Healthcare Intake \u00b7 answer",
+    "description": "Read a note, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "healthcare-intake-classify-intent",
+    "name": "Healthcare Intake \u00b7 classify intent",
+    "description": "Classify a note into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "healthcare-intake-draft-critique-revise",
+    "name": "Healthcare Intake \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "healthcare-intake-extract-to-json",
+    "name": "Healthcare Intake \u00b7 extract to JSON",
+    "description": "Extract structured fields from a note as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "healthcare-intake-keyword-extract",
+    "name": "Healthcare Intake \u00b7 keyword extract",
+    "description": "Pull the top keywords from a note as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "healthcare-intake-language-route",
+    "name": "Healthcare Intake \u00b7 language route",
+    "description": "Detect the language of a note; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "healthcare-intake-moderation-gate",
+    "name": "Healthcare Intake \u00b7 moderation gate",
+    "description": "Check a note for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "healthcare-intake-redact-summarize",
+    "name": "Healthcare Intake \u00b7 redact & summarize",
+    "description": "Redact personal data from a note, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "healthcare-intake-score-gate",
+    "name": "Healthcare Intake \u00b7 score & gate",
+    "description": "Score a note 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "healthcare-intake-sentiment-route",
+    "name": "Healthcare Intake \u00b7 sentiment route",
+    "description": "Detect sentiment of a note, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "healthcare-intake-severity-tiers",
+    "name": "Healthcare Intake \u00b7 severity tiers",
+    "description": "Classify severity of a note, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "healthcare-intake-summarize-then-decide",
+    "name": "Healthcare Intake \u00b7 summarize then decide",
+    "description": "Summarize a note, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "healthcare-intake-tag-enrich",
+    "name": "Healthcare Intake \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a note.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "healthcare-intake-tone-rewrite",
+    "name": "Healthcare Intake \u00b7 tone rewrite",
+    "description": "Rewrite a note in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "healthcare-intake-translate-reply",
+    "name": "Healthcare Intake \u00b7 translate & reply",
+    "description": "Translate a note to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "healthcare-intake-triage-route",
+    "name": "Healthcare Intake \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "hr-faq-match-answer",
+    "name": "Hr \u00b7 FAQ match & answer",
+    "description": "Match a feedback to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "hr-action-items",
+    "name": "Hr \u00b7 action items",
+    "description": "Turn a feedback into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "hr-answer",
+    "name": "Hr \u00b7 answer",
+    "description": "Read a feedback, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "hr-classify-intent",
+    "name": "Hr \u00b7 classify intent",
+    "description": "Classify a feedback into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "hr-draft-critique-revise",
+    "name": "Hr \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "hr-extract-to-json",
+    "name": "Hr \u00b7 extract to JSON",
+    "description": "Extract structured fields from a feedback as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "hr-keyword-extract",
+    "name": "Hr \u00b7 keyword extract",
+    "description": "Pull the top keywords from a feedback as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "hr-language-route",
+    "name": "Hr \u00b7 language route",
+    "description": "Detect the language of a feedback; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "hr-moderation-gate",
+    "name": "Hr \u00b7 moderation gate",
+    "description": "Check a feedback for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "hr-redact-summarize",
+    "name": "Hr \u00b7 redact & summarize",
+    "description": "Redact personal data from a feedback, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "hr-score-gate",
+    "name": "Hr \u00b7 score & gate",
+    "description": "Score a feedback 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "hr-sentiment-route",
+    "name": "Hr \u00b7 sentiment route",
+    "description": "Detect sentiment of a feedback, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "hr-severity-tiers",
+    "name": "Hr \u00b7 severity tiers",
+    "description": "Classify severity of a feedback, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "hr-summarize-then-decide",
+    "name": "Hr \u00b7 summarize then decide",
+    "description": "Summarize a feedback, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "hr-tag-enrich",
+    "name": "Hr \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a feedback.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "hr-tone-rewrite",
+    "name": "Hr \u00b7 tone rewrite",
+    "description": "Rewrite a feedback in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "hr-translate-reply",
+    "name": "Hr \u00b7 translate & reply",
+    "description": "Translate a feedback to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "hr-triage-route",
+    "name": "Hr \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "insurance-faq-match-answer",
+    "name": "Insurance \u00b7 FAQ match & answer",
+    "description": "Match a claim to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "insurance-action-items",
+    "name": "Insurance \u00b7 action items",
+    "description": "Turn a claim into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "insurance-answer",
+    "name": "Insurance \u00b7 answer",
+    "description": "Read a claim, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "insurance-classify-intent",
+    "name": "Insurance \u00b7 classify intent",
+    "description": "Classify a claim into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "insurance-draft-critique-revise",
+    "name": "Insurance \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "insurance-extract-to-json",
+    "name": "Insurance \u00b7 extract to JSON",
+    "description": "Extract structured fields from a claim as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "insurance-keyword-extract",
+    "name": "Insurance \u00b7 keyword extract",
+    "description": "Pull the top keywords from a claim as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "insurance-language-route",
+    "name": "Insurance \u00b7 language route",
+    "description": "Detect the language of a claim; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "insurance-moderation-gate",
+    "name": "Insurance \u00b7 moderation gate",
+    "description": "Check a claim for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "insurance-redact-summarize",
+    "name": "Insurance \u00b7 redact & summarize",
+    "description": "Redact personal data from a claim, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "insurance-score-gate",
+    "name": "Insurance \u00b7 score & gate",
+    "description": "Score a claim 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "insurance-sentiment-route",
+    "name": "Insurance \u00b7 sentiment route",
+    "description": "Detect sentiment of a claim, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "insurance-severity-tiers",
+    "name": "Insurance \u00b7 severity tiers",
+    "description": "Classify severity of a claim, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "insurance-summarize-then-decide",
+    "name": "Insurance \u00b7 summarize then decide",
+    "description": "Summarize a claim, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "insurance-tag-enrich",
+    "name": "Insurance \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a claim.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "insurance-tone-rewrite",
+    "name": "Insurance \u00b7 tone rewrite",
+    "description": "Rewrite a claim in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "insurance-translate-reply",
+    "name": "Insurance \u00b7 translate & reply",
+    "description": "Translate a claim to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "insurance-triage-route",
+    "name": "Insurance \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "it-helpdesk-faq-match-answer",
+    "name": "It Helpdesk \u00b7 FAQ match & answer",
+    "description": "Match a ticket to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "it-helpdesk-action-items",
+    "name": "It Helpdesk \u00b7 action items",
+    "description": "Turn a ticket into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "it-helpdesk-answer",
+    "name": "It Helpdesk \u00b7 answer",
+    "description": "Read a ticket, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "it-helpdesk-classify-intent",
+    "name": "It Helpdesk \u00b7 classify intent",
+    "description": "Classify a ticket into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "it-helpdesk-draft-critique-revise",
+    "name": "It Helpdesk \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "it-helpdesk-extract-to-json",
+    "name": "It Helpdesk \u00b7 extract to JSON",
+    "description": "Extract structured fields from a ticket as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "it-helpdesk-keyword-extract",
+    "name": "It Helpdesk \u00b7 keyword extract",
+    "description": "Pull the top keywords from a ticket as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "it-helpdesk-language-route",
+    "name": "It Helpdesk \u00b7 language route",
+    "description": "Detect the language of a ticket; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "it-helpdesk-moderation-gate",
+    "name": "It Helpdesk \u00b7 moderation gate",
+    "description": "Check a ticket for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "it-helpdesk-redact-summarize",
+    "name": "It Helpdesk \u00b7 redact & summarize",
+    "description": "Redact personal data from a ticket, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "it-helpdesk-score-gate",
+    "name": "It Helpdesk \u00b7 score & gate",
+    "description": "Score a ticket 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "it-helpdesk-sentiment-route",
+    "name": "It Helpdesk \u00b7 sentiment route",
+    "description": "Detect sentiment of a ticket, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "it-helpdesk-severity-tiers",
+    "name": "It Helpdesk \u00b7 severity tiers",
+    "description": "Classify severity of a ticket, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "it-helpdesk-summarize-then-decide",
+    "name": "It Helpdesk \u00b7 summarize then decide",
+    "description": "Summarize a ticket, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "it-helpdesk-tag-enrich",
+    "name": "It Helpdesk \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a ticket.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "it-helpdesk-tone-rewrite",
+    "name": "It Helpdesk \u00b7 tone rewrite",
+    "description": "Rewrite a ticket in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "it-helpdesk-translate-reply",
+    "name": "It Helpdesk \u00b7 translate & reply",
+    "description": "Translate a ticket to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "it-helpdesk-triage-route",
+    "name": "It Helpdesk \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "legal-intake-faq-match-answer",
+    "name": "Legal Intake \u00b7 FAQ match & answer",
+    "description": "Match a inquiry to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "legal-intake-action-items",
+    "name": "Legal Intake \u00b7 action items",
+    "description": "Turn a inquiry into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "legal-intake-answer",
+    "name": "Legal Intake \u00b7 answer",
+    "description": "Read a inquiry, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "legal-intake-classify-intent",
+    "name": "Legal Intake \u00b7 classify intent",
+    "description": "Classify a inquiry into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "legal-intake-draft-critique-revise",
+    "name": "Legal Intake \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "legal-intake-extract-to-json",
+    "name": "Legal Intake \u00b7 extract to JSON",
+    "description": "Extract structured fields from a inquiry as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "legal-intake-keyword-extract",
+    "name": "Legal Intake \u00b7 keyword extract",
+    "description": "Pull the top keywords from a inquiry as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "legal-intake-language-route",
+    "name": "Legal Intake \u00b7 language route",
+    "description": "Detect the language of a inquiry; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "legal-intake-moderation-gate",
+    "name": "Legal Intake \u00b7 moderation gate",
+    "description": "Check a inquiry for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "legal-intake-redact-summarize",
+    "name": "Legal Intake \u00b7 redact & summarize",
+    "description": "Redact personal data from a inquiry, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "legal-intake-score-gate",
+    "name": "Legal Intake \u00b7 score & gate",
+    "description": "Score a inquiry 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "legal-intake-sentiment-route",
+    "name": "Legal Intake \u00b7 sentiment route",
+    "description": "Detect sentiment of a inquiry, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "legal-intake-severity-tiers",
+    "name": "Legal Intake \u00b7 severity tiers",
+    "description": "Classify severity of a inquiry, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "legal-intake-summarize-then-decide",
+    "name": "Legal Intake \u00b7 summarize then decide",
+    "description": "Summarize a inquiry, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "legal-intake-tag-enrich",
+    "name": "Legal Intake \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a inquiry.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "legal-intake-tone-rewrite",
+    "name": "Legal Intake \u00b7 tone rewrite",
+    "description": "Rewrite a inquiry in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "legal-intake-translate-reply",
+    "name": "Legal Intake \u00b7 translate & reply",
+    "description": "Translate a inquiry to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "legal-intake-triage-route",
+    "name": "Legal Intake \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "logistics-faq-match-answer",
+    "name": "Logistics \u00b7 FAQ match & answer",
+    "description": "Match a shipment to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "logistics-action-items",
+    "name": "Logistics \u00b7 action items",
+    "description": "Turn a shipment into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "logistics-answer",
+    "name": "Logistics \u00b7 answer",
+    "description": "Read a shipment, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "logistics-classify-intent",
+    "name": "Logistics \u00b7 classify intent",
+    "description": "Classify a shipment into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "logistics-draft-critique-revise",
+    "name": "Logistics \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "logistics-extract-to-json",
+    "name": "Logistics \u00b7 extract to JSON",
+    "description": "Extract structured fields from a shipment as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "logistics-keyword-extract",
+    "name": "Logistics \u00b7 keyword extract",
+    "description": "Pull the top keywords from a shipment as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "logistics-language-route",
+    "name": "Logistics \u00b7 language route",
+    "description": "Detect the language of a shipment; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "logistics-moderation-gate",
+    "name": "Logistics \u00b7 moderation gate",
+    "description": "Check a shipment for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "logistics-redact-summarize",
+    "name": "Logistics \u00b7 redact & summarize",
+    "description": "Redact personal data from a shipment, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "logistics-score-gate",
+    "name": "Logistics \u00b7 score & gate",
+    "description": "Score a shipment 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "logistics-sentiment-route",
+    "name": "Logistics \u00b7 sentiment route",
+    "description": "Detect sentiment of a shipment, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "logistics-severity-tiers",
+    "name": "Logistics \u00b7 severity tiers",
+    "description": "Classify severity of a shipment, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "logistics-summarize-then-decide",
+    "name": "Logistics \u00b7 summarize then decide",
+    "description": "Summarize a shipment, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "logistics-tag-enrich",
+    "name": "Logistics \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a shipment.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "logistics-tone-rewrite",
+    "name": "Logistics \u00b7 tone rewrite",
+    "description": "Rewrite a shipment in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "logistics-translate-reply",
+    "name": "Logistics \u00b7 translate & reply",
+    "description": "Translate a shipment to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "logistics-triage-route",
+    "name": "Logistics \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "marketing-faq-match-answer",
+    "name": "Marketing \u00b7 FAQ match & answer",
+    "description": "Match a brief to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "marketing-action-items",
+    "name": "Marketing \u00b7 action items",
+    "description": "Turn a brief into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "marketing-answer",
+    "name": "Marketing \u00b7 answer",
+    "description": "Read a brief, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "marketing-classify-intent",
+    "name": "Marketing \u00b7 classify intent",
+    "description": "Classify a brief into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "marketing-draft-critique-revise",
+    "name": "Marketing \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "marketing-extract-to-json",
+    "name": "Marketing \u00b7 extract to JSON",
+    "description": "Extract structured fields from a brief as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "marketing-keyword-extract",
+    "name": "Marketing \u00b7 keyword extract",
+    "description": "Pull the top keywords from a brief as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "marketing-language-route",
+    "name": "Marketing \u00b7 language route",
+    "description": "Detect the language of a brief; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "marketing-moderation-gate",
+    "name": "Marketing \u00b7 moderation gate",
+    "description": "Check a brief for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "marketing-redact-summarize",
+    "name": "Marketing \u00b7 redact & summarize",
+    "description": "Redact personal data from a brief, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "marketing-score-gate",
+    "name": "Marketing \u00b7 score & gate",
+    "description": "Score a brief 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "marketing-sentiment-route",
+    "name": "Marketing \u00b7 sentiment route",
+    "description": "Detect sentiment of a brief, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "marketing-severity-tiers",
+    "name": "Marketing \u00b7 severity tiers",
+    "description": "Classify severity of a brief, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "marketing-summarize-then-decide",
+    "name": "Marketing \u00b7 summarize then decide",
+    "description": "Summarize a brief, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "marketing-tag-enrich",
+    "name": "Marketing \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a brief.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "marketing-tone-rewrite",
+    "name": "Marketing \u00b7 tone rewrite",
+    "description": "Rewrite a brief in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "marketing-translate-reply",
+    "name": "Marketing \u00b7 translate & reply",
+    "description": "Translate a brief to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "marketing-triage-route",
+    "name": "Marketing \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "nonprofit-faq-match-answer",
+    "name": "Nonprofit \u00b7 FAQ match & answer",
+    "description": "Match a message to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "nonprofit-action-items",
+    "name": "Nonprofit \u00b7 action items",
+    "description": "Turn a message into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "nonprofit-answer",
+    "name": "Nonprofit \u00b7 answer",
+    "description": "Read a message, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "nonprofit-classify-intent",
+    "name": "Nonprofit \u00b7 classify intent",
+    "description": "Classify a message into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "nonprofit-draft-critique-revise",
+    "name": "Nonprofit \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "nonprofit-extract-to-json",
+    "name": "Nonprofit \u00b7 extract to JSON",
+    "description": "Extract structured fields from a message as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "nonprofit-keyword-extract",
+    "name": "Nonprofit \u00b7 keyword extract",
+    "description": "Pull the top keywords from a message as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "nonprofit-language-route",
+    "name": "Nonprofit \u00b7 language route",
+    "description": "Detect the language of a message; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "nonprofit-moderation-gate",
+    "name": "Nonprofit \u00b7 moderation gate",
+    "description": "Check a message for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "nonprofit-redact-summarize",
+    "name": "Nonprofit \u00b7 redact & summarize",
+    "description": "Redact personal data from a message, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "nonprofit-score-gate",
+    "name": "Nonprofit \u00b7 score & gate",
+    "description": "Score a message 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "nonprofit-sentiment-route",
+    "name": "Nonprofit \u00b7 sentiment route",
+    "description": "Detect sentiment of a message, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "nonprofit-severity-tiers",
+    "name": "Nonprofit \u00b7 severity tiers",
+    "description": "Classify severity of a message, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "nonprofit-summarize-then-decide",
+    "name": "Nonprofit \u00b7 summarize then decide",
+    "description": "Summarize a message, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "nonprofit-tag-enrich",
+    "name": "Nonprofit \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a message.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "nonprofit-tone-rewrite",
+    "name": "Nonprofit \u00b7 tone rewrite",
+    "description": "Rewrite a message in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "nonprofit-translate-reply",
+    "name": "Nonprofit \u00b7 translate & reply",
+    "description": "Translate a message to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "nonprofit-triage-route",
+    "name": "Nonprofit \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "real-estate-faq-match-answer",
+    "name": "Real Estate \u00b7 FAQ match & answer",
+    "description": "Match a listing to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "real-estate-action-items",
+    "name": "Real Estate \u00b7 action items",
+    "description": "Turn a listing into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "real-estate-answer",
+    "name": "Real Estate \u00b7 answer",
+    "description": "Read a listing, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "real-estate-classify-intent",
+    "name": "Real Estate \u00b7 classify intent",
+    "description": "Classify a listing into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "real-estate-draft-critique-revise",
+    "name": "Real Estate \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "real-estate-extract-to-json",
+    "name": "Real Estate \u00b7 extract to JSON",
+    "description": "Extract structured fields from a listing as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "real-estate-keyword-extract",
+    "name": "Real Estate \u00b7 keyword extract",
+    "description": "Pull the top keywords from a listing as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "real-estate-language-route",
+    "name": "Real Estate \u00b7 language route",
+    "description": "Detect the language of a listing; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "real-estate-moderation-gate",
+    "name": "Real Estate \u00b7 moderation gate",
+    "description": "Check a listing for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "real-estate-redact-summarize",
+    "name": "Real Estate \u00b7 redact & summarize",
+    "description": "Redact personal data from a listing, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "real-estate-score-gate",
+    "name": "Real Estate \u00b7 score & gate",
+    "description": "Score a listing 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "real-estate-sentiment-route",
+    "name": "Real Estate \u00b7 sentiment route",
+    "description": "Detect sentiment of a listing, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "real-estate-severity-tiers",
+    "name": "Real Estate \u00b7 severity tiers",
+    "description": "Classify severity of a listing, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "real-estate-summarize-then-decide",
+    "name": "Real Estate \u00b7 summarize then decide",
+    "description": "Summarize a listing, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "real-estate-tag-enrich",
+    "name": "Real Estate \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a listing.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "real-estate-tone-rewrite",
+    "name": "Real Estate \u00b7 tone rewrite",
+    "description": "Rewrite a listing in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "real-estate-translate-reply",
+    "name": "Real Estate \u00b7 translate & reply",
+    "description": "Translate a listing to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "real-estate-triage-route",
+    "name": "Real Estate \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "recruiting-faq-match-answer",
+    "name": "Recruiting \u00b7 FAQ match & answer",
+    "description": "Match a resume to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "recruiting-action-items",
+    "name": "Recruiting \u00b7 action items",
+    "description": "Turn a resume into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "recruiting-answer",
+    "name": "Recruiting \u00b7 answer",
+    "description": "Read a resume, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "recruiting-classify-intent",
+    "name": "Recruiting \u00b7 classify intent",
+    "description": "Classify a resume into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "recruiting-draft-critique-revise",
+    "name": "Recruiting \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "recruiting-extract-to-json",
+    "name": "Recruiting \u00b7 extract to JSON",
+    "description": "Extract structured fields from a resume as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "recruiting-keyword-extract",
+    "name": "Recruiting \u00b7 keyword extract",
+    "description": "Pull the top keywords from a resume as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "recruiting-language-route",
+    "name": "Recruiting \u00b7 language route",
+    "description": "Detect the language of a resume; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "recruiting-moderation-gate",
+    "name": "Recruiting \u00b7 moderation gate",
+    "description": "Check a resume for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "recruiting-redact-summarize",
+    "name": "Recruiting \u00b7 redact & summarize",
+    "description": "Redact personal data from a resume, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "recruiting-score-gate",
+    "name": "Recruiting \u00b7 score & gate",
+    "description": "Score a resume 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "recruiting-sentiment-route",
+    "name": "Recruiting \u00b7 sentiment route",
+    "description": "Detect sentiment of a resume, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "recruiting-severity-tiers",
+    "name": "Recruiting \u00b7 severity tiers",
+    "description": "Classify severity of a resume, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "recruiting-summarize-then-decide",
+    "name": "Recruiting \u00b7 summarize then decide",
+    "description": "Summarize a resume, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "recruiting-tag-enrich",
+    "name": "Recruiting \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a resume.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "recruiting-tone-rewrite",
+    "name": "Recruiting \u00b7 tone rewrite",
+    "description": "Rewrite a resume in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "recruiting-translate-reply",
+    "name": "Recruiting \u00b7 translate & reply",
+    "description": "Translate a resume to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "recruiting-triage-route",
+    "name": "Recruiting \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "research-faq-match-answer",
+    "name": "Research \u00b7 FAQ match & answer",
+    "description": "Match a abstract to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "research-action-items",
+    "name": "Research \u00b7 action items",
+    "description": "Turn a abstract into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "research-answer",
+    "name": "Research \u00b7 answer",
+    "description": "Read a abstract, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "research-classify-intent",
+    "name": "Research \u00b7 classify intent",
+    "description": "Classify a abstract into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "research-draft-critique-revise",
+    "name": "Research \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "research-extract-to-json",
+    "name": "Research \u00b7 extract to JSON",
+    "description": "Extract structured fields from a abstract as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "research-keyword-extract",
+    "name": "Research \u00b7 keyword extract",
+    "description": "Pull the top keywords from a abstract as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "research-language-route",
+    "name": "Research \u00b7 language route",
+    "description": "Detect the language of a abstract; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "research-moderation-gate",
+    "name": "Research \u00b7 moderation gate",
+    "description": "Check a abstract for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "research-redact-summarize",
+    "name": "Research \u00b7 redact & summarize",
+    "description": "Redact personal data from a abstract, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "research-score-gate",
+    "name": "Research \u00b7 score & gate",
+    "description": "Score a abstract 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "research-sentiment-route",
+    "name": "Research \u00b7 sentiment route",
+    "description": "Detect sentiment of a abstract, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "research-severity-tiers",
+    "name": "Research \u00b7 severity tiers",
+    "description": "Classify severity of a abstract, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "research-summarize-then-decide",
+    "name": "Research \u00b7 summarize then decide",
+    "description": "Summarize a abstract, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "research-tag-enrich",
+    "name": "Research \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a abstract.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "research-tone-rewrite",
+    "name": "Research \u00b7 tone rewrite",
+    "description": "Rewrite a abstract in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "research-translate-reply",
+    "name": "Research \u00b7 translate & reply",
+    "description": "Translate a abstract to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "research-triage-route",
+    "name": "Research \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "sales-lead-faq-match-answer",
+    "name": "Sales Lead \u00b7 FAQ match & answer",
+    "description": "Match a message to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "sales-lead-action-items",
+    "name": "Sales Lead \u00b7 action items",
+    "description": "Turn a message into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "sales-lead-answer",
+    "name": "Sales Lead \u00b7 answer",
+    "description": "Read a message, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "sales-lead-classify-intent",
+    "name": "Sales Lead \u00b7 classify intent",
+    "description": "Classify a message into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "sales-lead-draft-critique-revise",
+    "name": "Sales Lead \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "sales-lead-extract-to-json",
+    "name": "Sales Lead \u00b7 extract to JSON",
+    "description": "Extract structured fields from a message as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "sales-lead-keyword-extract",
+    "name": "Sales Lead \u00b7 keyword extract",
+    "description": "Pull the top keywords from a message as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "sales-lead-language-route",
+    "name": "Sales Lead \u00b7 language route",
+    "description": "Detect the language of a message; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "sales-lead-moderation-gate",
+    "name": "Sales Lead \u00b7 moderation gate",
+    "description": "Check a message for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "sales-lead-redact-summarize",
+    "name": "Sales Lead \u00b7 redact & summarize",
+    "description": "Redact personal data from a message, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "sales-lead-score-gate",
+    "name": "Sales Lead \u00b7 score & gate",
+    "description": "Score a message 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "sales-lead-sentiment-route",
+    "name": "Sales Lead \u00b7 sentiment route",
+    "description": "Detect sentiment of a message, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "sales-lead-severity-tiers",
+    "name": "Sales Lead \u00b7 severity tiers",
+    "description": "Classify severity of a message, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "sales-lead-summarize-then-decide",
+    "name": "Sales Lead \u00b7 summarize then decide",
+    "description": "Summarize a message, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "sales-lead-tag-enrich",
+    "name": "Sales Lead \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a message.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "sales-lead-tone-rewrite",
+    "name": "Sales Lead \u00b7 tone rewrite",
+    "description": "Rewrite a message in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "sales-lead-translate-reply",
+    "name": "Sales Lead \u00b7 translate & reply",
+    "description": "Translate a message to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "sales-lead-triage-route",
+    "name": "Sales Lead \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  },
+  {
+    "slug": "travel-faq-match-answer",
+    "name": "Travel \u00b7 FAQ match & answer",
+    "description": "Match a request to a topic, then answer in that context.",
+    "category": "FAQ match & answer"
+  },
+  {
+    "slug": "travel-action-items",
+    "name": "Travel \u00b7 action items",
+    "description": "Turn a request into a JSON list of action items.",
+    "category": "action items"
+  },
+  {
+    "slug": "travel-answer",
+    "name": "Travel \u00b7 answer",
+    "description": "Read a request, draft a helpful reply.",
+    "category": "answer"
+  },
+  {
+    "slug": "travel-classify-intent",
+    "name": "Travel \u00b7 classify intent",
+    "description": "Classify a request into one label.",
+    "category": "classify intent"
+  },
+  {
+    "slug": "travel-draft-critique-revise",
+    "name": "Travel \u00b7 draft, critique, revise",
+    "description": "Draft a reply, self-critique it, then produce a revised final.",
+    "category": "draft, critique, revise"
+  },
+  {
+    "slug": "travel-extract-to-json",
+    "name": "Travel \u00b7 extract to JSON",
+    "description": "Extract structured fields from a request as JSON.",
+    "category": "extract to JSON"
+  },
+  {
+    "slug": "travel-keyword-extract",
+    "name": "Travel \u00b7 keyword extract",
+    "description": "Pull the top keywords from a request as a JSON array.",
+    "category": "keyword extract"
+  },
+  {
+    "slug": "travel-language-route",
+    "name": "Travel \u00b7 language route",
+    "description": "Detect the language of a request; answer directly if English, else translate first.",
+    "category": "language route"
+  },
+  {
+    "slug": "travel-moderation-gate",
+    "name": "Travel \u00b7 moderation gate",
+    "description": "Check a request for policy issues before publishing.",
+    "category": "moderation gate"
+  },
+  {
+    "slug": "travel-redact-summarize",
+    "name": "Travel \u00b7 redact & summarize",
+    "description": "Redact personal data from a request, then summarize the rest.",
+    "category": "redact & summarize"
+  },
+  {
+    "slug": "travel-score-gate",
+    "name": "Travel \u00b7 score & gate",
+    "description": "Score a request 1-5 for priority, then gate on the number.",
+    "category": "score & gate"
+  },
+  {
+    "slug": "travel-sentiment-route",
+    "name": "Travel \u00b7 sentiment route",
+    "description": "Detect sentiment of a request, escalate the negative ones.",
+    "category": "sentiment route"
+  },
+  {
+    "slug": "travel-severity-tiers",
+    "name": "Travel \u00b7 severity tiers",
+    "description": "Classify severity of a request, then route across three tiers with chained checks.",
+    "category": "severity tiers"
+  },
+  {
+    "slug": "travel-summarize-then-decide",
+    "name": "Travel \u00b7 summarize then decide",
+    "description": "Summarize a request, then branch on whether it needs follow-up.",
+    "category": "summarize then decide"
+  },
+  {
+    "slug": "travel-tag-enrich",
+    "name": "Travel \u00b7 tag & enrich",
+    "description": "Produce a JSON list of topic tags for a request.",
+    "category": "tag & enrich"
+  },
+  {
+    "slug": "travel-tone-rewrite",
+    "name": "Travel \u00b7 tone rewrite",
+    "description": "Rewrite a request in a warm, professional tone.",
+    "category": "tone rewrite"
+  },
+  {
+    "slug": "travel-translate-reply",
+    "name": "Travel \u00b7 translate & reply",
+    "description": "Translate a request to English, then draft a reply.",
+    "category": "translate & reply"
+  },
+  {
+    "slug": "travel-triage-route",
+    "name": "Travel \u00b7 triage & route",
+    "description": "Draft a reply, then route urgent vs normal on a keyword check.",
+    "category": "triage & route"
+  }
+]

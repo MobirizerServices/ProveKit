@@ -13,6 +13,7 @@ import { FlowNode } from "@/components/flow/FlowNode";
 import { FlowEdge } from "@/components/flow/FlowEdge";
 import NodeInspector from "@/components/flow/NodeInspector";
 import DeployModal from "@/components/DeployModal";
+import TemplatePicker from "@/components/flow/TemplatePicker";
 
 const nodeTypes = { fnode: FlowNode };
 const edgeTypes = { add: FlowEdge };
@@ -194,6 +195,13 @@ function Editor() {
     const f = await api.createFlow(tpl.name === "Blank canvas" ? "New flow" : tpl.name, tpl.nodes, tpl.edges);
     setTplPicker(false); await loadFlows(); setActiveId(f.id);
   }
+  async function newFlowFromStarter(id: string) {
+    const tpl = TEMPLATES.find((t) => t.id === id); if (tpl) await newFlowFrom(tpl);
+  }
+  async function newFlowFromTemplate(slug: string) {
+    const f = await api.createFlowFromTemplate(slug);
+    setTplPicker(false); await loadFlows(); setActiveId(f.id); flash("Flow created from template");
+  }
 
   function lightEdge(nid: string, branch: string | null | undefined) {
     setRfEdges((eds) => eds.map((e) => e.source === nid && (!branch || e.sourceHandle === branch) ? { ...e, animated: true, style: { stroke: "var(--accent)" } } : e));
@@ -293,23 +301,12 @@ function Editor() {
         {selNode && <NodeInspector key={selNode.id} node={selNode} connections={connections} runStep={stepsById[selNode.id]} onChange={patchConfig} onTitle={patchTitle} onClose={() => setSelected(null)} />}
       </div>
       {tplPicker && (
-        <div className="overlay" onClick={() => setTplPicker(false)}>
-          <div className="modal wiz" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">New flow<button onClick={() => setTplPicker(false)}>×</button></div>
-            <div className="modal-body">
-              <p className="wiz-lead">Start from a template — or a blank canvas.</p>
-              <div className="wiz-grid">
-                {TEMPLATES.map((t) => (
-                  <button key={t.id} className="wiz-provider" onClick={() => newFlowFrom(t)}>
-                    <span className="wp-ic">{t.icon}</span>
-                    <span className="wp-main"><span className="wp-name">{t.name}</span><span className="wp-desc">{t.desc}</span></span>
-                    <span className="wp-arrow">›</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        <TemplatePicker
+          starters={TEMPLATES.map((t) => ({ id: t.id, name: t.name, desc: t.desc, icon: t.icon }))}
+          onStarter={newFlowFromStarter}
+          onTemplate={newFlowFromTemplate}
+          onClose={() => setTplPicker(false)}
+        />
       )}
       {deployOpen && activeId && <DeployModal flowId={activeId} flowName={flows.find((f) => f.id === activeId)?.name || "flow"} onClose={() => setDeployOpen(false)} />}
       {toast && <div role="status" aria-live="polite" className="toast">{toast}</div>}

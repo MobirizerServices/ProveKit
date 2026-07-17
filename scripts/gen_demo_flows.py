@@ -11,6 +11,7 @@ into any workspace.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
@@ -18,7 +19,8 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "backend"))
 from agentman.services import testfile  # noqa: E402
 
-OUT = pathlib.Path(__file__).resolve().parent.parent / "examples" / ".agentman" / "flows"
+# Bundled with the package so the app serves them at runtime (incl. in Docker).
+OUT = pathlib.Path(__file__).resolve().parent.parent / "backend" / "agentman" / "templates" / "flows"
 LLM = "Demo Assistant (mock)"   # seeded, keyless — every flow runs offline out of the box
 MODEL = "demo-mock"
 
@@ -324,12 +326,17 @@ SHAPES = [shape_answer, shape_classify_route, shape_extract_validate, shape_clas
           shape_tone_rewrite, shape_action_items]
 
 
+def _category(name: str) -> str:
+    # names are "Domain · pattern" — the pattern is the useful filter facet
+    return name.split("·", 1)[1].strip() if "·" in name else "general"
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    for f in OUT.glob("*.yaml"):
+    for f in list(OUT.glob("*.yaml")) + list(OUT.glob("_manifest.json")):
         f.unlink()
     written, seen = 0, set()
-    index = []
+    manifest = []
     for shape in SHAPES:
         for domain, field, sample in DOMAINS:
             name, desc, nodes, edges = shape(domain, field, sample)
@@ -340,21 +347,23 @@ def main():
             text = testfile.dump_flow(name, desc, nodes, edges)
             testfile.load(text)  # validate every generated flow
             (OUT / f"{fn}.yaml").write_text(text)
-            index.append((name, desc))
+            manifest.append({"slug": fn, "name": name, "description": desc, "category": _category(name)})
             written += 1
-    _write_index(index)
-    print(f"wrote {written} demo flows to {OUT}")
+    manifest.sort(key=lambda m: m["name"])
+    (OUT / "_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    _write_index(manifest)
+    print(f"wrote {written} demo flows + manifest to {OUT}")
 
 
-def _write_index(index):
+def _write_index(manifest):
     lines = ["# Demo flow gallery",
              "",
-             f"{len(index)} ready-to-import example flows. Each references the keyless "
-             "**Demo Assistant (mock)** connection, so they run offline out of the box. "
-             "Import via the app (Flows → import) or `POST /api/import`, then hit Run.",
-             "", "| Flow | What it does |", "|---|---|"]
-    for name, desc in sorted(index):
-        lines.append(f"| `{slug(name)}.yaml` | {desc} |")
+             f"{len(manifest)} bundled flow templates, browsable + searchable in the app's "
+             "**New flow** picker. Each references the keyless **Demo Assistant (mock)** "
+             "connection, so they run offline out of the box.",
+             "", "| Flow | Pattern | What it does |", "|---|---|---|"]
+    for m in manifest:
+        lines.append(f"| `{m['slug']}.yaml` | {m['category']} | {m['description']} |")
     (OUT / "README.md").write_text("\n".join(lines) + "\n")
 
 

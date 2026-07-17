@@ -10,9 +10,10 @@ export default function DeploymentsPage() {
   const [stats, setStats] = useState<any>(null);
   const [runs, setRuns] = useState<any[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [usage, setUsage] = useState<any>(null);
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 2000); };
   const load = () => api.deployments().then(setDeps).catch(() => {});
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api.usage(30).then(setUsage).catch(() => {}); }, []);
   useEffect(() => {
     if (!sel) { setStats(null); setRuns([]); return; }
     api.deploymentStats(sel).then(setStats).catch(() => {});
@@ -33,6 +34,14 @@ export default function DeploymentsPage() {
               <p>Flows you’ve published as hosted API endpoints. Deploy from the Flows canvas.</p>
             </div>
           </div>
+          {usage && (
+            <div className="dep-metrics" style={{ marginBottom: 18 }}>
+              <div className="dep-stat"><b>{usage.runs}</b><span>runs · {usage.window_days}d</span></div>
+              <div className="dep-stat"><b>{usage.tokens_in.toLocaleString()}</b><span>tokens in</span></div>
+              <div className="dep-stat"><b>{usage.tokens_out.toLocaleString()}</b><span>tokens out</span></div>
+              <div className="dep-stat"><b>{usage.by_model.length}</b><span>models used</span></div>
+            </div>
+          )}
           {deps.length === 0 && <div className="jv-empty" style={{ padding: 40, textAlign: "center" }}>No deployments yet. Open a flow and hit <b>▲ Deploy</b>.</div>}
           {deps.map((d) => (
             <div key={d.slug} className="pr-card">

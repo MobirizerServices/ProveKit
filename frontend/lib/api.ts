@@ -135,6 +135,8 @@ export const api = {
   continueFlowStream(id: number, opts: { run_id: string; node_id: string; breakpoints?: string[]; step?: boolean }, onEvent: (e: FlowEvent) => void, signal?: AbortSignal) {
     return this._sseStream(`/api/flows/${id}/continue/stream`, { run_id: opts.run_id, node_id: opts.node_id, breakpoints: opts.breakpoints ?? [], step: !!opts.step }, onEvent, signal);
   },
+  // usage
+  usage: (days = 30) => j<any>(`/api/usage?days=${days}`),
   // deployments
   deployments: () => j<any[]>("/api/deployments"),
   createDeployment: (flow_id: number) => j<any>("/api/deployments", { method: "POST", body: JSON.stringify({ flow_id }) }),

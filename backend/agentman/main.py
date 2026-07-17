@@ -10,7 +10,7 @@ from .config import get_settings
 from .database import SessionLocal, init_db
 from .models import Connection
 from .observability import BodySizeLimitMiddleware, RequestIDMiddleware, healthz, init_sentry, setup_logging
-from .routers import auth, connections, deployments, flows, library, prompts, run, runtime, traces
+from .routers import auth, connections, deployments, flows, library, prompts, run, runtime, traces, usage
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -82,6 +82,7 @@ app.include_router(traces.router)
 app.include_router(traces.ws_router)
 app.include_router(deployments.router)
 app.include_router(runtime.router)
+app.include_router(usage.router)
 
 
 @app.get("/")

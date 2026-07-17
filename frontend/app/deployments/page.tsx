@@ -78,7 +78,7 @@ export default function DeploymentsPage() {
           ))}
         </div>
       </div>
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div role="status" aria-live="polite" className="toast">{toast}</div>}
     </div>
   );
 }

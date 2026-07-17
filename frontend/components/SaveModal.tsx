@@ -23,8 +23,8 @@ export default function SaveModal({ collections, req, onSaved, onClose }: {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">Save request<button onClick={onClose}>×</button></div>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Save request" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">Save request<button onClick={onClose} aria-label="Close">×</button></div>
         <div className="modal-body">
           <div className="field"><label>Name</label><input value={name} onChange={(e) => setName(e.target.value)} autoFocus /></div>
           <div className="field">

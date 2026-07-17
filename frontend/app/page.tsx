@@ -236,7 +236,7 @@ export default function Console() {
       {saveModal && <SaveModal collections={collections.collections} req={req} onSaved={() => { loadCollections(); flash("Request saved"); }} onClose={() => setSaveModal(false)} />}
       {datasetModal && <DatasetModal request={req} onClose={() => setDatasetModal(false)} />}
       {compareModal && <CompareModal request={req} connections={connections} onClose={() => setCompareModal(false)} />}
-      {toast && <div className={`toast ${toast.err ? "err" : ""}`}>{toast.text}</div>}
+      {toast && <div role="status" aria-live="polite" className={`toast ${toast.err ? "err" : ""}`}>{toast.text}</div>}
     </div>
   );
 }

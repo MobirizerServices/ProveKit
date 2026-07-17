@@ -41,8 +41,8 @@ export default function EnvironmentModal({ environments, onChanged, onClose }: {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">Environments<button onClick={onClose}>×</button></div>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Environments" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">Environments<button onClick={onClose} aria-label="Close">×</button></div>
         <div className="modal-body" style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 16 }}>
           <div>
             {environments.map((e) => (

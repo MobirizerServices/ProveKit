@@ -40,8 +40,8 @@ export default function CompareModal({ request, connections, onClose }: {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 860 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">Compare <span className="hint" style={{ marginLeft: 10, fontWeight: 400 }}>same input, two models</span><button onClick={onClose}>×</button></div>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Compare models" style={{ width: 860 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">Compare <span className="hint" style={{ marginLeft: 10, fontWeight: 400 }}>same input, two models</span><button onClick={onClose} aria-label="Close">×</button></div>
         <div className="modal-body">
           <div className="row2" style={{ marginBottom: 14 }}>
             <div className="field"><label>Model A</label>{models.length ? <select value={a} onChange={(e) => setA(e.target.value)}>{models.map((m) => <option key={m}>{m}</option>)}</select> : <input value={a} onChange={(e) => setA(e.target.value)} />}</div>

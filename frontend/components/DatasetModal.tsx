@@ -40,8 +40,8 @@ export default function DatasetModal({ request, onClose }: { request: any; onClo
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 720 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">Dataset run <span className="hint" style={{ marginLeft: 10, fontWeight: 400 }}>run this request over N input rows</span><button onClick={onClose}>×</button></div>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Dataset run" style={{ width: 720 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">Dataset run <span className="hint" style={{ marginLeft: 10, fontWeight: 400 }}>run this request over N input rows</span><button onClick={onClose} aria-label="Close">×</button></div>
         <div className="modal-body">
           {!result ? (
             <>

@@ -31,7 +31,7 @@ export default function PromptsPage() {
           {prompts.map((p) => <PromptCard key={p.id} prompt={p} onSaved={() => { load(); flash("Saved"); }} onDeleted={() => { load(); flash("Deleted"); }} />)}
         </div>
       </div>
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div role="status" aria-live="polite" className="toast">{toast}</div>}
     </div>
   );
 }

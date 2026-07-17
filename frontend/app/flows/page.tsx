@@ -312,7 +312,7 @@ function Editor() {
         </div>
       )}
       {deployOpen && activeId && <DeployModal flowId={activeId} flowName={flows.find((f) => f.id === activeId)?.name || "flow"} onClose={() => setDeployOpen(false)} />}
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div role="status" aria-live="polite" className="toast">{toast}</div>}
     </div>
   );
 }

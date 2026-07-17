@@ -23,8 +23,8 @@ export default function DeployModal({ flowId, flowName, onClose }: { flowId: num
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 620 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">Deploy “{flowName}”<button onClick={onClose}>×</button></div>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Deploy flow" style={{ width: 620 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">Deploy “{flowName}”<button onClick={onClose} aria-label="Close">×</button></div>
         <div className="modal-body">
           {!result ? (
             <>

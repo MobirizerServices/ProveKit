@@ -1,7 +1,7 @@
 # Secrets & local state — never commit.
 **/.env
 **/.DS_Store
-**/agentman.db
+**/agentman.db*
 **/.agentman.key
 **/venv/
 **/node_modules/

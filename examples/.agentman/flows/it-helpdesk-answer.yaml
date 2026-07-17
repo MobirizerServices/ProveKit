@@ -1,0 +1,43 @@
+version: 1
+kind: flow
+name: It Helpdesk · answer
+description: Read a ticket, draft a helpful reply.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 160
+  data:
+    title: Input
+  config:
+    sample:
+      ticket: Laptop won't connect to VPN after the update
+- id: ans
+  type: prompt
+  position:
+    x: 340
+    y: 160
+  data:
+    title: Draft reply
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: You are a concise IT helpdesk assistant.
+    user: '{{input.ticket}}'
+- id: out
+  type: output
+  position:
+    x: 640
+    y: 160
+  data:
+    title: Reply
+  config:
+    value: '{{ans.text}}'
+edges:
+- id: e-in-ans
+  source: in
+  target: ans
+- id: e-ans-out
+  source: ans
+  target: out

@@ -1,0 +1,73 @@
+version: 1
+kind: flow
+name: Content Moderation · moderation gate
+description: Check a text for policy issues before publishing.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 200
+  data:
+    title: Input
+  config:
+    sample:
+      text: This product is garbage and so is everyone who made it
+- id: mod
+  type: prompt
+  position:
+    x: 300
+    y: 200
+  data:
+    title: Moderate
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Reply with 'flag' if the text is abusive or unsafe, else 'ok'. Only that word.
+    user: '{{input.text}}'
+- id: cond
+  type: condition
+  position:
+    x: 560
+    y: 200
+  data:
+    title: Flagged?
+  config:
+    left: '{{mod.text}}'
+    op: contains
+    right: flag
+- id: block
+  type: output
+  position:
+    x: 820
+    y: 110
+  data:
+    title: Blocked
+  config:
+    value: blocked for review
+- id: pub
+  type: output
+  position:
+    x: 820
+    y: 300
+  data:
+    title: Published
+  config:
+    value: '{{input.text}}'
+edges:
+- id: e-in-mod
+  source: in
+  target: mod
+- id: e-mod-cond
+  source: mod
+  target: cond
+- id: e-cond-block
+  source: cond
+  target: block
+  condition:
+    branch: 'true'
+- id: e-cond-pub
+  source: cond
+  target: pub
+  condition:
+    branch: 'false'

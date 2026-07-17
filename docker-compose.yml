@@ -48,9 +48,9 @@ services:
   frontend:
     build:
       context: ./frontend
-    environment:
-      # Same-origin: the Next server proxies /api and /v1 to the backend service.
-      API_PROXY_TARGET: "http://backend:8100"
+      args:
+        # Baked into the standalone build: the Next server proxies /api and /v1 here.
+        API_PROXY_TARGET: "http://backend:8100"
     ports:
       - "3001:3001"
     depends_on:

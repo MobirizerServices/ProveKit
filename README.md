@@ -8,16 +8,18 @@
 Point it at an LLM API, an MCP server, an HTTP agent, or an A2A agent; run it with live
 streaming; turn a run into a regression test in one click; run the suite in CI.
 
-[![CI](https://github.com/OWNER/agentman/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/agentman/actions/workflows/ci.yml)
+[![CI](https://github.com/ketanq4udev/agentman/actions/workflows/ci.yml/badge.svg)](https://github.com/ketanq4udev/agentman/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.13](https://img.shields.io/badge/python-3.13-3776ab.svg)
 ![Next.js 14](https://img.shields.io/badge/next.js-14-black.svg)
 
 [Quickstart](#quickstart) · [Docs](docs/README.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
-<!-- Replace with the exported demo GIF (see docs/launch/DEMO_SCRIPT.md).
-     The 15s run → +assert → ✓ passed loop is the whole value prop. -->
+<!-- Demo GIF placeholder — export it first (see docs/launch/DEMO_SCRIPT.md), drop it at
+     docs/launch/demo.gif, then uncomment the <img> below. The 15s run → +assert → ✓ passed
+     loop is the whole value prop.
 <img src="docs/launch/demo.gif" alt="AgentMan: run an agent, turn the run into a test, run it in CI" width="760">
+-->
 
 </div>
 
@@ -40,7 +42,7 @@ trace ingest.
 ## Quickstart
 
 ```bash
-git clone https://github.com/OWNER/agentman && cd agentman
+git clone https://github.com/ketanq4udev/agentman && cd agentman
 make setup      # backend venv + deps, frontend deps  (needs Python 3.13, Node 20)
 make backend    # API on :8100     (terminal 1)
 make frontend   # web app on :3001 (terminal 2)
@@ -147,8 +149,8 @@ OPENAI_API_KEY=sk-… docker compose up --build
 # open http://localhost:3001
 ```
 
-The db persists in the `agentman-data` volume. In-container, the seeded Magari example
-connections point at `host.docker.internal` so they reach services on your host.
+The Postgres db persists in the `agentman-pg` volume. In-container, the seeded Magari
+example connections point at `host.docker.internal` so they reach services on your host.
 
 ### Local dev (two processes)
 
@@ -174,7 +176,9 @@ key to the OpenAI connection (pencil ✎ in the sidebar) to run prompts.
 
 ## Architecture
 
-- **backend/** — FastAPI + SQLite. `services/dispatch.py` routes a request by type to
+- **backend/** — FastAPI over SQLAlchemy; local/dev defaults to SQLite (`agentman.db`),
+  while the Docker/prod compose stacks run Postgres (set via `DATABASE_URL`).
+  `services/dispatch.py` routes a request by type to
   `providers/llm.py` (httpx streaming, provider-agnostic), `providers/mcp_client.py`
   (MCP JSON-RPC over Streamable-HTTP), or `providers/agent_http.py`. Everything is
   normalized to one event schema (`start / delta / node / result / assert / done / error`) streamed
@@ -182,7 +186,8 @@ key to the OpenAI connection (pencil ✎ in the sidebar) to run prompts.
   providers (via `dispatch.run_collect`), streaming a flow event schema
   (`start / node / pause / done / error`) with breakpoint + single-step support, from
   `/api/flows/{id}/run|continue/stream`. Connections, collections, requests, environments,
-  run history, **prompts**, and **flows** persist in `agentman.db`.
+  run history, **prompts**, and **flows** persist in the configured database
+  (`agentman.db` locally, Postgres under Docker/prod).
 - **frontend/** — Next.js app with a shared `TopNav` over three routes: **`/`** console
   (`RequestEditor` + `ResponsePanel`), **`/flows`** visual builder (`FlowNode` +
   `NodeInspector` on a React Flow canvas), and **`/prompts`** registry.

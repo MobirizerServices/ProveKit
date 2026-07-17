@@ -3,7 +3,8 @@ FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    DATABASE_URL=sqlite:////data/agentman.db
 
 WORKDIR /app
 COPY requirements.txt .
@@ -12,8 +13,9 @@ COPY agentman ./agentman
 COPY alembic.ini .
 COPY migrations ./migrations
 
-# Writable data dir for the SQLite db (mount a volume here).
-RUN useradd --create-home --uid 10001 appuser && mkdir /data && chown appuser /data
+# Writable data dir for the SQLite db (mount a volume here). Owned by the app
+# uid so the default DATABASE_URL (sqlite:////data/agentman.db) works standalone.
+RUN useradd --create-home --uid 10001 appuser && mkdir /data && chown 10001:10001 /data
 USER appuser
 
 EXPOSE 8100

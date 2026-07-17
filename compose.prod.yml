@@ -53,6 +53,10 @@ services:
       SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY}"
       CORS_ORIGINS: "https://${DOMAIN}"
       PUBLIC_BASE_URL: "https://${DOMAIN}"
+      WEB_BASE_URL: "https://${DOMAIN}"
+      # Don't prefill example connections for tenants in a shared deployment (they would
+      # otherwise point at the operator's OpenAI key / internal Magari MCP endpoint).
+      SEED_EXAMPLES: "false"
       SENTRY_DSN: "${SENTRY_DSN:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
     depends_on:
@@ -69,9 +73,11 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # Baked into the standalone build. Caddy routes /api + /v1 straight to the backend,
+        # so this is only a fallback for same-origin calls that reach the Next server.
+        API_PROXY_TARGET: "http://backend:8100"
     restart: unless-stopped
-    environment:
-      API_PROXY_TARGET: "http://backend:8100"
     depends_on:
       - backend
 

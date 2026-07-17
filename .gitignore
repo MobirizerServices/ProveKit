@@ -4,6 +4,7 @@
 **/agentman.db*
 **/.agentman.key
 **/venv/
+**/.venv*/
 **/node_modules/
 **/.next/
 **/*.tsbuildinfo

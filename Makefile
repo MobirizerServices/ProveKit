@@ -6,6 +6,7 @@ help:
 	@echo "make backend   - run the API on :8100"
 	@echo "make frontend  - run the web app on :3001"
 	@echo "make test      - backend pytest + frontend typecheck"
+	@echo "make lint      - ruff check on the backend"
 	@echo "make build     - frontend production build"
 	@echo "make clean     - remove venv, node_modules, local db"
 
@@ -23,6 +24,9 @@ frontend:
 test:
 	cd backend && ./venv/bin/python -m pytest tests/ -q
 	cd frontend && ./node_modules/.bin/tsc --noEmit
+
+lint:
+	cd backend && ./venv/bin/python -m ruff check agentman
 
 build:
 	cd frontend && npm run build

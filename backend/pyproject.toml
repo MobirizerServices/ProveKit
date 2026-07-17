@@ -13,6 +13,11 @@ dependencies = [
     "jsonschema==4.23.0",
     "cryptography==49.0.0",
     "pyyaml==6.0.3",
+    "alembic==1.18.5",
+    "psycopg[binary]==3.3.4",
+    "email-validator==2.2.0",
+    "redis==5.2.1",
+    "sentry-sdk[fastapi]==2.20.0",
 ]
 
 [project.scripts]
@@ -32,3 +37,17 @@ include-package-data = true
 [tool.setuptools.package-data]
 # ship the bundled flow-template gallery (served by the New-flow picker)
 agentman = ["templates/flows/*.yaml", "templates/flows/_manifest.json"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Lenient set: pyflakes (F) catches real bugs (undefined names, etc.) and a subset
+# of pycodestyle (E). We relax a few purely-stylistic rules the current code trips:
+#   E501 - long lines (line-length is advisory here, not enforced)
+#   E702 - multiple statements on one line (semicolons); a deliberate style choice
+#   F401 - unused imports (a couple of re-export/placeholder imports)
+# Import sorting (I) is intentionally left out of the select set for the same reason.
+select = ["E", "F"]
+ignore = ["E501", "E702", "F401"]

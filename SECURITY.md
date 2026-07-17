@@ -38,12 +38,22 @@ acknowledge within 72 hours. Please include reproduction steps and the affected 
 - **Resource abuse** — per-workspace run rate limits, dataset-row caps, request body-size
   limits, flow-node caps, per-deployment invocation timeouts, and run-history retention.
 
+## Known dependency advisories
+
+- **Next.js** is pinned to `14.2.35`, which clears the critical December 2025 advisory.
+  Two lower-severity advisories remain (1 high, 1 moderate/postcss), both DoS/cache-class
+  and only fixed in Next 16 — a two-major upgrade that requires migrating the client-hook
+  pages (`/forgot`, `/reset`, `/verify`) and is tracked as follow-up work, not a
+  pre-launch rush. When AgentMan runs behind the reverse proxy in `docs/DEPLOY.md`, the
+  proxy mitigates the request-smuggling/cache-poisoning classes. Run `npm audit` to review.
+
 ## What is NOT yet done (be aware before exposing publicly)
 
 - No third-party penetration test or formal audit has been performed.
 - No CSP / security-header middleware on the frontend yet.
 - Deployment API keys are workspace-visible; rotation is manual (redeploy).
 - The SSRF guard does not defend against DNS rebinding without an egress proxy.
+- Next.js 16 upgrade pending (see dependency advisories above).
 
 Run `HOSTED=true` (with a strong `SECRET_KEY`, Postgres, Redis, TLS) for any
 internet-facing deployment — see `docs/DEPLOY.md`.

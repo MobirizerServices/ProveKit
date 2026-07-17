@@ -42,7 +42,10 @@ function toRF(flow: any): { nodes: RFNode[]; edges: RFEdge[] } {
       data: { title: n.data?.title, nodeType: n.type, color: COLOR[n.type] || "muted", config: n.config || {} },
     })),
     edges: (flow.edges || []).map((e: any) => ({
-      id: e.id, source: e.source, target: e.target,
+      // Edges from templates/imports/the API carry no id; derive a stable unique one so
+      // React Flow can key them (missing ids => duplicate "undefined" keys + a render warning).
+      id: e.id || `e-${e.source}-${e.target}-${e.condition?.branch || ""}`,
+      source: e.source, target: e.target,
       sourceHandle: e.condition?.branch || undefined, label: e.condition?.branch,
       data: {}, type: "add",
     })),
@@ -192,15 +195,19 @@ function Editor() {
     setBaseline(JSON.stringify(g)); flash("Saved");
   }
   async function newFlowFrom(tpl: typeof TEMPLATES[number]) {
-    const f = await api.createFlow(tpl.name === "Blank canvas" ? "New flow" : tpl.name, tpl.nodes, tpl.edges);
-    setTplPicker(false); await loadFlows(); setActiveId(f.id);
+    try {
+      const f = await api.createFlow(tpl.name === "Blank canvas" ? "New flow" : tpl.name, tpl.nodes, tpl.edges);
+      setTplPicker(false); await loadFlows(); setActiveId(f.id);
+    } catch (e: any) { flash(e.message); }
   }
   async function newFlowFromStarter(id: string) {
     const tpl = TEMPLATES.find((t) => t.id === id); if (tpl) await newFlowFrom(tpl);
   }
   async function newFlowFromTemplate(slug: string) {
-    const f = await api.createFlowFromTemplate(slug);
-    setTplPicker(false); await loadFlows(); setActiveId(f.id); flash("Flow created from template");
+    try {
+      const f = await api.createFlowFromTemplate(slug);
+      setTplPicker(false); await loadFlows(); setActiveId(f.id); flash("Flow created from template");
+    } catch (e: any) { flash(e.message); }
   }
 
   function lightEdge(nid: string, branch: string | null | undefined) {
@@ -221,7 +228,7 @@ function Editor() {
 
   async function run(step = false) {
     if (!activeId) return;
-    await save().catch(() => {});
+    try { await save(); } catch (e: any) { flash(`Save failed — ${e.message}`); return; }  // abort: a stale graph would run
     resetRun(); setRunStatus("running"); setRunning(true);
     const ac = new AbortController(); abortRef.current = ac;
     try { await api.runFlowStream(activeId, flowInput(), { breakpoints: [...breakpoints], step }, onEvent, ac.signal); }
@@ -275,7 +282,7 @@ function Editor() {
             <span style={{ marginLeft: "auto" }} />
             {dirty && <span className="pr-dirty">● unsaved</span>}
             <button className="btn btn-sm" title="Save (⌘S)" disabled={!dirty} onClick={save}>Save</button>
-            {activeId && <button className="btn btn-sm" title="Deploy as an API endpoint" onClick={async () => { if (dirty) await save().catch(() => {}); setDeployOpen(true); }}>▲ Deploy</button>}
+            {activeId && <button className="btn btn-sm" title="Deploy as an API endpoint" onClick={async () => { if (dirty) { try { await save(); } catch (e: any) { flash(`Save failed — ${e.message}`); return; } } setDeployOpen(true); }}>▲ Deploy</button>}
           </div>
           <div className="rf-wrap">
             <ReactFlow

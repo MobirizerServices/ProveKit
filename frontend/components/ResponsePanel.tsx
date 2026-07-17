@@ -5,7 +5,7 @@ import JsonView from "./JsonView";
 
 export interface AssertResult { type: string; name: string; ok: boolean; detail: string; }
 export interface RunState {
-  status: "idle" | "running" | "completed" | "failed";
+  status: "idle" | "running" | "completed" | "failed" | "interrupted";
   text: string;
   output: any;
   meta: any;

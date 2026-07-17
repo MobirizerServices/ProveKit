@@ -27,14 +27,16 @@ export default function TemplatePicker({ starters, onStarter, onTemplate, onClos
   useEffect(() => {
     setLoading(true);
     clearTimeout(timer.current);
+    let cancelled = false;  // ignore a slow earlier search that resolves after a newer query
     const query = [q, cat].filter(Boolean).join(" ");
     timer.current = setTimeout(() => {
       api.flowTemplates(query, 60).then((r) => {
+        if (cancelled) return;
         setItems(r.items); setTotal(r.total);
         if (!categories.length) setCategories(r.categories);
-      }).catch(() => setItems([])).finally(() => setLoading(false));
+      }).catch(() => { if (!cancelled) setItems([]); }).finally(() => { if (!cancelled) setLoading(false); });
     }, 180);
-    return () => clearTimeout(timer.current);
+    return () => { cancelled = true; clearTimeout(timer.current); };
   }, [q, cat]); // eslint-disable-line
 
   const pick = async (slug: string) => { setBusy(slug); try { await onTemplate(slug); } finally { setBusy(null); } };

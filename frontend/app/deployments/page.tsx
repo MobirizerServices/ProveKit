@@ -16,11 +16,23 @@ export default function DeploymentsPage() {
   useEffect(() => { load(); api.usage(30).then(setUsage).catch(() => {}); }, []);
   useEffect(() => {
     if (!sel) { setStats(null); setRuns([]); return; }
-    api.deploymentStats(sel).then(setStats).catch(() => {});
-    api.deploymentRuns(sel).then(setRuns).catch(() => {});
+    let cancelled = false;  // ignore out-of-order responses when switching between deployments
+    setStats(null); setRuns([]);
+    api.deploymentStats(sel).then((s) => { if (!cancelled) setStats(s); }).catch(() => {});
+    api.deploymentRuns(sel).then((r) => { if (!cancelled) setRuns(r); }).catch(() => {});
+    return () => { cancelled = true; };
   }, [sel]);
 
-  const deactivate = async (slug: string) => { await api.deactivateDeployment(slug); flash("Deactivated"); load(); };
+  const deactivate = async (slug: string) => {
+    if (!confirm(`Deactivate "${slug}"? Its endpoint will stop responding.`)) return;
+    try { await api.deactivateDeployment(slug); flash("Deactivated"); load(); }
+    catch (e: any) { flash(e.message); }
+  };
+  const rollback = async (slug: string, version: number) => {
+    if (version < 2 || !confirm(`Roll "${slug}" back to v${version - 1}?`)) return;
+    try { await api.rollbackDeployment(slug, version - 1); flash(`Rolled back to v${version - 1}`); load(); }
+    catch (e: any) { flash(e.message); }
+  };
 
   return (
     <div className="app" style={{ gridTemplateRows: "auto 1fr" }}>
@@ -53,6 +65,7 @@ export default function DeploymentsPage() {
               <div className="dep-copy"><code>{d.url}</code></div>
               <div className="pr-actions">
                 <button className="btn btn-ghost btn-sm" onClick={() => setSel(sel === d.slug ? null : d.slug)}>{sel === d.slug ? "Hide" : "Metrics"}</button>
+                {d.versions > 1 && <button className="btn btn-ghost btn-sm" title={`Roll back to v${d.version - 1}`} onClick={() => rollback(d.slug, d.version)}>↩ Rollback</button>}
                 {d.active && <button className="btn btn-ghost btn-sm btn-stop" onClick={() => deactivate(d.slug)}>Deactivate</button>}
               </div>
               {sel === d.slug && stats && (

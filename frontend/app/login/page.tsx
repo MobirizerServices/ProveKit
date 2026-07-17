@@ -4,10 +4,18 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
+// Only allow same-origin relative paths, so ?next=https://evil.example can't turn the
+// login page into an open redirect for phishing. Requires a single leading slash NOT
+// followed by "/" or "\" — both of which browsers can treat as protocol-relative.
+function safeNext(raw: string | null): string {
+  const n = raw || "/";
+  return /^\/(?![/\\])/.test(n) ? n : "/";
+}
+
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
+  const next = safeNext(params.get("next"));
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,7 +49,7 @@ function LoginForm() {
         {err && <div className="auth-err">{err}</div>}
         <button className="btn btn-run" type="submit" disabled={busy} style={{ width: "100%", marginTop: 4 }}>{busy ? "…" : mode === "login" ? "Sign in" : "Create account"}</button>
         <div className="auth-switch">
-          {mode === "login" ? <>No account? <a onClick={() => { setMode("signup"); setErr(""); }}>Sign up</a></> : <>Have an account? <a onClick={() => { setMode("login"); setErr(""); }}>Sign in</a></>}
+          {mode === "login" ? <>No account? <button type="button" onClick={() => { setMode("signup"); setErr(""); }}>Sign up</button></> : <>Have an account? <button type="button" onClick={() => { setMode("login"); setErr(""); }}>Sign in</button></>}
           {mode === "login" && <> · <a href="/forgot">Forgot password?</a></>}
         </div>
       </form>

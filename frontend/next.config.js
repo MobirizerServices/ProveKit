@@ -14,6 +14,7 @@ const nextConfig = {
     return [
       { source: "/api/:path*", destination: `${API_TARGET}/api/:path*` },
       { source: "/v1/:path*", destination: `${API_TARGET}/v1/:path*` },
+      { source: "/healthz", destination: `${API_TARGET}/healthz` },  // TopNav health poll
     ];
   },
 };

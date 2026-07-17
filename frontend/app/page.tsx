@@ -81,7 +81,7 @@ export default function Console() {
       if (err?.name !== "AbortError") setRun((r) => ({ ...r, status: "failed", error: String(err?.message || err) }));
     } finally { setRunning(false); abortRef.current = null; loadRuns(); }
   }
-  function stop() { abortRef.current?.abort(); setRunning(false); setRun((r) => ({ ...r, status: r.status === "running" ? "completed" : r.status })); }
+  function stop() { abortRef.current?.abort(); setRunning(false); setRun((r) => ({ ...r, status: r.status === "running" ? "interrupted" : r.status })); }
 
   async function openRun(id: number) {
     try {
@@ -100,7 +100,10 @@ export default function Console() {
     try { if (c.id) await api.updateConnection(c.id, c); else await api.createConnection(c); await loadConnections(); setModal(null); flash("Connection saved"); }
     catch (e: any) { flash(e.message, true); }
   }
-  async function deleteConnection(id: number) { await api.deleteConnection(id); await loadConnections(); setModal(null); flash("Connection deleted"); }
+  async function deleteConnection(id: number) {
+    try { await api.deleteConnection(id); await loadConnections(); setModal(null); flash("Connection deleted"); }
+    catch (e: any) { flash(e.message, true); }
+  }
 
   const [testing, setTesting] = useState<number | null>(null);
   async function testConn(id: number, e?: React.MouseEvent) {

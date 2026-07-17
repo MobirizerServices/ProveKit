@@ -16,6 +16,7 @@ export default function EnvironmentModal({ environments, onChanged, onClose }: {
   const [rows, setRows] = useState<Row[]>(
     current ? Object.entries(current.variables).map(([k, v]) => ({ k, v: String(v) })) : [{ k: "", v: "" }]);
   const [active, setActive] = useState(current?.is_active ?? false);
+  const [err, setErr] = useState("");
 
   const pick = (id: number | "new") => {
     setSel(id);
@@ -29,14 +30,17 @@ export default function EnvironmentModal({ environments, onChanged, onClose }: {
     const variables: Record<string, string> = {};
     rows.forEach((r) => { if (r.k.trim()) variables[r.k.trim()] = r.v; });
     const body = { name: name || "env", variables, is_active: active };
-    if (sel === "new") await api.createEnvironment(body);
-    else await api.updateEnvironment(sel, body);
-    onChanged();
-    onClose();
+    try {
+      if (sel === "new") await api.createEnvironment(body);
+      else await api.updateEnvironment(sel, body);
+      onChanged(); onClose();
+    } catch (e: any) { setErr(e.message); }
   };
   const del = async () => {
-    if (sel !== "new") await api.deleteEnvironment(sel);
-    onChanged(); onClose();
+    if (sel === "new") { onClose(); return; }
+    if (!confirm(`Delete environment "${current?.name || name}"?`)) return;
+    try { await api.deleteEnvironment(sel); onChanged(); onClose(); }
+    catch (e: any) { setErr(e.message); }
   };
 
   return (
@@ -72,6 +76,7 @@ export default function EnvironmentModal({ environments, onChanged, onClose }: {
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
               <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active (apply these variables to runs)
             </label>
+            {err && <div className="hint" style={{ color: "var(--err)", marginTop: 8 }}>{err}</div>}
           </div>
         </div>
         <div className="modal-foot">

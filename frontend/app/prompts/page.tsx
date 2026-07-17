@@ -11,7 +11,10 @@ export default function PromptsPage() {
   useEffect(() => { load(); }, []);
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 2200); };
 
-  const addNew = async () => { await api.createPrompt({ name: "New prompt", content: "" }); load(); };
+  const addNew = async () => {
+    try { await api.createPrompt({ name: "New prompt", content: "" }); load(); }
+    catch (e: any) { flash(e.message); }
+  };
 
   return (
     <div className="app" style={{ gridTemplateRows: "auto 1fr" }}>
@@ -42,10 +45,11 @@ function PromptCard({ prompt, onSaved, onDeleted }: { prompt: PromptT; onSaved: 
   const [desc, setDesc] = useState(prompt.description);
   const [content, setContent] = useState(prompt.content);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
   const dirty = name !== prompt.name || key !== prompt.key || desc !== prompt.description || content !== prompt.content;
 
-  const save = async () => { setSaving(true); try { await api.updatePrompt(prompt.id, { name, key, description: desc, content }); onSaved(); } finally { setSaving(false); } };
-  const del = async () => { if (confirm(`Delete prompt "${name}"?`)) { await api.deletePrompt(prompt.id); onDeleted(); } };
+  const save = async () => { setSaving(true); setErr(""); try { await api.updatePrompt(prompt.id, { name, key, description: desc, content }); onSaved(); } catch (e: any) { setErr(e.message); } finally { setSaving(false); } };
+  const del = async () => { if (confirm(`Delete prompt "${name}"?`)) { try { await api.deletePrompt(prompt.id); onDeleted(); } catch (e: any) { setErr(e.message); } } };
 
   return (
     <div className="pr-card">
@@ -60,6 +64,7 @@ function PromptCard({ prompt, onSaved, onDeleted }: { prompt: PromptT; onSaved: 
         <button className="btn btn-run btn-sm" disabled={!dirty || saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
         <button className="btn btn-ghost btn-sm btn-stop" onClick={del}>Delete</button>
         {dirty && <span className="pr-dirty">● unsaved</span>}
+        {err && <span className="hint" style={{ color: "var(--err)" }}>{err}</span>}
       </div>
     </div>
   );

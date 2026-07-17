@@ -15,16 +15,21 @@ export default function CompareModal({ request, connections, onClose }: {
   const [b, setB] = useState(models[1] || models[0] || "");
   const [res, setRes] = useState<{ a?: any; b?: any } | null>(null);
   const [running, setRunning] = useState(false);
+  const [err, setErr] = useState("");
 
   const run = async () => {
-    setRunning(true); setRes(null);
+    setRunning(true); setRes(null); setErr("");
     try {
-      const [ra, rb] = await Promise.all([
+      // allSettled so one model failing still surfaces the other's result.
+      const [ra, rb] = await Promise.allSettled([
         api.runOnce({ ...request, model: a }),
         api.runOnce({ ...request, model: b }),
       ]);
-      setRes({ a: ra, b: rb });
-    } finally { setRunning(false); }
+      setRes({ a: ra.status === "fulfilled" ? ra.value : undefined, b: rb.status === "fulfilled" ? rb.value : undefined });
+      const errs = [ra, rb].filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason?.message || String(r.reason));
+      if (errs.length) setErr(errs.join(" · "));
+    } catch (e: any) { setErr(e.message); }
+    finally { setRunning(false); }
   };
 
   const Col = ({ label, r }: { label: string; r: any }) => (
@@ -47,6 +52,7 @@ export default function CompareModal({ request, connections, onClose }: {
             <div className="field"><label>Model A</label>{models.length ? <select value={a} onChange={(e) => setA(e.target.value)}>{models.map((m) => <option key={m}>{m}</option>)}</select> : <input value={a} onChange={(e) => setA(e.target.value)} />}</div>
             <div className="field"><label>Model B</label>{models.length ? <select value={b} onChange={(e) => setB(e.target.value)}>{models.map((m) => <option key={m}>{m}</option>)}</select> : <input value={b} onChange={(e) => setB(e.target.value)} />}</div>
           </div>
+          {err && <div className="resp-error" style={{ marginBottom: 12 }}>{err}</div>}
           {res && <div className="cmp-grid"><Col label={a} r={res.a} /><Col label={b} r={res.b} /></div>}
         </div>
         <div className="modal-foot">

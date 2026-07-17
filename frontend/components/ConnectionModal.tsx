@@ -42,18 +42,24 @@ export default function ConnectionModal({ initial, onSave, onDelete, onClose, on
   const [url, setUrl] = useState(cfg.url || "");
   const [spec, setSpec] = useState(cfg.spec || "auto");
   const [headers, setHeaders] = useState(JSON.stringify(cfg.headers || {}, null, 2));
+  const [err, setErr] = useState("");
 
   const save = () => {
     let config: any = {};
     if (kind === "llm") config = { provider, base_url: baseUrl, api_key: apiKey, models: models.split(",").map((m: string) => m.trim()).filter(Boolean) };
     else if (kind === "mcp") config = { ...cfg, url, spec };
-    else config = { base_url: baseUrl, headers: safeJson(headers) };  // agent + a2a
+    else {  // agent + a2a
+      let parsed: any;
+      try { parsed = JSON.parse(headers || "{}"); } catch { setErr("Headers: invalid JSON"); return; }
+      config = { base_url: baseUrl, headers: parsed };
+    }
+    setErr("");
     onSave({ id: initial?.id, name, kind, config });
   };
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Connection" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">{initial ? "Edit connection" : "New connection"}<button onClick={onClose} aria-label="Close">×</button></div>
         <div className="modal-body">
           <div className="field"><label>Name</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. OpenAI (prod)" /></div>
@@ -105,9 +111,16 @@ export default function ConnectionModal({ initial, onSave, onDelete, onClose, on
               )}
             </>
           )}
+          {kind === "a2a" && (
+            <>
+              <div className="field"><label>Base URL</label><input className="mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="http://127.0.0.1:9000" /></div>
+              <div className="field"><label>Default headers <span className="hint">JSON</span></label><textarea className="mono" rows={3} value={headers} onChange={(e) => setHeaders(e.target.value)} placeholder='{ "Authorization": "Bearer …" }' /></div>
+            </>
+          )}
+          {err && <div className="hint" style={{ color: "var(--err)" }}>{err}</div>}
         </div>
         <div className="modal-foot">
-          {initial && onDelete && <button className="btn btn-ghost btn-stop" style={{ marginRight: "auto" }} onClick={() => onDelete(initial.id)}>Delete</button>}
+          {initial && onDelete && <button className="btn btn-ghost btn-stop" style={{ marginRight: "auto" }} onClick={() => { if (confirm(`Delete connection "${initial.name}"?`)) onDelete(initial.id); }}>Delete</button>}
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-run" onClick={save} disabled={!name}>Save</button>
         </div>

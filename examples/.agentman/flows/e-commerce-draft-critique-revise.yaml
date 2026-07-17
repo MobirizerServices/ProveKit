@@ -1,0 +1,75 @@
+version: 1
+kind: flow
+name: E-Commerce · draft, critique, revise
+description: Draft a reply, self-critique it, then produce a revised final.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 160
+  data:
+    title: Input
+  config:
+    sample:
+      review: Arrived a day late but the quality is excellent, 5 stars
+- id: draft
+  type: prompt
+  position:
+    x: 300
+    y: 160
+  data:
+    title: Draft
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: You are a e-commerce assistant.
+    user: '{{input.review}}'
+- id: crit
+  type: prompt
+  position:
+    x: 560
+    y: 160
+  data:
+    title: Critique
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: List one concrete way to improve this reply. Be brief.
+    user: '{{draft.text}}'
+- id: rev
+  type: prompt
+  position:
+    x: 820
+    y: 160
+  data:
+    title: Revise
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Rewrite the reply applying the critique. Output only the improved reply.
+    user: 'Reply: {{draft.text}}
+
+      Critique: {{crit.text}}'
+- id: out
+  type: output
+  position:
+    x: 1080
+    y: 160
+  data:
+    title: Final
+  config:
+    value: '{{rev.text}}'
+edges:
+- id: e-in-draft
+  source: in
+  target: draft
+- id: e-draft-crit
+  source: draft
+  target: crit
+- id: e-crit-rev
+  source: crit
+  target: rev
+- id: e-rev-out
+  source: rev
+  target: out

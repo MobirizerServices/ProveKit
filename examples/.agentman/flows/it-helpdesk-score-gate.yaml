@@ -1,0 +1,73 @@
+version: 1
+kind: flow
+name: It Helpdesk · score & gate
+description: Score a ticket 1-5 for priority, then gate on the number.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 200
+  data:
+    title: Input
+  config:
+    sample:
+      ticket: Laptop won't connect to VPN after the update
+- id: score
+  type: prompt
+  position:
+    x: 300
+    y: 200
+  data:
+    title: Score
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Rate priority from 1 (low) to 5 (high). Reply with only the number.
+    user: '{{input.ticket}}'
+- id: cond
+  type: condition
+  position:
+    x: 560
+    y: 200
+  data:
+    title: '> 3?'
+  config:
+    left: '{{score.text}}'
+    op: '>'
+    right: '3'
+- id: hi
+  type: output
+  position:
+    x: 820
+    y: 110
+  data:
+    title: High priority
+  config:
+    value: 'priority {{score.text}}: escalate'
+- id: lo
+  type: output
+  position:
+    x: 820
+    y: 300
+  data:
+    title: Normal
+  config:
+    value: 'priority {{score.text}}: queue'
+edges:
+- id: e-in-score
+  source: in
+  target: score
+- id: e-score-cond
+  source: score
+  target: cond
+- id: e-cond-hi
+  source: cond
+  target: hi
+  condition:
+    branch: 'true'
+- id: e-cond-lo
+  source: cond
+  target: lo
+  condition:
+    branch: 'false'

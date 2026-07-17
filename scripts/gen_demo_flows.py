@@ -44,6 +44,8 @@ DOMAINS = [
     ("research", "abstract", "A new method for retrieval-augmented generation over tables"),
     ("gaming support", "report", "Got disconnected mid-match and lost my rank points"),
     ("food delivery", "complaint", "Order was cold and missing the drinks"),
+    ("nonprofit", "message", "We'd like to volunteer 20 people for the weekend drive"),
+    ("devrel", "question", "Does your API support streaming responses over websockets?"),
 ]
 
 # Reusable node/edge builders ------------------------------------------------
@@ -158,8 +160,97 @@ def shape_translate_reply(domain, field, sample):
         [E("in", "tr"), E("tr", "rep"), E("rep", "out")])
 
 
+def shape_score_gate(domain, field, sample):
+    return (
+        f"{domain.title()} · score & gate",
+        f"Score a {field} 1-5 for priority, then gate on the number.",
+        [N("in", "input", "Input", 40, 200, {"sample": {field: sample}}),
+         prompt_node("score", "Score", 300, 200,
+                     "Rate priority from 1 (low) to 5 (high). Reply with only the number.",
+                     f"{{{{input.{field}}}}}"),
+         N("cond", "condition", "> 3?", 560, 200, {"left": "{{score.text}}", "op": ">", "right": "3"}),
+         N("hi", "output", "High priority", 820, 110, {"value": "priority {{score.text}}: escalate"}),
+         N("lo", "output", "Normal", 820, 300, {"value": "priority {{score.text}}: queue"})],
+        [E("in", "score"), E("score", "cond"), E("cond", "hi", "true"), E("cond", "lo", "false")])
+
+
+def shape_sentiment_route(domain, field, sample):
+    return (
+        f"{domain.title()} · sentiment route",
+        f"Detect sentiment of a {field}, escalate the negative ones.",
+        [N("in", "input", "Input", 40, 200, {"sample": {field: sample}}),
+         prompt_node("sent", "Sentiment", 300, 200,
+                     "Classify sentiment as positive, negative, or neutral. Reply with only that word.",
+                     f"{{{{input.{field}}}}}"),
+         N("cond", "condition", "Negative?", 560, 200, {"left": "{{sent.text}}", "op": "contains", "right": "negative"}),
+         N("esc", "output", "Escalate", 820, 110, {"value": "unhappy customer — escalate"}),
+         N("ok", "output", "Thank", 820, 300, {"value": "thanks for the feedback"})],
+        [E("in", "sent"), E("sent", "cond"), E("cond", "esc", "true"), E("cond", "ok", "false")])
+
+
+def shape_draft_critique_revise(domain, field, sample):
+    return (
+        f"{domain.title()} · draft, critique, revise",
+        f"Draft a reply, self-critique it, then produce a revised final.",
+        [N("in", "input", "Input", 40, 160, {"sample": {field: sample}}),
+         prompt_node("draft", "Draft", 300, 160, f"You are a {domain} assistant.", f"{{{{input.{field}}}}}"),
+         prompt_node("crit", "Critique", 560, 160,
+                     "List one concrete way to improve this reply. Be brief.", "{{draft.text}}"),
+         prompt_node("rev", "Revise", 820, 160,
+                     "Rewrite the reply applying the critique. Output only the improved reply.",
+                     "Reply: {{draft.text}}\nCritique: {{crit.text}}"),
+         N("out", "output", "Final", 1080, 160, {"value": "{{rev.text}}"})],
+        [E("in", "draft"), E("draft", "crit"), E("crit", "rev"), E("rev", "out")])
+
+
+def shape_language_route(domain, field, sample):
+    return (
+        f"{domain.title()} · language route",
+        f"Detect the language of a {field}; answer directly if English, else translate first.",
+        [N("in", "input", "Input", 40, 200, {"sample": {field: sample}}),
+         prompt_node("lang", "Detect", 300, 200,
+                     "Reply with only the language name of the input.", f"{{{{input.{field}}}}}"),
+         N("cond", "condition", "English?", 560, 200, {"left": "{{lang.text}}", "op": "contains", "right": "english"}),
+         prompt_node("en", "Answer", 820, 110, f"You are a {domain} assistant.", f"{{{{input.{field}}}}}"),
+         prompt_node("xl", "Translate & answer", 820, 300,
+                     f"Translate to English, then answer as a {domain} assistant.", f"{{{{input.{field}}}}}"),
+         N("o1", "output", "Reply (EN)", 1100, 110, {"value": "{{en.text}}"}),
+         N("o2", "output", "Reply (translated)", 1100, 300, {"value": "{{xl.text}}"})],
+        [E("in", "lang"), E("lang", "cond"),
+         E("cond", "en", "true"), E("cond", "xl", "false"), E("en", "o1"), E("xl", "o2")])
+
+
+def shape_tag_enrich(domain, field, sample):
+    return (
+        f"{domain.title()} · tag & enrich",
+        f"Produce a JSON list of topic tags for a {field}.",
+        [N("in", "input", "Input", 40, 160, {"sample": {field: sample}}),
+         prompt_node("tag", "Tag", 340, 160,
+                     "Return a JSON array of 3 short topic tags for the input. Only the JSON array.",
+                     f"{{{{input.{field}}}}}"),
+         N("out", "output", "Tags", 640, 160, {"value": "{{tag.text}}"})],
+        [E("in", "tag"), E("tag", "out")])
+
+
+def shape_faq_answer(domain, field, sample):
+    return (
+        f"{domain.title()} · FAQ match & answer",
+        f"Match a {field} to a topic, then answer in that context.",
+        [N("in", "input", "Input", 40, 160, {"sample": {field: sample}}),
+         prompt_node("topic", "Match topic", 300, 160,
+                     "Pick the single best topic: billing, technical, account, other. Only the word.",
+                     f"{{{{input.{field}}}}}"),
+         prompt_node("ans", "Answer", 560, 160,
+                     f"You are a {domain} assistant. Tailor the answer to the matched topic.",
+                     "Topic: {{topic.text}}\nQuestion: {{input.%s}}" % field),
+         N("out", "output", "Answer", 820, 160, {"value": "{{ans.text}}"})],
+        [E("in", "topic"), E("topic", "ans"), E("ans", "out")])
+
+
 SHAPES = [shape_answer, shape_classify_route, shape_extract_validate, shape_classify_label,
-          shape_summarize_then_act, shape_moderate_gate, shape_translate_reply]
+          shape_summarize_then_act, shape_moderate_gate, shape_translate_reply,
+          shape_score_gate, shape_sentiment_route, shape_draft_critique_revise,
+          shape_language_route, shape_tag_enrich, shape_faq_answer]
 
 
 def main():

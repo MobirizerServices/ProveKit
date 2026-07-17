@@ -1,0 +1,103 @@
+version: 1
+kind: flow
+name: Customer Support · language route
+description: Detect the language of a message; answer directly if English, else translate first.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 200
+  data:
+    title: Input
+  config:
+    sample:
+      message: 'URGENT: my order never arrived and I want a refund'
+- id: lang
+  type: prompt
+  position:
+    x: 300
+    y: 200
+  data:
+    title: Detect
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Reply with only the language name of the input.
+    user: '{{input.message}}'
+- id: cond
+  type: condition
+  position:
+    x: 560
+    y: 200
+  data:
+    title: English?
+  config:
+    left: '{{lang.text}}'
+    op: contains
+    right: english
+- id: en
+  type: prompt
+  position:
+    x: 820
+    y: 110
+  data:
+    title: Answer
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: You are a customer support assistant.
+    user: '{{input.message}}'
+- id: xl
+  type: prompt
+  position:
+    x: 820
+    y: 300
+  data:
+    title: Translate & answer
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Translate to English, then answer as a customer support assistant.
+    user: '{{input.message}}'
+- id: o1
+  type: output
+  position:
+    x: 1100
+    y: 110
+  data:
+    title: Reply (EN)
+  config:
+    value: '{{en.text}}'
+- id: o2
+  type: output
+  position:
+    x: 1100
+    y: 300
+  data:
+    title: Reply (translated)
+  config:
+    value: '{{xl.text}}'
+edges:
+- id: e-in-lang
+  source: in
+  target: lang
+- id: e-lang-cond
+  source: lang
+  target: cond
+- id: e-cond-en
+  source: cond
+  target: en
+  condition:
+    branch: 'true'
+- id: e-cond-xl
+  source: cond
+  target: xl
+  condition:
+    branch: 'false'
+- id: e-en-o1
+  source: en
+  target: o1
+- id: e-xl-o2
+  source: xl
+  target: o2

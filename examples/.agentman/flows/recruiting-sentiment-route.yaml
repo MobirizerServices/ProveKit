@@ -1,0 +1,73 @@
+version: 1
+kind: flow
+name: Recruiting · sentiment route
+description: Detect sentiment of a resume, escalate the negative ones.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 200
+  data:
+    title: Input
+  config:
+    sample:
+      resume: 10y backend, led a payments team, Go and Postgres
+- id: sent
+  type: prompt
+  position:
+    x: 300
+    y: 200
+  data:
+    title: Sentiment
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Classify sentiment as positive, negative, or neutral. Reply with only that word.
+    user: '{{input.resume}}'
+- id: cond
+  type: condition
+  position:
+    x: 560
+    y: 200
+  data:
+    title: Negative?
+  config:
+    left: '{{sent.text}}'
+    op: contains
+    right: negative
+- id: esc
+  type: output
+  position:
+    x: 820
+    y: 110
+  data:
+    title: Escalate
+  config:
+    value: unhappy customer — escalate
+- id: ok
+  type: output
+  position:
+    x: 820
+    y: 300
+  data:
+    title: Thank
+  config:
+    value: thanks for the feedback
+edges:
+- id: e-in-sent
+  source: in
+  target: sent
+- id: e-sent-cond
+  source: sent
+  target: cond
+- id: e-cond-esc
+  source: cond
+  target: esc
+  condition:
+    branch: 'true'
+- id: e-cond-ok
+  source: cond
+  target: ok
+  condition:
+    branch: 'false'

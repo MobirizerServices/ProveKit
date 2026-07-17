@@ -1,0 +1,60 @@
+version: 1
+kind: flow
+name: Travel · FAQ match & answer
+description: Match a request to a topic, then answer in that context.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 160
+  data:
+    title: Input
+  config:
+    sample:
+      request: Cheapest flight NYC to Lisbon in the first week of May
+- id: topic
+  type: prompt
+  position:
+    x: 300
+    y: 160
+  data:
+    title: Match topic
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: 'Pick the single best topic: billing, technical, account, other. Only the word.'
+    user: '{{input.request}}'
+- id: ans
+  type: prompt
+  position:
+    x: 560
+    y: 160
+  data:
+    title: Answer
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: You are a travel assistant. Tailor the answer to the matched topic.
+    user: 'Topic: {{topic.text}}
+
+      Question: {{input.request}}'
+- id: out
+  type: output
+  position:
+    x: 820
+    y: 160
+  data:
+    title: Answer
+  config:
+    value: '{{ans.text}}'
+edges:
+- id: e-in-topic
+  source: in
+  target: topic
+- id: e-topic-ans
+  source: topic
+  target: ans
+- id: e-ans-out
+  source: ans
+  target: out

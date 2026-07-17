@@ -1,0 +1,103 @@
+version: 1
+kind: flow
+name: Developer Tooling · severity tiers
+description: Classify severity of a issue, then route across three tiers with chained checks.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 240
+  data:
+    title: Input
+  config:
+    sample:
+      issue: Build fails intermittently on CI, passes locally
+- id: sev
+  type: prompt
+  position:
+    x: 280
+    y: 240
+  data:
+    title: Severity
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Classify severity as high, medium, or low. Reply with only that word.
+    user: '{{input.issue}}'
+- id: c1
+  type: condition
+  position:
+    x: 540
+    y: 240
+  data:
+    title: High?
+  config:
+    left: '{{sev.text}}'
+    op: contains
+    right: high
+- id: p1
+  type: output
+  position:
+    x: 820
+    y: 120
+  data:
+    title: Tier 1 (page)
+  config:
+    value: 'P1: page on-call'
+- id: c2
+  type: condition
+  position:
+    x: 820
+    y: 300
+  data:
+    title: Medium?
+  config:
+    left: '{{sev.text}}'
+    op: contains
+    right: medium
+- id: p2
+  type: output
+  position:
+    x: 1080
+    y: 240
+  data:
+    title: Tier 2 (queue)
+  config:
+    value: 'P2: engineer queue'
+- id: p3
+  type: output
+  position:
+    x: 1080
+    y: 380
+  data:
+    title: Tier 3 (backlog)
+  config:
+    value: 'P3: backlog'
+edges:
+- id: e-in-sev
+  source: in
+  target: sev
+- id: e-sev-c1
+  source: sev
+  target: c1
+- id: e-c1-p1
+  source: c1
+  target: p1
+  condition:
+    branch: 'true'
+- id: e-c1-c2
+  source: c1
+  target: c2
+  condition:
+    branch: 'false'
+- id: e-c2-p2
+  source: c2
+  target: p2
+  condition:
+    branch: 'true'
+- id: e-c2-p3
+  source: c2
+  target: p3
+  condition:
+    branch: 'false'

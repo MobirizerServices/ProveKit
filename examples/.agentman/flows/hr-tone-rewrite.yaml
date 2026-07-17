@@ -1,0 +1,43 @@
+version: 1
+kind: flow
+name: Hr · tone rewrite
+description: Rewrite a feedback in a warm, professional tone.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 160
+  data:
+    title: Input
+  config:
+    sample:
+      feedback: My manager cancels our 1:1s and I feel blocked on growth
+- id: rw
+  type: prompt
+  position:
+    x: 340
+    y: 160
+  data:
+    title: Rewrite
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Rewrite the input in a warm, professional tone. Output only the rewrite.
+    user: '{{input.feedback}}'
+- id: out
+  type: output
+  position:
+    x: 640
+    y: 160
+  data:
+    title: Rewritten
+  config:
+    value: '{{rw.text}}'
+edges:
+- id: e-in-rw
+  source: in
+  target: rw
+- id: e-rw-out
+  source: rw
+  target: out

@@ -1,0 +1,43 @@
+version: 1
+kind: flow
+name: Research · keyword extract
+description: Pull the top keywords from a abstract as a JSON array.
+nodes:
+- id: in
+  type: input
+  position:
+    x: 40
+    y: 160
+  data:
+    title: Input
+  config:
+    sample:
+      abstract: A new method for retrieval-augmented generation over tables
+- id: kw
+  type: prompt
+  position:
+    x: 340
+    y: 160
+  data:
+    title: Keywords
+  config:
+    connection: Demo Assistant (mock)
+    model: demo-mock
+    system: Return a JSON array of the 5 most important keywords. Only the JSON array.
+    user: '{{input.abstract}}'
+- id: out
+  type: output
+  position:
+    x: 640
+    y: 160
+  data:
+    title: Keywords
+  config:
+    value: '{{kw.text}}'
+edges:
+- id: e-in-kw
+  source: in
+  target: kw
+- id: e-kw-out
+  source: kw
+  target: out

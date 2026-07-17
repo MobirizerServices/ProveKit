@@ -46,6 +46,8 @@ DOMAINS = [
     ("food delivery", "complaint", "Order was cold and missing the drinks"),
     ("nonprofit", "message", "We'd like to volunteer 20 people for the weekend drive"),
     ("devrel", "question", "Does your API support streaming responses over websockets?"),
+    ("community forum", "post", "Anyone else seeing timeouts on the new release?"),
+    ("banking", "request", "I need to dispute a charge I don't recognize on my card"),
 ]
 
 # Reusable node/edge builders ------------------------------------------------
@@ -247,10 +249,79 @@ def shape_faq_answer(domain, field, sample):
         [E("in", "topic"), E("topic", "ans"), E("ans", "out")])
 
 
+def shape_redact_summarize(domain, field, sample):
+    return (
+        f"{domain.title()} · redact & summarize",
+        f"Redact personal data from a {field}, then summarize the rest.",
+        [N("in", "input", "Input", 40, 160, {"sample": {field: sample}}),
+         prompt_node("red", "Redact PII", 300, 160,
+                     "Replace names, emails, phone numbers, and card numbers with [REDACTED]. "
+                     "Output only the redacted text.", f"{{{{input.{field}}}}}"),
+         prompt_node("sum", "Summarize", 560, 160, "Summarize in one sentence.", "{{red.text}}"),
+         N("out", "output", "Safe summary", 820, 160, {"value": "{{sum.text}}"})],
+        [E("in", "red"), E("red", "sum"), E("sum", "out")])
+
+
+def shape_severity_tiers(domain, field, sample):
+    return (
+        f"{domain.title()} · severity tiers",
+        f"Classify severity of a {field}, then route across three tiers with chained checks.",
+        [N("in", "input", "Input", 40, 240, {"sample": {field: sample}}),
+         prompt_node("sev", "Severity", 280, 240,
+                     "Classify severity as high, medium, or low. Reply with only that word.",
+                     f"{{{{input.{field}}}}}"),
+         N("c1", "condition", "High?", 540, 240, {"left": "{{sev.text}}", "op": "contains", "right": "high"}),
+         N("p1", "output", "Tier 1 (page)", 820, 120, {"value": "P1: page on-call"}),
+         N("c2", "condition", "Medium?", 820, 300, {"left": "{{sev.text}}", "op": "contains", "right": "medium"}),
+         N("p2", "output", "Tier 2 (queue)", 1080, 240, {"value": "P2: engineer queue"}),
+         N("p3", "output", "Tier 3 (backlog)", 1080, 380, {"value": "P3: backlog"})],
+        [E("in", "sev"), E("sev", "c1"),
+         E("c1", "p1", "true"), E("c1", "c2", "false"),
+         E("c2", "p2", "true"), E("c2", "p3", "false")])
+
+
+def shape_keyword_extract(domain, field, sample):
+    return (
+        f"{domain.title()} · keyword extract",
+        f"Pull the top keywords from a {field} as a JSON array.",
+        [N("in", "input", "Input", 40, 160, {"sample": {field: sample}}),
+         prompt_node("kw", "Keywords", 340, 160,
+                     "Return a JSON array of the 5 most important keywords. Only the JSON array.",
+                     f"{{{{input.{field}}}}}"),
+         N("out", "output", "Keywords", 640, 160, {"value": "{{kw.text}}"})],
+        [E("in", "kw"), E("kw", "out")])
+
+
+def shape_tone_rewrite(domain, field, sample):
+    return (
+        f"{domain.title()} · tone rewrite",
+        f"Rewrite a {field} in a warm, professional tone.",
+        [N("in", "input", "Input", 40, 160, {"sample": {field: sample}}),
+         prompt_node("rw", "Rewrite", 340, 160,
+                     "Rewrite the input in a warm, professional tone. Output only the rewrite.",
+                     f"{{{{input.{field}}}}}"),
+         N("out", "output", "Rewritten", 640, 160, {"value": "{{rw.text}}"})],
+        [E("in", "rw"), E("rw", "out")])
+
+
+def shape_action_items(domain, field, sample):
+    return (
+        f"{domain.title()} · action items",
+        f"Turn a {field} into a JSON list of action items.",
+        [N("in", "input", "Input", 40, 160, {"sample": {field: sample}}),
+         prompt_node("ai", "Extract actions", 340, 160,
+                     "List concrete action items as a JSON array of short strings. Only the JSON array.",
+                     f"{{{{input.{field}}}}}"),
+         N("out", "output", "Action items", 640, 160, {"value": "{{ai.text}}"})],
+        [E("in", "ai"), E("ai", "out")])
+
+
 SHAPES = [shape_answer, shape_classify_route, shape_extract_validate, shape_classify_label,
           shape_summarize_then_act, shape_moderate_gate, shape_translate_reply,
           shape_score_gate, shape_sentiment_route, shape_draft_critique_revise,
-          shape_language_route, shape_tag_enrich, shape_faq_answer]
+          shape_language_route, shape_tag_enrich, shape_faq_answer,
+          shape_redact_summarize, shape_severity_tiers, shape_keyword_extract,
+          shape_tone_rewrite, shape_action_items]
 
 
 def main():

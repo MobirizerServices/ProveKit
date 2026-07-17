@@ -90,3 +90,21 @@ def test_deactivate_and_rollback(client):
 
     client.post(f"/api/deployments/{slug}/rollback", json={"version": 1})
     assert client.post(f"/v1/d/{slug}", headers={"X-API-Key": key}, json={"question": "hi"}).status_code == 200
+
+
+def test_deployment_timeout(client, monkeypatch):
+    from agentman.config import get_settings
+    from agentman.services import deploy as deploy_svc
+    f = _mock_flow(client)
+    dep = client.post("/api/deployments", json={"flow_id": f["id"]}).json()
+    monkeypatch.setattr(get_settings(), "deployment_timeout_s", 0.05)
+
+    # make the snapshot run hang longer than the timeout
+    import anyio
+    async def _slow(session, snapshot, flow_input, workspace_id, stream=False):
+        await anyio.sleep(0.5)
+        yield {"type": "done", "status": "completed"}
+    monkeypatch.setattr(deploy_svc, "run_snapshot", _slow)
+
+    r = client.post(f"/v1/d/{dep['slug']}", headers={"X-API-Key": dep["api_key"]}, json={})
+    assert r.status_code == 504 and "timeout" in r.json()["detail"]

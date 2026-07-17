@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Public base URL shown in deployment endpoints (where /v1/d/{slug} is reachable).
     public_base_url: str = "http://localhost:8100"
 
+    # Wall-clock cap for a single deployment invocation (seconds); 0 disables.
+    deployment_timeout_s: float = 120.0
+
     # Optional Sentry DSN for error reporting (off when unset).
     sentry_dsn: str = ""
 

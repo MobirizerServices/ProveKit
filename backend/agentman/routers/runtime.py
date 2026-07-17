@@ -75,8 +75,17 @@ async def invoke(slug: str, request: Request, stream: bool = False,
 
     try:
         t0 = time.monotonic()
-        events = [ev async for ev in deploy.run_snapshot(session, snapshot, body, ws_id)]
+        timeout = get_settings().deployment_timeout_s
+        timed_out = False
+        events = []
+        with anyio.move_on_after(timeout if timeout > 0 else None) as scope:
+            async for ev in deploy.run_snapshot(session, snapshot, body, ws_id):
+                events.append(ev)
+        timed_out = scope.cancelled_caught
         result = deploy.collect_output(events)
+        if timed_out:
+            result["status"] = "failed"
+            result["error"] = f"deployment invocation exceeded {timeout}s timeout"
         dur = round((time.monotonic() - t0) * 1000)
 
         def _save():
@@ -86,6 +95,8 @@ async def invoke(slug: str, request: Request, stream: bool = False,
                             duration_ms=dur, error=result["error"]))
             session.commit()
         await anyio.to_thread.run_sync(_save)  # keep the blocking write off the loop
+        if timed_out:
+            raise HTTPException(504, result["error"])
         return {"output": result["output"], "status": result["status"],
                 "run_id": result["run_id"], "duration_ms": dur}
     finally:

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from agentman.config import get_settings
+from agentman.services.netguard import BlockedURL
 from agentman.services.providers import mcp_client as mc
 
 SERVER = str(Path(__file__).parent / "mcp_stdio_server.py")
@@ -15,6 +17,14 @@ def test_stdio_list_and_call():
     assert [t["name"] for t in tools] == ["echo"]
     out = mc.MCPSession(command=sys.executable, args=[SERVER]).call_tool("echo", {"x": 1})
     assert out == {"echoed": {"x": 1}}
+
+
+def test_stdio_blocked_in_hosted_mode(monkeypatch):
+    """Spawning a local process from a connection is RCE on shared infra — refuse it in
+    hosted mode before any subprocess is created."""
+    monkeypatch.setattr(get_settings(), "hosted", True)
+    with pytest.raises(BlockedURL, match="hosted"):
+        mc.MCPSession(command=sys.executable, args=[SERVER]).list_tools()
 
 
 # ---- HTTP transport driven by a fake, to exercise spec / pagination / oauth / 401 ----
@@ -96,7 +106,7 @@ def test_oauth_client_credentials(monkeypatch):
     class _Resp:
         def raise_for_status(self): pass
         def json(self): return {"access_token": "tok-123"}
-    def fake_post(url, data=None, timeout=None):
+    def fake_post(url, data=None, timeout=None, follow_redirects=None):
         captured["url"] = url; captured["data"] = data
         return _Resp()
     monkeypatch.setattr(mc.httpx, "post", fake_post)

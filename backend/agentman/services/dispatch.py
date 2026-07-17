@@ -197,7 +197,10 @@ async def _run_a2a(db, req, variables, workspace_id=None):
     base = ((conn.config or {}).get("base_url") if conn else None) or (req.get("base_url") if not conn else None)
     if not base:
         raise ValueError("A2A run needs an A2A connection (or base_url)")
-    headers = (conn.config or {}).get("headers") if conn else (req.get("headers") or None)
+    # Drop masked values on the ad-hoc path (a run replayed from history) so we don't send
+    # the literal "••••1234" placeholder as an auth header.
+    headers = ((conn.config or {}).get("headers") if conn
+               else {k: v for k, v in (req.get("headers") or {}).items() if not is_masked(v)} or None)
     text = interpolate(req.get("message") or req.get("text") or "", variables)
     card = None
     try:  # discover the endpoint from the agent card; fall back to base_url on failure

@@ -52,6 +52,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), default="")
     auth_provider: Mapped[str] = mapped_column(String(32), default="password")  # password | github | local
     email_verified: Mapped[bool] = mapped_column(default=False)
+    # Bumped on password reset to revoke every previously-issued token (sessions + the
+    # just-used reset link): tokens embed the version and are rejected once it moves on.
+    token_version: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

@@ -36,9 +36,11 @@ def total() -> int:
 
 def load(slug: str) -> dict | None:
     """Return the parsed .agentman flow doc for a template slug (None if unknown)."""
-    if not slug or "/" in slug or "\\" in slug or ".." in slug:  # path-traversal guard
+    # Reject separators/traversal (incl. Windows drive-relative "C:foo"), then confirm the
+    # resolved path stays inside the templates dir before reading.
+    if not slug or any(ch in slug for ch in ("/", "\\", ":")) or ".." in slug:
         return None
-    f = _DIR / f"{slug}.yaml"
-    if not f.exists():
+    f = (_DIR / f"{slug}.yaml").resolve()
+    if _DIR not in f.parents or not f.exists():
         return None
     return testfile.load(f.read_text())

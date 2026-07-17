@@ -164,8 +164,9 @@ class ContinuePayload(BaseModel):
 @router.post("/{fid}/continue/stream")
 def continue_stream(fid: int, payload: ContinuePayload, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     f = _get(db, ws, fid)
-    # pop (not peek) so two concurrent /continue calls can't resume the same run and corrupt its ctx.
-    ctx = engine.pop_ctx(payload.run_id)
+    # pop (not peek) so two concurrent /continue calls can't resume the same run and corrupt
+    # its ctx; scoped to the workspace so another tenant's run_id can't be resumed or deleted.
+    ctx = engine.pop_run(payload.run_id, ws.id)
     if ctx is None:
         raise HTTPException(409, "Run context expired or already resumed — start a fresh run.")
     flow = {"nodes": f.nodes, "edges": f.edges}

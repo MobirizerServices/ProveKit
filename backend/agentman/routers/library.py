@@ -19,6 +19,14 @@ def _scoped(db, model, oid, ws):
     return row if row and row.workspace_id == ws.id else None
 
 
+def _valid_collection(db, cid, ws) -> int | None:
+    """Return cid only if it names a collection in this workspace; a foreign/unknown id
+    becomes None (unfiled) rather than a dangling cross-workspace reference."""
+    if cid is None:
+        return None
+    return cid if _scoped(db, Collection, cid, ws) else None
+
+
 # ---- collections ----
 class CollectionIn(BaseModel):
     name: str
@@ -71,7 +79,7 @@ def _req(r: Request) -> dict:
 @router.post("/requests")
 def save_request(payload: RequestIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     r = Request(workspace_id=ws.id, name=payload.name, type=payload.type, payload=payload.payload,
-                collection_id=payload.collection_id)
+                collection_id=_valid_collection(db, payload.collection_id, ws))
     db.add(r); db.commit(); db.refresh(r)
     return _req(r)
 
@@ -89,7 +97,8 @@ def update_request(rid: int, payload: RequestIn, db: Session = Depends(get_db), 
     r = _scoped(db, Request, rid, ws)
     if not r:
         raise HTTPException(404, "Request not found")
-    r.name, r.type, r.payload, r.collection_id = payload.name, payload.type, payload.payload, payload.collection_id
+    r.name, r.type, r.payload = payload.name, payload.type, payload.payload
+    r.collection_id = _valid_collection(db, payload.collection_id, ws)
     db.commit(); db.refresh(r)
     return _req(r)
 
@@ -133,6 +142,7 @@ def import_file(payload: ImportIn, db: Session = Depends(get_db), ws: Workspace 
         c = db.query(Connection).filter(Connection.workspace_id == ws.id, Connection.name == name).first()
         return c.id if c else None
 
+    collection_id = _valid_collection(db, payload.collection_id, ws)
     if doc["kind"] == "test":
         req = dict(doc["request"])
         cid = _resolve(doc.get("connection"))
@@ -141,7 +151,7 @@ def import_file(payload: ImportIn, db: Session = Depends(get_db), ws: Workspace 
         if doc.get("assertions"):
             req["assertions"] = doc["assertions"]
         r = Request(workspace_id=ws.id, name=doc.get("name") or "imported", type=req.get("type"),
-                    payload=req, collection_id=payload.collection_id)
+                    payload=req, collection_id=collection_id)
         db.add(r)
         d = None
         if doc.get("dataset"):
@@ -151,9 +161,17 @@ def import_file(payload: ImportIn, db: Session = Depends(get_db), ws: Workspace 
         return {"kind": "test", "request": _req(r), "dataset_id": d.id if d else None,
                 "connection_resolved": bool(cid) or not doc.get("connection")}
 
+    raw_nodes = doc["nodes"]
+    # Enforce the same node cap as create/update so import can't persist an oversized graph.
+    from ..config import get_settings
+    cap = get_settings().max_flow_nodes
+    if cap and len(raw_nodes or []) > cap:
+        raise HTTPException(400, f"Flow too large: {len(raw_nodes)} nodes (max {cap}).")
     nodes = []
     unresolved = 0
-    for n in doc["nodes"]:
+    for n in raw_nodes:
+        if not isinstance(n, dict):
+            raise HTTPException(400, "Invalid flow: each node must be an object")
         cfg = dict(n.get("config") or {})
         cname = cfg.pop("connection", None)
         if cname:

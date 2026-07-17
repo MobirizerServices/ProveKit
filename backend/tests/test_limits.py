@@ -26,6 +26,9 @@ def _mock_req(conn_id):
 
 def test_rate_limit_returns_429(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "rate_limit_per_min", 3)
+    # Pin the fixed-window bucket so the counter can't reset mid-test at a wall-clock
+    # minute boundary (that boundary made this test flaky under the full suite).
+    monkeypatch.setattr(limits, "_now", lambda: 1_000_000)
     conn = next(c for c in client.get("/api/connections").json() if c["config"].get("provider") == "mock")
     req = _mock_req(conn["id"])
     statuses = [client.post("/api/run", json={"request": req, "save": False}).status_code for _ in range(5)]

@@ -125,7 +125,7 @@ def emit_run(run_row) -> None:
         return
     import httpx
 
-    from .netguard import BlockedURL, guard_url
+    from .netguard import guard_url
     meta = (run_row.result or {}).get("meta") or {}
     attrs = [{"key": "gen_ai.operation.name", "value": {"stringValue": run_row.type}}]
     if meta.get("provider"):
@@ -141,6 +141,6 @@ def emit_run(run_row) -> None:
         "status": {"code": 2 if run_row.status == "failed" else 1}}]}]}]}
     try:
         guard_url(url)
-        httpx.post(url, json=body, timeout=5)
-    except (BlockedURL, Exception) as exc:  # best-effort; never break a run on export failure
+        httpx.post(url, json=body, timeout=5, follow_redirects=False)
+    except Exception as exc:  # best-effort; never break a run on export failure
         log.debug("otel emit failed: %s", exc)

@@ -43,14 +43,17 @@ def _seed_connections(db: Session, ws: int) -> None:
     rows = [Connection(workspace_id=ws, name="Demo Assistant (mock)", kind="llm",
                        config={"provider": "mock", "base_url": "", "api_key": "", "models": ["demo-mock"]})]
     if s.seed_examples:
+        # Never distribute the operator's own OpenAI key to tenant workspaces in hosted
+        # mode — every signup would otherwise get a connection billed to the operator.
+        # Hosted tenants get an empty key to fill in with their own.
+        seeded_openai_key = "" if s.hosted else s.openai_api_key
         rows += [
             Connection(workspace_id=ws, name="OpenAI", kind="llm", config={
-                "provider": "openai", "base_url": "", "api_key": s.openai_api_key,
+                "provider": "openai", "base_url": "", "api_key": seeded_openai_key,
                 "models": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]}),
             Connection(workspace_id=ws, name="Anthropic", kind="llm", config={
                 "provider": "anthropic", "base_url": "", "api_key": "",
                 "models": ["claude-sonnet-4-5", "claude-haiku-4-5-20251001"]}),
-            Connection(workspace_id=ws, name="Magari · catalog (MCP)", kind="mcp", config={"url": s.magari_mcp_url}),
         ]
     db.add_all(rows); db.commit()
 

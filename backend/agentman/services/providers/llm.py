@@ -119,7 +119,7 @@ async def _stream_openai(base, api_key, model, system, messages, temperature, ma
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
         async with client.stream("POST", f"{base}/chat/completions", json=body, headers=headers) as resp:
             if resp.status_code >= 400:
                 raise RuntimeError(f"LLM error {resp.status_code}: {(await resp.aread()).decode()[:400]}")
@@ -143,7 +143,7 @@ async def _stream_responses(base, api_key, model, system, messages, temperature,
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
         async with client.stream("POST", f"{base}/responses", json=body, headers=headers) as resp:
             if resp.status_code >= 400:
                 raise RuntimeError(f"LLM error {resp.status_code}: {(await resp.aread()).decode()[:400]}")
@@ -170,7 +170,7 @@ async def _stream_anthropic(base, api_key, model, system, messages, temperature,
     headers = {"Content-Type": "application/json", "anthropic-version": "2023-06-01"}
     if api_key:
         headers["x-api-key"] = api_key
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
         async with client.stream("POST", f"{base}/messages", json=body, headers=headers) as resp:
             if resp.status_code >= 400:
                 raise RuntimeError(f"LLM error {resp.status_code}: {(await resp.aread()).decode()[:400]}")

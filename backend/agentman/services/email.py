@@ -14,8 +14,13 @@ log = logging.getLogger("agentman.email")
 def send(to: str, subject: str, body: str) -> None:
     s = get_settings()
     if not s.smtp_host:
-        # Dev / self-host without SMTP: surface the message (incl. any link) in the logs.
-        log.info("EMAIL (no SMTP configured) to=%s subject=%s\n%s", to, subject, body)
+        if s.hosted:
+            # Never write reset/verify links (the message body) to logs in a hosted
+            # deployment — anyone with log access could take over accounts. Fail loudly instead.
+            log.error("EMAIL NOT SENT: hosted mode has no SMTP configured (to=%s subject=%s)", to, subject)
+        else:
+            # Dev / self-host without SMTP: surface the message (incl. any link) in the logs.
+            log.info("EMAIL (no SMTP configured) to=%s subject=%s\n%s", to, subject, body)
         return
     msg = EmailMessage()
     msg["From"] = s.smtp_from or s.smtp_user or "no-reply@agentman.local"

@@ -19,7 +19,7 @@ from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
 
 from ..config import get_settings
-from .masking import SECRET_HEADERS
+from .masking import is_secret_header
 
 _PREFIX = "enc:"
 log = logging.getLogger("agentman.sealing")
@@ -72,14 +72,21 @@ def unseal(value):
 
 
 def seal_config(cfg: dict) -> dict:
-    """Encrypt the secret fields of a connection config (api_key + secret headers)."""
+    """Encrypt the secret fields of a connection config: api_key, secret headers,
+    the MCP OAuth client_secret, and stdio env values (which routinely carry tokens)."""
     out = dict(cfg)
     if out.get("api_key"):
         out["api_key"] = seal(out["api_key"])
     hdrs = out.get("headers")
     if isinstance(hdrs, dict):
-        out["headers"] = {k: (seal(v) if k.lower() in SECRET_HEADERS and isinstance(v, str) and v else v)
+        out["headers"] = {k: (seal(v) if is_secret_header(k) and isinstance(v, str) and v else v)
                           for k, v in hdrs.items()}
+    oauth = out.get("oauth")
+    if isinstance(oauth, dict) and oauth.get("client_secret"):
+        out["oauth"] = {**oauth, "client_secret": seal(oauth["client_secret"])}
+    env = out.get("env")
+    if isinstance(env, dict):
+        out["env"] = {k: (seal(v) if isinstance(v, str) and v else v) for k, v in env.items()}
     return out
 
 
@@ -90,4 +97,10 @@ def unseal_config(cfg: dict) -> dict:
     hdrs = out.get("headers")
     if isinstance(hdrs, dict):
         out["headers"] = {k: unseal(v) for k, v in hdrs.items()}
+    oauth = out.get("oauth")
+    if isinstance(oauth, dict) and "client_secret" in oauth:
+        out["oauth"] = {**oauth, "client_secret": unseal(oauth.get("client_secret"))}
+    env = out.get("env")
+    if isinstance(env, dict):
+        out["env"] = {k: unseal(v) for k, v in env.items()}
     return out

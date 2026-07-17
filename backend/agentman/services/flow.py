@@ -12,11 +12,23 @@ import uuid
 
 from . import dispatch
 from .runstore import drop_ctx as _drop_run
-from .runstore import get_ctx, pop_ctx
+from .runstore import pop_ctx
 from .runstore import store_ctx as _store_run
 
 MAX_STEPS = 100
 _REF = re.compile(r"\{\{\s*([\w.\-]+)\s*\}\}")
+
+
+def _skey(run_id: str, workspace_id) -> str:
+    """Namespace a stored run context by workspace so /continue can only resume runs from
+    the caller's own workspace — a foreign run_id misses the store instead of popping (and
+    deleting) another tenant's paused context."""
+    return f"{workspace_id if workspace_id is not None else 0}:{run_id}"
+
+
+def pop_run(run_id: str, workspace_id=None) -> dict | None:
+    """Atomically remove and return a paused run context for a workspace (None if absent)."""
+    return pop_ctx(_skey(run_id, workspace_id))
 
 # Catalog served to the frontend palette + inspector.
 NODE_TYPES = {
@@ -68,6 +80,19 @@ def _interp_obj(obj, ctx):
     if isinstance(obj, dict):
         return {k: _interp_obj(v, ctx) for k, v in obj.items()}
     return obj
+
+
+def _mask_config(cfg):
+    """Mask secrets in a node's config before it's streamed to the canvas — an agent node's
+    inline `headers` or `body` can carry a credential that must not leak into run events."""
+    from .masking import mask_body, mask_headers
+    if not isinstance(cfg, dict):
+        return cfg
+    hdrs = cfg.get("headers")
+    out = mask_body({k: v for k, v in cfg.items() if k != "headers"})
+    if isinstance(hdrs, dict):
+        out["headers"] = mask_headers(hdrs)
+    return out
 
 
 def _trim(v, _d=0):
@@ -212,18 +237,19 @@ async def run_stream(db, flow: dict, flow_input: dict, breakpoints=None, single_
     rid = run_id or uuid.uuid4().hex[:12]
     yield {"type": "start", "run_id": rid}
 
+    skey = _skey(rid, workspace_id)
     node_id = start_at or _find_trigger(graph)
     steps, first = ctx.get("_steps", 0), True  # cumulative across pause/continue so cycles stay bounded
     while node_id:
         # Skip the breakpoint check only for the node we're resuming ONTO.
         if node_id in breakpoints and not (first and start_at):
             ctx["_steps"] = steps
-            _store_run(rid, ctx)
+            _store_run(skey, ctx)
             yield {"type": "pause", "node_id": node_id, "run_id": rid, "reason": "breakpoint"}
             return
         steps += 1
         if steps > MAX_STEPS:
-            _drop_run(rid)
+            _drop_run(skey)
             yield {"type": "error", "error": "step budget exceeded (cycle?)"}
             yield {"type": "done", "status": "failed"}
             return
@@ -237,7 +263,7 @@ async def run_stream(db, flow: dict, flow_input: dict, breakpoints=None, single_
         try:
             output, branch = await _exec_node(db, node, ctx, variables, workspace_id)
         except Exception as exc:
-            _drop_run(rid)
+            _drop_run(skey)
             yield {"type": "node", "node_id": node_id, "node_type": ntype, "title": title,
                    "status": "error", "error": str(exc)[:400], "duration_ms": round((time.monotonic() - t0) * 1000)}
             yield {"type": "done", "status": "failed"}
@@ -245,21 +271,21 @@ async def run_stream(db, flow: dict, flow_input: dict, breakpoints=None, single_
         dur = round((time.monotonic() - t0) * 1000)
         ctx["nodes"][node_id] = output
         yield {"type": "node", "node_id": node_id, "node_type": ntype, "title": title, "status": "ok",
-               "branch": branch, "duration_ms": dur, "input": _trim(node.get("config") or {}),
+               "branch": branch, "duration_ms": dur, "input": _trim(_mask_config(node.get("config") or {})),
                "output": _trim(output)}
         nxt = _next(adj, node_id, branch)
         if single_step and nxt:
             ctx["_steps"] = steps
-            _store_run(rid, ctx)
+            _store_run(skey, ctx)
             yield {"type": "pause", "node_id": nxt, "run_id": rid, "reason": "step"}
             return
         node_id = nxt
         first = False
 
-    _drop_run(rid)
+    _drop_run(skey)
     yield {"type": "done", "status": "completed", "output": _trim({k: v for k, v in (ctx.get("nodes") or {}).items()})}
 
 
-# get_ctx / pop_ctx are re-exported from runstore (imported above) so callers keep using
-# engine.pop_ctx — GETDEL-atomic under Redis so a concurrent /continue can't resume twice.
-__all__ = ["run_stream", "get_ctx", "pop_ctx", "NODE_TYPES"]
+# pop_run wraps the runstore's GETDEL-atomic pop with per-workspace key namespacing so a
+# concurrent /continue can't resume twice and a foreign run_id can't touch another tenant.
+__all__ = ["run_stream", "pop_run", "NODE_TYPES"]

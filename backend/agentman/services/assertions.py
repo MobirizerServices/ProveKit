@@ -12,6 +12,22 @@ from jsonschema import validate as js_validate
 from ..models import Connection
 from .providers import llm
 
+# re.search holds the GIL, so a catastrophic-backtracking pattern (ReDoS) would freeze the
+# whole process — and a worker thread can't preempt it. Since stdlib re has no timeout, we
+# reject the common nested-quantifier signature and cap the searched text instead. This is a
+# heuristic guard; an interruptible engine (the `regex` module's timeout, or RE2) is the
+# complete fix if fully-untrusted patterns ever need to run.
+_MAX_REGEX_INPUT = 100_000
+_NESTED_QUANT = re.compile(r"\([^()]*[*+][^()]*\)\s*[*+{]")
+
+
+def _regex_search(pattern: str, text: str):
+    if len(pattern) > 2000:
+        raise ValueError("regex pattern too long")
+    if _NESTED_QUANT.search(pattern):
+        raise ValueError("regex rejected: nested quantifier (possible ReDoS)")
+    return re.search(pattern, text[:_MAX_REGEX_INPUT])
+
 
 def _text_of(result: dict) -> str:
     if result.get("text"):
@@ -80,7 +96,7 @@ def evaluate(db, assertions: list, run: dict, workspace_id=None) -> list[dict]:
                 ok = str(target) == str(a.get("value"))
                 detail = f"{target!r} {'==' if ok else '!='} {a.get('value')!r}"
             elif t == "regex":
-                ok = re.search(a.get("value", ""), text) is not None
+                ok = _regex_search(a.get("value", ""), text) is not None
                 detail = f"/{a.get('value')}/ {'matched' if ok else 'no match'}"
             elif t == "json_path":
                 val = get_path(output, a.get("path", ""))

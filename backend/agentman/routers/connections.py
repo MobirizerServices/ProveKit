@@ -41,6 +41,12 @@ def _public(c: Connection) -> dict:
     hdrs = cfg.get("headers")
     if isinstance(hdrs, dict) and hdrs:
         cfg["headers"] = mask_headers(hdrs)
+    oauth = cfg.get("oauth")
+    if isinstance(oauth, dict) and oauth.get("client_secret"):
+        cfg["oauth"] = {**oauth, "client_secret": mask_value(oauth["client_secret"])}
+    env = cfg.get("env")
+    if isinstance(env, dict) and env:
+        cfg["env"] = {k: mask_value(v) for k, v in env.items()}
     return {"id": c.id, "name": c.name, "kind": c.kind, "config": cfg,
             "created_at": iso_utc(c.created_at)}
 
@@ -77,6 +83,18 @@ def update_connection(cid: int, payload: ConnectionIn, db: Session = Depends(get
     if isinstance(hdrs, dict):
         stored_hdrs = stored.get("headers") or {}
         cfg["headers"] = {k: (stored_hdrs.get(k, v) if isinstance(v, str) and v.startswith(MASK) else v) for k, v in hdrs.items()}
+    # Preserve a masked/blank MCP OAuth client_secret rather than clobbering the stored one.
+    oauth = cfg.get("oauth")
+    if isinstance(oauth, dict):
+        stored_oauth = stored.get("oauth") or {}
+        cs = oauth.get("client_secret", "")
+        if isinstance(cs, str) and (not cs or cs.startswith(MASK)):
+            cfg["oauth"] = {**oauth, "client_secret": stored_oauth.get("client_secret", "")}
+    # Same for masked stdio env values.
+    env = cfg.get("env")
+    if isinstance(env, dict):
+        stored_env = stored.get("env") or {}
+        cfg["env"] = {k: (stored_env.get(k, v) if isinstance(v, str) and v.startswith(MASK) else v) for k, v in env.items()}
     cfg.pop("has_key", None)
     c.name, c.kind, c.config = payload.name, payload.kind, cfg
     db.commit(); db.refresh(c)

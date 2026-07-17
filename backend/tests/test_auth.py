@@ -14,11 +14,46 @@ def test_password_hash_roundtrip():
     assert h != auth.hash_password("correct horse battery")  # salted
 
 
+def test_local_user_creation_is_concurrency_safe():
+    # The frontend mount fires several requests at once; on a fresh local DB they all
+    # get-or-create the singleton local user. The losing INSERTs must be absorbed, not 500.
+    import threading
+
+    from agentman.database import SessionLocal
+    from agentman.models import User
+
+    d = SessionLocal()
+    d.query(User).filter(User.email == auth.LOCAL_EMAIL).delete()
+    d.commit(); d.close()
+
+    ids, errors = [], []
+
+    def worker():
+        s = SessionLocal()
+        try:
+            ids.append(auth._local_user(s).id)
+        except Exception as exc:  # pragma: no cover - the bug this guards against
+            errors.append(repr(exc))
+        finally:
+            s.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+
+    assert not errors, errors           # no IntegrityError bubbled up as a 500
+    assert len(set(ids)) == 1           # everyone resolved to the same local user
+    d = SessionLocal()
+    assert d.query(User).filter(User.email == auth.LOCAL_EMAIL).count() == 1
+    d.close()
+
+
 def test_token_roundtrip_and_tamper():
-    t = auth.make_token(42)
-    assert auth.read_token(t) == 42
+    t = auth.make_token(42, ver=3)
+    assert auth.read_token(t) == (42, 3)                    # (user_id, token_version)
     assert auth.read_token(t[:-2] + "xx") is None          # bad signature
     assert auth.read_token("garbage") is None
+    assert auth.read_token("a.b.é") is None                 # non-ASCII sig → no 500
     assert auth.read_token(auth.make_token(1, ttl=-10)) is None  # expired
 
 

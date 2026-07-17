@@ -9,7 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .database import SessionLocal, init_db
 from .models import Connection
-from .observability import BodySizeLimitMiddleware, RequestIDMiddleware, healthz, init_sentry, setup_logging
+from .observability import (
+    BodySizeLimitMiddleware,
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+    healthz,
+    init_sentry,
+    setup_logging,
+)
 from .routers import auth, connections, deployments, flows, library, prompts, run, runtime, traces, usage
 
 logging.basicConfig(level=logging.INFO)
@@ -35,10 +42,18 @@ def _guard_production_config() -> None:
     """Refuse to boot hosted mode with an unset/weak SECRET_KEY — otherwise every stored
     credential is decryptable by anyone who reads the (default, public) value."""
     s = settings
-    if s.hosted and (s.secret_key.strip() in _WEAK_KEYS or len(s.secret_key.strip()) < 16):
+    weak_key = s.secret_key.strip() in _WEAK_KEYS or len(s.secret_key.strip()) < 16
+    if s.hosted and weak_key:
         raise RuntimeError(
             "HOSTED=true requires a strong SECRET_KEY (>=16 chars, not the dev default). "
             "Generate one: python -c \"import secrets; print(secrets.token_urlsafe(48))\"")
+    # Not hosted but using a server database with a weak key = credentials encrypted under a
+    # public constant. Legitimate for the dev compose; warn loudly if it reaches a real server.
+    if not s.hosted and weak_key and not s.database_url.startswith("sqlite"):
+        logging.getLogger("agentman").warning(
+            "Weak/default SECRET_KEY with a non-SQLite database and HOSTED=false — stored "
+            "credentials are encrypted under a public constant. Set a strong SECRET_KEY (and "
+            "HOSTED=true) before exposing this to a network.")
 
 
 @asynccontextmanager
@@ -63,6 +78,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AgentMan", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,

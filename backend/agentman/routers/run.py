@@ -186,6 +186,7 @@ async def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db), ws
 
 @router.get("/runs")
 def list_runs(limit: int = 30, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    limit = max(1, min(limit, 200))  # bound the page (SQLite treats LIMIT -1 as unlimited)
     rows = db.query(Run).filter(Run.workspace_id == ws.id).order_by(Run.id.desc()).limit(limit).all()
     return [{"id": r.id, "type": r.type, "label": r.label, "status": r.status,
              "duration_ms": r.duration_ms, "created_at": iso_utc(r.created_at)}

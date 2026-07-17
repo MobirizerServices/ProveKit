@@ -6,7 +6,9 @@ Local mode (no hosting) leaves the limit generous; tune via RATE_LIMIT_PER_MIN.
 """
 from __future__ import annotations
 
+import threading
 import time
+from collections import OrderedDict
 from functools import lru_cache
 
 from fastapi import Depends, HTTPException
@@ -18,15 +20,20 @@ from .workspace import current_workspace
 
 class _MemoryWindow:
     def __init__(self):
-        self._c: dict[str, int] = {}
+        # LRU-ordered so eviction drops the oldest bucket, never the one being counted.
+        self._c: OrderedDict[str, int] = OrderedDict()
+        self._lock = threading.Lock()
 
     def hit(self, key: str, ttl: int) -> int:
-        # key already includes the window bucket, so stale buckets simply stop being touched;
-        # keep the dict from growing unbounded by dropping everything but the current-ish keys.
-        if len(self._c) > 10_000:
-            self._c.clear()
-        self._c[key] = self._c.get(key, 0) + 1
-        return self._c[key]
+        # Streams run concurrently in the threadpool, so the read-modify-write must be atomic
+        # or concurrent hits under-count and admit more than the limit.
+        with self._lock:
+            count = self._c.get(key, 0) + 1
+            self._c[key] = count
+            self._c.move_to_end(key)  # mark as most-recently-used
+            while len(self._c) > 10_000:
+                self._c.popitem(last=False)  # evict least-recently-used, keeping live buckets
+            return count
 
 
 class _RedisWindow:

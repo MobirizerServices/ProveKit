@@ -14,6 +14,7 @@ import json
 import time
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -60,20 +61,29 @@ def verify_password(pw: str, stored: str) -> bool:
         return False
 
 
-# ---- signed tokens (compact HS256 JWT). purpose separates sessions from reset/verify. ----
-def make_token(uid: int, ttl: int = _TTL, purpose: str = "session") -> str:
+# Verify against this when the account is missing/OAuth-only, so the not-found login branch
+# spends the same PBKDF2 time as a real check and doesn't leak account existence via timing.
+DUMMY_HASH = hash_password("agentman-timing-equalizer")
+
+
+# ---- signed tokens (compact HS256 JWT). purpose separates sessions from reset/verify;
+# ver binds the token to the user's token_version so a password reset revokes old tokens. ----
+def make_token(uid: int, ttl: int = _TTL, purpose: str = "session", ver: int = 0) -> str:
     header = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-    payload = _b64(json.dumps({"uid": uid, "exp": int(time.time()) + ttl, "p": purpose},
+    payload = _b64(json.dumps({"uid": uid, "exp": int(time.time()) + ttl, "p": purpose, "v": ver},
                               separators=(",", ":")).encode())
     signing_input = f"{header}.{payload}".encode()
     sig = _b64(hmac.new(_secret(), signing_input, hashlib.sha256).digest())
     return f"{header}.{payload}.{sig}"
 
 
-def read_token(token: str, purpose: str = "session") -> int | None:
+def read_token(token: str, purpose: str = "session") -> tuple[int, int] | None:
+    """Verify signature/expiry/purpose and return (user_id, token_version), else None. The
+    caller checks token_version against the user so revoked tokens are rejected."""
     try:
         header, payload, sig = token.split(".")
         expected = _b64(hmac.new(_secret(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+        # compare_digest raises TypeError on a non-ASCII signature segment — treat as invalid.
         if not hmac.compare_digest(expected, sig):
             return None
         data = json.loads(_unb64(payload))
@@ -81,25 +91,35 @@ def read_token(token: str, purpose: str = "session") -> int | None:
             return None
         if data.get("p", "session") != purpose:  # a reset token can't be used as a session
             return None
-        return int(data["uid"])
-    except (ValueError, KeyError, json.JSONDecodeError):
+        return int(data["uid"]), int(data.get("v", 0))
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         return None
 
 
 def _local_user(db: Session) -> User:
     u = db.query(User).filter(User.email == LOCAL_EMAIL).first()
-    if not u:
-        u = User(email=LOCAL_EMAIL, name="Local", auth_provider="local")
-        db.add(u); db.commit(); db.refresh(u)
+    if u:
+        return u
+    u = User(email=LOCAL_EMAIL, name="Local", auth_provider="local")
+    db.add(u)
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent first request created it (the mount fires several requests at once);
+        # the unique-email constraint rejects the loser — fall back to the row that won.
+        db.rollback()
+        return db.query(User).filter(User.email == LOCAL_EMAIL).first()
+    db.refresh(u)
     return u
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     token = request.cookies.get(COOKIE)
-    uid = read_token(token) if token else None
-    if uid is not None:
+    claims = read_token(token) if token else None
+    if claims is not None:
+        uid, ver = claims
         u = db.get(User, uid)
-        if u:
+        if u and u.token_version == ver:  # reject sessions revoked by a password reset
             return u
     if not get_settings().hosted:
         return _local_user(db)  # local mode: no login required

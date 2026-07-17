@@ -63,14 +63,65 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Reject oversized request bodies (declared Content-Length) with 413."""
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Baseline hardening headers on every response; HSTS only in hosted (TLS) mode."""
     async def dispatch(self, request: Request, call_next):
-        cl = request.headers.get("content-length")
-        if cl and cl.isdigit() and int(cl) > get_settings().max_body_bytes:
-            from starlette.responses import JSONResponse as _JR
-            return _JR({"detail": "Request body too large"}, status_code=413)
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if get_settings().hosted:
+            response.headers.setdefault("Strict-Transport-Security",
+                                        "max-age=31536000; includeSubDomains")
+        return response
+
+
+class BodySizeLimitMiddleware:
+    """Reject oversized request bodies with 413. Pure ASGI so the cap holds for chunked /
+    Content-Length-less requests too: the body is buffered up to the limit and then replayed
+    to the app (this API takes small JSON bodies, so buffering is cheap)."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        max_bytes = get_settings().max_body_bytes
+        headers = dict(scope.get("headers") or [])
+        cl = headers.get(b"content-length")
+        if cl is not None and cl.isdigit() and int(cl) > max_bytes:
+            return await self._reject(send)
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            body.extend(message.get("body", b""))
+            if len(body) > max_bytes:
+                return await self._reject(send)
+            if not message.get("more_body", False):
+                break
+        buffered = bytes(body)
+        done = False
+
+        async def replay():
+            nonlocal done
+            if not done:
+                done = True
+                return {"type": "http.request", "body": buffered, "more_body": False}
+            # Delegate later reads to the real channel so a StreamingResponse's disconnect
+            # listener gets genuine http.disconnect events (returning a fake one truncates SSE).
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+    @staticmethod
+    async def _reject(send):
+        body = json.dumps({"detail": "Request body too large"}).encode()
+        await send({"type": "http.response.start", "status": 413,
+                    "headers": [(b"content-type", b"application/json"),
+                                (b"content-length", str(len(body)).encode())]})
+        await send({"type": "http.response.body", "body": body})
 
 
 def healthz() -> JSONResponse:

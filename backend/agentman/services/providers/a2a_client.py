@@ -22,7 +22,7 @@ async def fetch_card(base_url: str, headers: dict | None = None, timeout: float 
     base = base_url.rstrip("/")
     guard_url(base)
     last = None
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         for path in _CARD_PATHS:
             try:
                 r = await client.get(base + path, headers=headers or None)
@@ -74,7 +74,8 @@ async def arun(*, base_url: str, text: str, headers: dict | None = None, stream:
                "params": {"message": message}}
     hdrs = {"Content-Type": "application/json", **(headers or {})}
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    # follow_redirects stays False: guard_url only vetted the initial endpoint (SSRF).
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         if stream:
             collected = ""
             async with client.stream("POST", endpoint, json=payload, headers=hdrs) as resp:

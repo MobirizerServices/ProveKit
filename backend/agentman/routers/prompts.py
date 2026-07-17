@@ -52,9 +52,14 @@ def update_prompt(pid: int, payload: PromptIn, db: Session = Depends(get_db), ws
     p = db.get(Prompt, pid)
     if not p or p.workspace_id != ws.id:
         raise HTTPException(404, "Prompt not found")
-    p.name, p.description, p.content = payload.name, payload.description, payload.content
-    if payload.key:
+    if payload.key and payload.key != p.key:
+        # Reject a rename onto an existing key with a clean 409 (the DB unique constraint
+        # would otherwise surface as an unhandled 500).
+        clash = db.query(Prompt).filter(Prompt.workspace_id == ws.id, Prompt.key == payload.key).first()
+        if clash:
+            raise HTTPException(409, f"A prompt with key '{payload.key}' already exists")
         p.key = payload.key
+    p.name, p.description, p.content = payload.name, payload.description, payload.content
     db.commit(); db.refresh(p)
     return _p(p)
 

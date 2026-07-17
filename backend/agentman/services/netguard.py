@@ -24,6 +24,18 @@ class BlockedURL(ValueError):
     """Raised when an outbound URL targets a forbidden address."""
 
 
+def guard_stdio() -> None:
+    """Refuse to spawn a local MCP server process in hosted mode.
+
+    stdio MCP connections run an arbitrary `command` on the server (subprocess.Popen).
+    That is fine for a single-user local install, but on shared/hosted infrastructure it
+    is remote code execution: any authenticated tenant could run arbitrary programs. URLs
+    are policed by guard_url; this is the equivalent gate for the process transport.
+    """
+    if get_settings().hosted:
+        raise BlockedURL("Local process (stdio) MCP connections are disabled in hosted mode")
+
+
 def _check_ip(ip, hosted: bool) -> None:
     if ip.is_link_local:
         raise BlockedURL("Link-local / metadata addresses are not allowed")

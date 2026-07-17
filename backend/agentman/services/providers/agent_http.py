@@ -9,6 +9,9 @@ import httpx
 
 from ..netguard import guard_url
 
+# Cap a buffered agent response so a hostile/misbehaving endpoint can't OOM the worker.
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+
 
 async def arun(*, base_url: str, method: str, path: str, headers: dict | None = None,
                body=None, stream: bool = False, timeout: float = 120):
@@ -17,7 +20,9 @@ async def arun(*, base_url: str, method: str, path: str, headers: dict | None = 
     method = (method or "POST").upper()
     hdrs = {"Accept": "application/json, text/event-stream", **(headers or {})}
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    # follow_redirects stays False (httpx default) on purpose: guard_url only vetted the
+    # initial URL, so a redirect could point at an internal address (SSRF).
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         if stream:
             async with client.stream(method, url, json=body if body is not None else None, headers=hdrs) as resp:
                 status = resp.status_code
@@ -37,7 +42,14 @@ async def arun(*, base_url: str, method: str, path: str, headers: dict | None = 
                 yield {"type": "result", "data": None, "meta": {"status": status, "streamed": True}}
             return
 
-        resp = await client.request(method, url, json=body if body is not None else None, headers=hdrs)
-        ctype = resp.headers.get("content-type", "")
-        data = resp.json() if ctype.startswith("application/json") else resp.text
-        yield {"type": "result", "data": data, "meta": {"status": resp.status_code}}
+        async with client.stream(method, url, json=body if body is not None else None, headers=hdrs) as resp:
+            status = resp.status_code
+            ctype = resp.headers.get("content-type", "")
+            buf = bytearray()
+            async for chunk in resp.aiter_bytes():
+                buf += chunk
+                if len(buf) > MAX_RESPONSE_BYTES:
+                    raise ValueError(f"agent response exceeded {MAX_RESPONSE_BYTES} bytes")
+            raw = bytes(buf)
+        data = json.loads(raw) if ctype.startswith("application/json") and raw else raw.decode("utf-8", "replace")
+        yield {"type": "result", "data": data, "meta": {"status": status}}

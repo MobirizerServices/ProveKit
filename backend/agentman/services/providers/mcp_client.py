@@ -15,7 +15,7 @@ import threading
 
 import httpx
 
-from ..netguard import guard_url
+from ..netguard import guard_stdio, guard_url
 
 _ACCEPT = "application/json, text/event-stream"
 _STATEFUL = "2025-11-25"
@@ -49,7 +49,7 @@ def _fetch_oauth_token(oauth: dict) -> str:
         data["scope"] = oauth["scope"]
     if oauth.get("resource"):  # RFC 8707 resource indicator
         data["resource"] = oauth["resource"]
-    r = httpx.post(token_url, data=data, timeout=30)
+    r = httpx.post(token_url, data=data, timeout=30, follow_redirects=False)
     r.raise_for_status()
     tok = r.json().get("access_token")
     if not tok:
@@ -64,7 +64,7 @@ class _HTTPTransport:
         self.headers = {"Content-Type": "application/json", "Accept": _ACCEPT, **(headers or {})}
         self.stateful = stateful
         self.session_id: str | None = None
-        self._client = httpx.Client(timeout=timeout)
+        self._client = httpx.Client(timeout=timeout, follow_redirects=False)
 
     def _hdrs(self):
         h = dict(self.headers)
@@ -93,6 +93,7 @@ class _HTTPTransport:
 class _StdioTransport:
     """Newline-delimited JSON-RPC over a spawned process's stdin/stdout."""
     def __init__(self, command, args, env, timeout):
+        guard_stdio()  # RCE gate: never spawn a local process in hosted mode
         self.proc = subprocess.Popen(
             [command, *(args or [])], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env)

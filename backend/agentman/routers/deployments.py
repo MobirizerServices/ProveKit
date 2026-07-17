@@ -99,8 +99,9 @@ def deployment_runs(slug: str, limit: int = 50, db: Session = Depends(get_db), w
     dep_ids = [d.id for d in db.query(Deployment.id).filter(Deployment.workspace_id == ws.id, Deployment.slug == slug).all()]
     if not dep_ids:
         raise HTTPException(404, "Deployment not found")
+    limit = max(1, min(limit, 200))  # clamp both ends (SQLite treats LIMIT -1 as unlimited)
     rows = (db.query(Run).filter(Run.deployment_id.in_(dep_ids))
-            .order_by(Run.id.desc()).limit(min(limit, 200)).all())
+            .order_by(Run.id.desc()).limit(limit).all())
     return [{"id": r.id, "status": r.status, "duration_ms": r.duration_ms,
              "created_at": iso_utc(r.created_at)} for r in rows]
 

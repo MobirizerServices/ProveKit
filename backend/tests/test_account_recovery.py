@@ -51,7 +51,24 @@ def test_reset_token_cannot_be_used_as_session():
     # a reset-purpose token must not authenticate as a session
     t = auth.make_token(1, purpose="reset")
     assert auth.read_token(t, purpose="session") is None
-    assert auth.read_token(t, purpose="reset") == 1
+    assert auth.read_token(t, purpose="reset") == (1, 0)
+
+
+def test_reset_revokes_sessions_and_is_single_use(sent, monkeypatch):
+    # Hosted mode so an unauthenticated request is a 401 (no local-user fallback). Bare
+    # client (no `with`) so the hosted-boot SECRET_KEY guard in lifespan doesn't run.
+    monkeypatch.setattr(get_settings(), "hosted", True)
+    c = TestClient(app, base_url="https://testserver")
+    c.post("/api/auth/register", json={"email": "rev@x.com", "password": "originalpw1"})
+    assert c.get("/api/auth/me").status_code == 200  # register logged us in
+    sent.clear()
+    c.post("/api/auth/forgot", json={"email": "rev@x.com"})
+    token = _link(sent, "/reset?token=").split("token=")[1]
+    assert c.post("/api/auth/reset", json={"token": token, "password": "brandnewpw2"}).status_code == 200
+    # the pre-reset session cookie is now revoked...
+    assert c.get("/api/auth/me").status_code == 401
+    # ...and the reset link cannot be replayed to reset the password again.
+    assert c.post("/api/auth/reset", json={"token": token, "password": "thirdpass99"}).status_code == 400
 
 
 def test_expired_or_bad_reset_token_rejected():

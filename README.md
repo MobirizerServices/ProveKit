@@ -19,6 +19,18 @@ OpenRouter) · Anthropic Messages · MCP (stdio + Streamable HTTP, OAuth 2.1, bo
 2025-11-25 and 2026-07-28 spec generations) · A2A agent cards · OpenTelemetry GenAI
 trace ingest.
 
+## Quickstart
+
+```bash
+make setup      # backend venv + deps, frontend deps  (needs Python 3.13, Node 20)
+make backend    # API on :8100     (terminal 1)
+make frontend   # web app on :3001 (terminal 2)
+```
+
+Open http://localhost:3001 — no login, no API key needed; the seeded mock agent runs
+offline. Full docs: [docs/](docs/README.md) · [contributing](CONTRIBUTING.md) ·
+[security](SECURITY.md).
+
 Three surfaces, one nav:
 
 ```

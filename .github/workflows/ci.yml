@@ -41,6 +41,9 @@ jobs:
       - name: Install
         working-directory: frontend
         run: npm ci
+      - name: Audit (fail on high/critical advisories)
+        working-directory: frontend
+        run: npm audit --audit-level=high
       - name: Typecheck
         working-directory: frontend
         run: npx tsc --noEmit

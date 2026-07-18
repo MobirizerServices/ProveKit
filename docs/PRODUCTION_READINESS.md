@@ -9,15 +9,17 @@
 > (`database.py init_db → _run_migrations`), and a `LICENSE` *does* exist at the repo root —
 > the real gap is that it isn't bundled in the wheel (#69).
 
-## The 7 ship-blockers (P0) — do these first
+## The 7 ship-blockers (P0) — status
 
-- **#52** Coverage isn't gated in CI (can regress silently).
-- **#53** `publish.yml` ships to PyPI with no test gate.
-- **#66** The pip CLI drags in the whole server stack.
-- **#67** Hard `==` pins on a distributed library cause install conflicts.
-- **#17** MCP stdio has no read timeout → shared threadpool exhaustion.
-- **#14** Next.js 14.2.35 ships with 2 open advisories.
-- **#87** README demo GIF (the value-prop visual) is missing.
+- **[DONE]** **#52** Coverage isn't gated in CI (can regress silently). — `pytest-cov` + `--cov` in CI, `fail_under` gate.
+- **[DONE]** **#53** `publish.yml` ships to PyPI with no test gate. — publish now `needs: [test, version-check]`.
+- **[DONE]** **#66** The pip CLI drags in the whole server stack. — core-only deps + `provekit[server]` extra.
+- **[DONE]** **#67** Hard `==` pins on a distributed library cause install conflicts. — compatible-release ranges.
+- **[DONE]** **#17** MCP stdio has no read timeout → shared threadpool exhaustion. — reader-thread + read deadline, kill on expiry.
+- **[DONE]** **#14** Next.js 14.2.35 ships with 2 open advisories. — upgraded to **Next 15.5.20** (no 14.2.x patch exists; the audit found 6 highs, not 2), pinned `postcss` via override, `npm audit --audit-level=high` gate in CI, Dependabot added. **0 vulnerabilities**; build + typecheck + runtime (login/reset/verify render, no console errors) verified.
+- **[NEEDS HUMAN]** **#87** README demo GIF (the value-prop visual) is missing. — script is in `docs/launch/DEMO_SCRIPT.md`; needs a 90s screen recording dropped at `docs/launch/demo.gif`, then uncomment the `<img>` in `README.md`. The placeholder is safely commented out (no broken image). An interactive in-page demo now ships on the web landing hero as an interim value-prop visual.
+
+**6 of 7 P0s are fixed, verified, and pushed to `main`. Only #87 remains — it requires a human screen recording.**
 
 ---
 

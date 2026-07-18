@@ -11,7 +11,7 @@ streaming; turn a run into a regression test in one click; run the suite in CI.
 [![CI](https://github.com/MobirizerServices/ProveKit/actions/workflows/ci.yml/badge.svg)](https://github.com/MobirizerServices/ProveKit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.13](https://img.shields.io/badge/python-3.13-3776ab.svg)
-![Next.js 14](https://img.shields.io/badge/next.js-14-black.svg)
+![Next.js 15](https://img.shields.io/badge/next.js-15-black.svg)
 
 [Quickstart](#quickstart) · [Docs](docs/README.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 

@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/flows", label: "Flows" },
   { href: "/prompts", label: "Prompts" },
   { href: "/deployments", label: "Deployments" },
+  { href: "/api-keys", label: "API Keys" },
 ];
 
 export default function TopNav() {
@@ -47,7 +48,7 @@ export default function TopNav() {
     <>
     {down && <div className="down-banner" role="status">⚠ Can’t reach the ProveKit backend. Retrying… — check that it’s running on the API port.</div>}
     <div className="topbar">
-      <div className="brand"><span className="logo">◇</span>Agent<b>Man</b></div>
+      <div className="brand"><span className="logo">◇</span>Prove<b>Kit</b></div>
       <nav className="topnav">
         {LINKS.map((l) => (
           <Link key={l.href} href={l.href} className={`tn-link ${is(l.href) ? "on" : ""}`}>{l.label}</Link>

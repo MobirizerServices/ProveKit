@@ -69,6 +69,23 @@ class Workspace(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class ApiKey(Base):
+    """A named, revocable bearer key for machine access (trace ingest, CLI, CI).
+
+    Unlike the single per-workspace `ingest_key_hash`, a workspace can hold many of
+    these — one per environment/service — each revocable on its own. Only the SHA-256
+    hash is stored; the plaintext (`pk_…`) is shown exactly once, at creation."""
+    __tablename__ = "api_keys"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(120), default="")
+    prefix: Mapped[str] = mapped_column(String(16), default="")   # e.g. "pk_A1b2C3d4" for display
+    key_hash: Mapped[str] = mapped_column(String(128), index=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class WorkspaceMember(Base):
     __tablename__ = "workspace_members"
     id: Mapped[int] = mapped_column(primary_key=True)

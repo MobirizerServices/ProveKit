@@ -17,7 +17,9 @@ from .observability import (
     init_sentry,
     setup_logging,
 )
-from .routers import auth, connections, deployments, flows, library, prompts, run, runtime, traces, usage
+from .routers import (
+    apikeys, auth, connections, deployments, flows, library, prompts, run, runtime, traces, usage,
+)
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -94,6 +96,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(connections.router)
+app.include_router(apikeys.router)
 app.include_router(library.router)
 app.include_router(prompts.router)
 app.include_router(flows.router)

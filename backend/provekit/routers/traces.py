@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import Run, Workspace
-from ..services import deploy, otel
+from ..services import apikey, deploy, otel
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/v1", tags=["traces"])
@@ -22,8 +22,12 @@ def _resolve_ingest_ws(db: Session, request: Request, authorization: str | None)
     """Bearer ingest key first (exporters), else fall back to the session cookie."""
     if authorization and authorization.lower().startswith("bearer "):
         key = authorization[7:].strip()
-        h = deploy.hash_key(key)
-        ws = db.query(Workspace).filter(Workspace.ingest_key_hash == h).first()
+        # A named pk_ key (portal-issued, revocable) first, then the legacy per-workspace
+        # ingest key. Both are SHA-256 bearer keys; either resolves the same workspace.
+        ws = apikey.resolve_workspace(db, key)
+        if ws:
+            return ws
+        ws = db.query(Workspace).filter(Workspace.ingest_key_hash == deploy.hash_key(key)).first()
         if ws:
             return ws
         raise HTTPException(403, "Invalid ingest key")

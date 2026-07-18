@@ -52,6 +52,7 @@ async function j<T>(path: string, opts?: RequestInit & { noAuthRedirect?: boolea
 }
 
 export interface Me { id: number; email: string; name: string; auth_provider: string; }
+export interface ApiKey { id: number; name: string; prefix: string; revoked: boolean; last_used_at: string | null; created_at?: string; }
 
 // Parse one SSE event block (may contain multiple `data:` lines per the spec). Returns true on [DONE].
 function _emitSSE(block: string, onEvent: (e: any) => void): boolean {
@@ -141,6 +142,10 @@ export const api = {
   health: async (): Promise<boolean> => {
     try { const r = await fetch(`${BASE}/healthz`, { credentials: "include" }); return r.ok; } catch { return false; }
   },
+  // api keys (pk_ bearer keys for trace ingest / CI / CLI)
+  apiKeys: () => j<ApiKey[]>("/api/api-keys"),
+  createApiKey: (name: string) => j<ApiKey & { key: string }>("/api/api-keys", { method: "POST", body: JSON.stringify({ name }) }),
+  revokeApiKey: (id: number) => j(`/api/api-keys/${id}`, { method: "DELETE" }),
   // usage
   usage: (days = 30) => j<any>(`/api/usage?days=${days}`),
   // deployments

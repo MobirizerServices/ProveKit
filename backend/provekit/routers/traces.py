@@ -8,14 +8,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..config import get_settings
 from ..database import get_db
-from ..models import Run, Workspace
+from ..models import Run, Workspace, iso_utc
 from ..services import apikey, deploy, otel
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/v1", tags=["traces"])
 ws_router = APIRouter(prefix="/api/workspace", tags=["workspace"])
+runs_router = APIRouter(prefix="/api", tags=["runs"])
 
 
 def _resolve_ingest_ws(db: Session, request: Request, authorization: str | None) -> Workspace:
@@ -67,3 +67,24 @@ def rotate_ingest_key(db: Session = Depends(get_db), ws: Workspace = Depends(cur
     ws.ingest_key_hash = key_hash
     db.commit()
     return {"ingest_key": plaintext}
+
+
+# ---- captured runs (what the Traces view reads) ----
+@runs_router.get("/runs")
+def list_runs(limit: int = 50, db: Session = Depends(get_db),
+              ws: Workspace = Depends(current_workspace)):
+    limit = max(1, min(limit, 200))
+    rows = (db.query(Run).filter(Run.workspace_id == ws.id)
+            .order_by(Run.id.desc()).limit(limit).all())
+    return [{"id": r.id, "type": r.type, "label": r.label, "status": r.status,
+             "duration_ms": r.duration_ms, "created_at": iso_utc(r.created_at)} for r in rows]
+
+
+@runs_router.get("/runs/{rid}")
+def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    r = db.get(Run, rid)
+    if not r or r.workspace_id != ws.id:
+        raise HTTPException(404, "Run not found")
+    return {"id": r.id, "type": r.type, "label": r.label, "request": r.request,
+            "result": r.result, "status": r.status, "duration_ms": r.duration_ms,
+            "error": r.error, "created_at": iso_utc(r.created_at)}

@@ -1,5 +1,5 @@
-"""ProveKit — a generic "Postman for agents": create, run, and debug prompts, MCP tools,
-and agent endpoints across any provider."""
+"""ProveKit — drop-in agent tracing. Add one decorator, get a project key, and review
+every run your agent makes. No connections to configure, no SDK to swap."""
 import logging
 from contextlib import asynccontextmanager
 
@@ -7,8 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .database import SessionLocal, init_db
-from .models import Connection
+from .database import init_db
 from .observability import (
     BodySizeLimitMiddleware,
     RequestIDMiddleware,
@@ -17,24 +16,12 @@ from .observability import (
     init_sentry,
     setup_logging,
 )
-from .routers import (
-    apikeys, auth, connections, deployments, flows, library, prompts, run, runtime, traces, usage,
-)
+from .routers import apikeys, auth, traces
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
 setup_logging()
 init_sentry()
-
-
-def _reseal_connections(db) -> None:
-    """Upgrade plaintext secrets from older databases to encrypted-at-rest: force each
-    config back through SealedJSON's bind processor (flag_modified beats SQLAlchemy's
-    equal-value change suppression). Idempotent — already-sealed values stay sealed."""
-    from sqlalchemy.orm.attributes import flag_modified
-    for c in db.query(Connection).all():
-        flag_modified(c, "config")
-    db.commit()
 
 
 _WEAK_KEYS = {"", "dev-only-change-me", "change-me", "changeme", "secret"}
@@ -69,11 +56,6 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     init_db()
-    db = SessionLocal()
-    try:
-        _reseal_connections(db)  # per-workspace seeding happens on first workspace access
-    finally:
-        db.close()
     yield
 
 
@@ -95,17 +77,10 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(connections.router)
 app.include_router(apikeys.router)
-app.include_router(library.router)
-app.include_router(prompts.router)
-app.include_router(flows.router)
-app.include_router(run.router)
 app.include_router(traces.router)
 app.include_router(traces.ws_router)
-app.include_router(deployments.router)
-app.include_router(runtime.router)
-app.include_router(usage.router)
+app.include_router(traces.runs_router)
 
 
 @app.get("/")

@@ -1,0 +1,24 @@
+# Auto-PR security + version updates so advisories (e.g. the open Next.js ones) don't rot
+# silently. Grouped weekly to keep the noise down; security updates come as they land.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      frontend:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      backend:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

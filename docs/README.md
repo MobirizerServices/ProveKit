@@ -2,6 +2,8 @@
 
 - [Quickstart & contributing](../CONTRIBUTING.md) — clone to running in ~2 minutes
 - [`.provekit` file format](FILE_FORMAT.md) — git-diffable tests & flows
+- [LangGraph starter](../examples/langgraph-starter/) — test a framework agent from the
+  outside (serve wrapper + `.provekit/` tests + CI workflow), no SDK
 - [Deployment](DEPLOY.md) — local vs hosted (TLS, Postgres, Redis)
 - [Product strategy](PRODUCT_STRATEGY.md) — positioning, competitive analysis, roadmap
 - [Security](../SECURITY.md) — threat model, secret handling, disclosure

@@ -150,6 +150,11 @@ connections:
     models: [gpt-4o-mini]
 ```
 
+**Testing a framework agent (LangGraph, CrewAI, …)?** Serve it behind an endpoint and point
+ProveKit at it — no SDK, no changes to your agent code. Copy-and-run example:
+[`examples/langgraph-starter/`](examples/langgraph-starter/) (serve wrapper + `.provekit/`
+tests + a GitHub Actions workflow).
+
 ## Run it
 
 ### Docker (both services)

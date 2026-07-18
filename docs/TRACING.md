@@ -1,29 +1,17 @@
-# Tracing → tests
+# Tracing guide
 
-Capture what your agent actually did in the real world, then turn any run into a
-regression test in one click. This is the **trace → test bridge**: point the decorator at
-your agent, run it, and its inputs and outputs flow to ProveKit as *traces*; pick a trace
-you care about and **Save as test** turns it into a runnable `.provekit` test you commit and
-run in CI.
+Add one decorator at your agent's entrypoint and review the whole nested flow — model
+calls, tools, and steps — in the portal. This is the entire product.
 
 ```
-  @pk.trace          runs land as        Save as test        provekit run
-  your agent  ──────▶  Traces in the ──────▶  a .provekit  ──────▶  green/red in CI
-  (real runs)          portal               regression test
+  @pk.trace          nested spans           the portal
+  your entrypoint ──▶ ship to /v1/traces ──▶ rebuilds the agent-flow tree
 ```
 
-Unlike testing an agent from the outside (see the [LangGraph starter](../examples/langgraph-starter/)),
-tracing observes your agent *from the inside* — so a test is seeded from a genuine
-production interaction, not a hand-written guess.
+## Setup
 
----
-
-## Quickstart
-
-### 1. Get an API key
-
-In the portal, open **API Keys** → name a key → **Create**. The `pk_…` value is shown
-once; copy it. Put it in your agent's environment:
+1. **Create a project** in the portal and copy its key (Project keys). It's shown once.
+2. Put it in your agent's environment:
 
 ```bash
 # .env
@@ -31,10 +19,7 @@ PROVEKIT_API_KEY=pk_...
 PROVEKIT_ENDPOINT=https://provekit.your-company.com   # your ProveKit URL
 ```
 
-`PROVEKIT_ENDPOINT` is wherever your ProveKit server is reachable (for local dev, the same
-origin you open the portal on). Traces are shipped to `${PROVEKIT_ENDPOINT}/v1/traces`.
-
-### 2. Decorate your agent
+3. Install and decorate:
 
 ```bash
 pip install "provekit[trace]"
@@ -45,125 +30,80 @@ import provekit.trace as pk
 
 @pk.trace(name="support-agent")
 def run_agent(question: str) -> str:
-    # ...your agent: LLM calls, tools, whatever...
-    return answer
+    ...
 ```
 
-That's it. Every call to `run_agent` is captured as a run carrying its input and output.
-Configuration is read from the environment automatically on first use.
-
-### 3. See your runs
-
-Run your agent as usual, then open **Traces** in the portal. Each captured run shows its
-input, output, model, and status. (Runs also appear in the console's history.)
-
-### 4. Save a run as a test
-
-On a trace, click **Save as test**:
-
-- It creates a **prompt** test whose input is the captured input.
-- It seeds an **`llm_judge`** assertion — "the response should convey the same answer as
-  this reference from the captured run, even if worded differently" — so the test passes on
-  a correct answer even if the wording changes (far more robust than a substring match).
-- Pick a **connection** in the dialog; it's wired to both the prompt target and the judge,
-  so the test runs as-is. (Choose *Attach later* to set it in the console instead.)
-
-The saved test is immediately runnable in the console, and exportable to a `.provekit`
-file (see [the file format](FILE_FORMAT.md)).
-
-### 5. Run it in CI
-
-Export the saved test to a `.provekit` file, commit it under `.provekit/tests/`, and run
-the suite headless — the same runner the rest of your tests use:
-
-```bash
-provekit run .provekit/tests/          # exit code is non-zero if any assertion fails
-```
-
-See [CONTRIBUTING](../CONTRIBUTING.md) and the [LangGraph starter](../examples/langgraph-starter/)
-for a full CI workflow (`provekit run` + a connections file with `${ENV}` secrets).
-
----
+Run your agent, then open **Traces**. Each call is one trace; expand any span for its
+input and output.
 
 ## What gets captured
 
-The decorator emits an OpenTelemetry span per call, tagged with the
-[GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/):
+You decorate the **entrypoint once**. The decorator opens an OpenTelemetry span and makes
+it the current context, so everything beneath it nests automatically:
 
-| what | captured as |
+| Source | Captured |
 |---|---|
-| the decorated call's inputs | `gen_ai.input.messages` (function args, JSON) |
-| its return value | `gen_ai.output.messages` |
-| success / failure | span status (an exception marks the run failed and re-raises) |
-| duration | span timing |
+| OpenAI / Anthropic calls | automatically — the `[trace]` extra auto-instruments them |
+| Any OTel-instrumented library | automatically — it nests under the current span |
+| Your own sub-steps | wrap them in `with pk.span("name"):` |
+| The decorated call | its input (args) and output (return), timing, and status |
 
-Because it's **real OpenTelemetry**, any LLM instrumentation you already have installed —
-e.g. OpenInference or OpenLLMetry for OpenAI/Anthropic — emits its own `gen_ai` spans into
-the same trace, and those are captured too. You don't have to hand-annotate each model
-call; decorate the entrypoint and the nested calls come along.
+Every span becomes a node in the trace, classified **agent · llm · tool · step**.
 
-Every `gen_ai` span becomes a **run** (`type="trace"`) in your workspace. The same ingest
-endpoint accepts OTLP from *any* exporter, so you can also point a stock OpenTelemetry
-collector at `${PROVEKIT_ENDPOINT}/v1/traces` instead of using the decorator.
+## Sub-steps with `pk.span()`
 
----
+Wrap a retrieval, a tool call, or a branch to see it in the tree:
 
-## API reference
+```python
+@pk.trace(name="support-agent")
+def run_agent(question: str) -> str:
+    with pk.span("retrieve") as s:
+        docs = search(question)
+        s and s.set_attribute("gen_ai.output.messages", str(docs))
+    return answer(question, docs)
+```
+
+`pk.span()` yields the OpenTelemetry span (or `None` when tracing is disabled — hence the
+`s and ...` guard). Set `gen_ai.input.messages` / `gen_ai.output.messages` to show a step's
+input/output in the portal.
+
+## API
 
 ### `@pk.trace(name=None, *, operation="invoke_agent")`
+Decorate an entrypoint (or any function). `name` is the span label (defaults to the
+function name).
 
-Wrap a function so each call is captured.
-
-- `name` — the span/run label (defaults to the function name).
-- `operation` — the `gen_ai.operation.name` tag (defaults to `"invoke_agent"`).
+### `with pk.span(name, **attributes)`
+Capture a sub-step as a child span. Keyword attributes are attached to the span.
 
 ### `pk.configure(api_key=None, endpoint=None, *, batch=True)`
-
 Wire up tracing explicitly instead of via the environment. Called automatically on first
-use; call it yourself only to pass values in code or to change batching. Returns `True` if
-tracing is active, `False` if it's a no-op. Idempotent.
-
-- `api_key` / `endpoint` — default to `PROVEKIT_API_KEY` / `PROVEKIT_ENDPOINT`.
-- `batch` — `True` batches exports in the background (default); `False` exports each span
-  synchronously (useful in short-lived scripts and tests).
+use; returns `True` if active, `False` if a no-op. Idempotent. `batch=False` exports each
+span synchronously (handy in short scripts).
 
 ### Environment
 
 | variable | meaning |
 |---|---|
-| `PROVEKIT_API_KEY` | a `pk_` key from **API Keys** in the portal |
+| `PROVEKIT_API_KEY` | the `pk_` project key from the portal |
 | `PROVEKIT_ENDPOINT` | your ProveKit URL; traces ship to `${PROVEKIT_ENDPOINT}/v1/traces` |
 
----
+## Fail-open
 
-## Fail-open by design
+Tracing never takes your agent down. If the key/endpoint are unset, OpenTelemetry isn't
+installed, or the portal is unreachable, tracing degrades to a transparent no-op — your
+function runs exactly as it would without the decorator.
 
-Tracing must never take your agent down. If `PROVEKIT_API_KEY`/`PROVEKIT_ENDPOINT` are
-unset, the OpenTelemetry SDK isn't installed, or the portal is unreachable, tracing
-degrades to a transparent no-op — your function runs exactly as it would without the
-decorator. Export failures are swallowed and logged at debug level, never raised.
+## Other languages / stock OpenTelemetry
 
----
+ProveKit is OTel-native: the ingest endpoint accepts OTLP/JSON, so any OpenTelemetry
+exporter (any language) can `POST` gen_ai spans to `${PROVEKIT_ENDPOINT}/v1/traces` with
+your project key as a bearer token — the Python decorator is the batteries-included path,
+not the only one.
 
-## How it works
+## Notes
 
-The decorator uses the OpenTelemetry SDK to create spans and a minimal exporter that ships
-them to `${PROVEKIT_ENDPOINT}/v1/traces` as OTLP-JSON, authenticated with your `pk_` key as
-a bearer token. The server maps `gen_ai` spans into runs; **Save as test** maps a run into
-a saved request plus an `llm_judge` assertion, which serializes to a `.provekit` file via
-the same exporter the console uses. Nothing about your model calls is intercepted or
-proxied — the decorator only observes.
-
----
-
-## Notes & limits
-
-- The seeded `llm_judge` needs an LLM connection to run (the one you pick, or one you
-  attach later). Refine the criteria or swap assertion types in the console.
-- The Traces view lists each captured span as its own run (a flat list, newest first),
-  not yet a nested waterfall.
+- Secrets are never sent by the decorator — only the inputs/outputs of the traced
+  function. Redact anything sensitive before returning it if you don't want it captured.
 - Self-hosters set `PROVEKIT_ENDPOINT` to their instance; there is no default hosted
   endpoint.
-- Secrets are never sent by the decorator — only the inputs/outputs you pass through the
-  traced function. Redact anything sensitive before returning it if you don't want it
-  captured.

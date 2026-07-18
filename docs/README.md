@@ -1,21 +1,14 @@
 # ProveKit docs
 
-- [Quickstart & contributing](../CONTRIBUTING.md) — clone to running in ~2 minutes
-- [`.provekit` file format](FILE_FORMAT.md) — git-diffable tests & flows
-- [Tracing → tests](TRACING.md) — capture real agent runs with `@pk.trace`, turn any one
-  into a regression test (the trace → test bridge)
-- [LangGraph starter](../examples/langgraph-starter/) — test a framework agent from the
-  outside (serve wrapper + `.provekit/` tests + CI workflow), no SDK
+- [Tracing guide](TRACING.md) — the decorator, `pk.span()`, configuration, what's captured
 - [Deployment](DEPLOY.md) — local vs hosted (TLS, Postgres, Redis)
-- [Product strategy](PRODUCT_STRATEGY.md) — positioning, competitive analysis, roadmap
+- [Contributing](../CONTRIBUTING.md) — clone to running
 - [Security](../SECURITY.md) — threat model, secret handling, disclosure
-- [Changelog](../CHANGELOG.md)
 
 ## The 60-second tour
 
-1. `make setup && make backend && make frontend`, open http://localhost:3001
-2. Run the seeded **Demo Assistant (mock)** — streams an answer, no key needed.
-3. Click **+ contains** on the result to turn it into an assertion; run again to check it.
-4. Open a **Flow**, hit **Run** to watch nodes execute, then **▲ Deploy** to publish it as
-   an API endpoint (you get a URL + one-time key + a ready `curl`).
-5. `provekit run .provekit/tests/` runs your saved tests headless in CI.
+1. Sign in to the portal and create a project → copy its key.
+2. `pip install "provekit[trace]"`, put the key + endpoint in `.env`.
+3. Add `@pk.trace(name="my-agent")` at your agent's entrypoint and run it.
+4. Open **Traces** — your run appears as a nested flow: the entrypoint, the model calls,
+   the tools, each with its input and output.

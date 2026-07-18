@@ -1,7 +1,0 @@
-# The demo agent server (serve.py). In your project you already have langgraph + your
-# LLM provider; you only additionally need fastapi + uvicorn to expose the endpoint,
-# and `provekit` to run the tests.
-fastapi
-uvicorn[standard]
-langgraph
-langchain-openai

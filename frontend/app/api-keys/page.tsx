@@ -41,11 +41,11 @@ export default function ApiKeysPage() {
     <>
       <TopNav />
       <main style={{ maxWidth: 860, margin: "0 auto", padding: "28px 20px 80px" }}>
-        <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>API keys</h1>
+        <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Project keys</h1>
         <p className="muted" style={{ margin: "0 0 24px", fontSize: 13.5 }}>
-          Bearer keys for machine access — the tracing decorator, CI, and the CLI. Drop one in
-          your <span className="mono">.env</span> as <span className="mono">PROVEKIT_API_KEY</span>.
-          The key is shown once at creation and stored only as a hash.
+          A key connects your agent to this project. Drop one in your{" "}
+          <span className="mono">.env</span> as <span className="mono">PROVEKIT_API_KEY</span> —
+          create one per app or environment. Shown once at creation, stored only as a hash.
         </p>
 
         {/* create */}

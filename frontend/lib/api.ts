@@ -99,7 +99,7 @@ export const api = {
   // runs
   runs: (type?: string) => j<RunSummary[]>(`/api/runs${type ? `?type=${encodeURIComponent(type)}` : ""}`),
   getRun: (id: number) => j<any>(`/api/runs/${id}`),
-  runToTest: (id: number, body: { name?: string; collection_id?: number | null } = {}) =>
+  runToTest: (id: number, body: { name?: string; collection_id?: number | null; connection_id?: number | null } = {}) =>
     j<{ id: number; name: string; type: string }>(`/api/runs/${id}/to-test`, { method: "POST", body: JSON.stringify(body) }),
   runOnce: (request: any, variables: Record<string, any> = {}) =>
     j<{ result: any; status: string; duration_ms: number; assertions: any[] }>("/api/run", { method: "POST", body: JSON.stringify({ request, variables, save: false }) }),

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
-from ..models import Environment, Request, Run, Workspace, iso_utc
+from ..models import Connection, Environment, Request, Run, Workspace, iso_utc
 from ..services import assertions as assertion_engine
 from ..services import dispatch, otel, tracetest
 from ..services.limits import check_rate, clamp_max_tokens, enforce_dataset_size, prune_runs
@@ -210,17 +210,24 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
 class _ToTest(BaseModel):
     name: str | None = None
     collection_id: int | None = None
+    connection_id: int | None = None
 
 
 @router.post("/runs/{rid}/to-test")
 def run_to_test(rid: int, body: _ToTest, db: Session = Depends(get_db),
                 ws: Workspace = Depends(current_workspace)):
-    """Turn a captured run into a saved Request (a prompt test seeded from the run's input
-    and output). It's then runnable in the console and exportable to a .provekit file."""
+    """Turn a captured run into a saved Request: a prompt test seeded from the run's input,
+    with an llm_judge assertion on the captured output. If connection_id is given (and in
+    this workspace) it's wired to both the prompt and the judge so the test runs as-is.
+    Runnable in the console and exportable to a .provekit file."""
     r = db.get(Run, rid)
     if not r or r.workspace_id != ws.id:
         raise HTTPException(404, "Run not found")
-    payload = tracetest.run_to_request_payload(r.request, r.result)
+    if body.connection_id is not None:
+        conn = db.get(Connection, body.connection_id)
+        if not conn or conn.workspace_id != ws.id:
+            raise HTTPException(400, "Unknown connection")
+    payload = tracetest.run_to_request_payload(r.request, r.result, body.connection_id)
     name = (body.name or r.label or "trace test")[:160]
     req = Request(workspace_id=ws.id, name=name, type=payload["type"],
                   payload=payload, collection_id=body.collection_id)

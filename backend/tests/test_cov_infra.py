@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import logging
+import uuid
 
 import pytest
 from cryptography.fernet import Fernet
@@ -1028,7 +1029,7 @@ from provekit.services import workspace as ws_mod
 
 def _make_user_and_ws(db):
     from provekit.models import User, Workspace
-    u = User(email=f"seed{id(db)}@x.com", password_hash="x")
+    u = User(email=f"seed-{uuid.uuid4().hex}@x.com", password_hash="x")
     db.add(u); db.commit(); db.refresh(u)
     w = Workspace(name="W", owner_user_id=u.id)
     db.add(w); db.commit(); db.refresh(w)
@@ -1080,7 +1081,7 @@ def test_get_or_create_default_workspace_seeds_and_reuses(monkeypatch):
     monkeypatch.setattr(s, "seed_examples", False, raising=False)
     db = SessionLocal()
     try:
-        u = User(email=f"wsuser{id(db)}@x.com", password_hash="x")
+        u = User(email=f"wsuser-{uuid.uuid4().hex}@x.com", password_hash="x")
         db.add(u); db.commit(); db.refresh(u)
         w1 = ws_mod.get_or_create_default_workspace(db, u)
         w2 = ws_mod.get_or_create_default_workspace(db, u)  # existing -> returned as-is

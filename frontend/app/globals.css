@@ -585,3 +585,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 /* sidebar empty-state icon (History / Collections) */
 .side-empty .se-ic { font-size: 22px; color: var(--faint); margin-bottom: 9px; opacity: .75; }
+
+/* Smooth anchor scrolling (landing nav); off for reduced-motion. */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

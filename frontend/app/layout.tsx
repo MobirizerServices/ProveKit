@@ -16,6 +16,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  // Prod resolves OG/Twitter image URLs against this — set NEXT_PUBLIC_SITE_URL in deploy.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: {
     default: "ProveKit — Prove any AI agent works",
     template: "%s · ProveKit",

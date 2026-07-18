@@ -47,14 +47,23 @@ function CopyButton({ text }: { text: string }) {
 
 function Terminal() {
   const [shown, setShown] = useState(0);
+  const [reduce, setReduce] = useState(false);
   useEffect(() => {
+    setReduce(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+  useEffect(() => {
+    // Respect reduced motion: show the whole run at once, no typing loop.
+    if (reduce) {
+      setShown(TERM.length);
+      return;
+    }
     if (shown >= TERM.length) {
       const r = setTimeout(() => setShown(0), 2600); // loop
       return () => clearTimeout(r);
     }
     const t = setTimeout(() => setShown((n) => n + 1), TERM[shown].d);
     return () => clearTimeout(t);
-  }, [shown]);
+  }, [shown, reduce]);
   return (
     <div className={s.term}>
       <div className={s.termHead}>
@@ -134,6 +143,29 @@ const CASES = [
 ];
 
 export default function Landing() {
+  const [scrolled, setScrolled] = useState(false);
+  const [stars, setStars] = useState<number | null>(null);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 460);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    // Real star count — falls back silently to "★ GitHub" if rate-limited/offline.
+    fetch("https://api.github.com/repos/MobirizerServices/ProveKit")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.stargazers_count === "number") setStars(d.stargazers_count);
+      })
+      .catch(() => {});
+  }, []);
+
+  const starLabel =
+    stars == null ? "★ GitHub" : `★ ${stars >= 1000 ? (stars / 1000).toFixed(1) + "k" : stars}`;
+
   return (
     <div className={s.page}>
       {/* nav */}
@@ -147,7 +179,14 @@ export default function Landing() {
             <a href={DOCS}>Docs</a>
           </div>
           <div className={s.navRight}>
-            <a className={s.btnGhost} href={GITHUB}>★ GitHub</a>
+            {scrolled && (
+              <div className={s.installMini}>
+                <span className={s.dollar}>$</span>
+                <span className={s.cmd}>pipx install provekit</span>
+                <CopyButton text="pipx install provekit" />
+              </div>
+            )}
+            <a className={s.btnGhost} href={GITHUB}>{starLabel}</a>
             <a className={s.btnGold} href="/console">Open app</a>
           </div>
         </div>

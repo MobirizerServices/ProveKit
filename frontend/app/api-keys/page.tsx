@@ -10,10 +10,11 @@ export default function ApiKeysPage() {
   const [busy, setBusy] = useState(false);
   const [fresh, setFresh] = useState<string | null>(null); // plaintext, shown exactly once
   const [toast, setToast] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("https://your-provekit-host");
 
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 2000); };
   const load = () => api.apiKeys().then(setKeys).catch(() => {});
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); setOrigin(window.location.origin); }, []);
 
   const create = async () => {
     setBusy(true);
@@ -80,6 +81,26 @@ export default function ApiKeysPage() {
           )}
         </div>
 
+        {/* usage */}
+        <div style={{ ...panel, marginTop: 18 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Use your key</div>
+          <p className="muted" style={{ margin: "0 0 10px", fontSize: 13 }}>
+            Wrap your agent's entrypoint — each call is captured as a run you can turn into a
+            regression test. Any OpenAI/Anthropic calls inside are captured automatically.
+          </p>
+          <pre style={code}>{`pip install "provekit[trace]"
+
+# .env
+PROVEKIT_API_KEY=pk_...
+PROVEKIT_ENDPOINT=${origin}
+
+import provekit.trace as pk
+
+@pk.trace(name="support-agent")
+def run_agent(question: str) -> str:
+    ...  # your agent; the input + output land in the portal`}</pre>
+        </div>
+
         {/* list */}
         <div style={{ ...panel, marginTop: 18, padding: 0 }}>
           {keys.length === 0 ? (
@@ -133,3 +154,8 @@ const keyBox: React.CSSProperties = {
 };
 const th: React.CSSProperties = { padding: "10px 14px", fontWeight: 500, fontSize: 12 };
 const td: React.CSSProperties = { padding: "11px 14px" };
+const code: React.CSSProperties = {
+  margin: 0, padding: 14, borderRadius: 8, background: "var(--bg-2)",
+  border: "1px solid var(--border-strong)", fontSize: 12.5, lineHeight: 1.6,
+  fontFamily: "var(--font-mono)", overflowX: "auto", whiteSpace: "pre",
+};

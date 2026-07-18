@@ -55,6 +55,13 @@ server = [
     "redis>=5.2,<6",
     "sentry-sdk[fastapi]>=2.20,<3",
 ]
+# The tracing SDK: capture real agent runs and ship them to a ProveKit portal, then turn
+# a run into a regression test. `pip install provekit[trace]`. Only the OpenTelemetry SDK
+# is added — the JSON exporter and HTTP shipping ride on httpx, already a core dep.
+trace = [
+    "opentelemetry-api>=1.20,<2",
+    "opentelemetry-sdk>=1.20,<2",
+]
 # Keep in sync with requirements-dev.txt — CI gates on pytest+coverage and ruff.
 dev = ["pytest==9.1.1", "pytest-cov==6.0.0", "ruff==0.9.2"]
 

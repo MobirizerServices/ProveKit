@@ -127,8 +127,9 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
                 left: `${b.left}%`, width: `${b.width}%`, minWidth: 3,
                 background: s.status === "failed" ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)"), opacity: 0.85 }} />}
             </span>
-            <span className="muted" style={{ fontSize: 11, flexShrink: 0, width: 58, textAlign: "right" }}>
-              {s.duration_ms}ms
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              {tokens(s) && <span className="muted mono" style={{ fontSize: 10.5 }} title="input → output tokens">{tokens(s)}</span>}
+              <span className="muted" style={{ fontSize: 11, width: 54, textAlign: "right" }}>{s.duration_ms}ms</span>
             </span>
           </button>
           {open === s.span_id && (
@@ -143,7 +144,19 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
         </div>
       );
     });
-  return <div>{render("__root__", 0)}</div>;
+  const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
+  const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{root?.label || "trace"}</span>
+        <span className="muted" style={{ fontSize: 12 }}>
+          {spans.length} span{spans.length === 1 ? "" : "s"} · {root?.duration_ms ?? 0}ms{totalTok ? ` · ${totalTok} tokens` : ""}
+        </span>
+      </div>
+      {render("__root__", 0)}
+    </div>
+  );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -159,6 +172,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function textOf(v: any): string {
   if (v == null) return "";
   return typeof v === "string" ? v : JSON.stringify(v, null, 2);
+}
+
+function tokens(s: TraceSpan): string | null {
+  const u = s.result?.meta?.usage;
+  if (!u || u.input_tokens == null) return null;
+  return `${u.input_tokens}→${u.output_tokens ?? 0} tok`;
 }
 
 const panel: React.CSSProperties = {

@@ -15,7 +15,7 @@ const INSTALLS: Record<string, string> = {
 
 // The loop, as ProveKit actually prints it. Revealed line-by-line below.
 const TERM: { t: string; c: string; d: number }[] = [
-  { t: "$ provekit run tests/support-agent.yaml", c: "p", d: 60 },
+  { t: "$ provekit run .provekit/tests/", c: "p", d: 60 },
   { t: "→ connect  mcp://localhost:8931", c: "dim", d: 500 },
   { t: '→ stream   "Sure — let me pull up your order and check the refund window…"', c: "stream", d: 900 },
   { t: "+ assert   tool_called(\"lookup_order\")            ✓", c: "assert", d: 380 },
@@ -105,17 +105,17 @@ function Quickstart() {
         </div>
         <div className={s.codeBox} style={{ marginTop: 10 }}>
           <span>
-            <span style={{ color: "var(--faint)" }}>$ </span>provekit run tests/agent.yaml
+            <span style={{ color: "var(--faint)" }}>$ </span>provekit run .provekit/tests/
           </span>
-          <CopyButton text="provekit run tests/agent.yaml" />
+          <CopyButton text="provekit run .provekit/tests/" />
         </div>
       </div>
       <ol className={s.qsList}>
         <li><span><b>Install</b> — one command, no SDK, nothing to import into your code.</span></li>
         <li><span><b>Connect</b> — point it at an LLM API, MCP server, HTTP or A2A agent.</span></li>
         <li><span><b>Run</b> — watch it stream live; every call, tool, latency and cost is captured.</span></li>
-        <li><span><b>Assert</b> — turn a good run into a regression test in one click.</span></li>
-        <li><span><b>Ship</b> — drop the suite into CI; no green check, no merge.</span></li>
+        <li><span><b>Assert</b> — click <code>+ contains</code> on a result and it saves a plain-text, git-diffable test.</span></li>
+        <li><span><b>Ship</b> — <code>provekit run .provekit/tests/</code> in CI; no green check, no merge.</span></li>
       </ol>
     </div>
   );
@@ -168,6 +168,7 @@ export default function Landing() {
 
   return (
     <div className={s.page}>
+      <a className={s.skip} href="#main">Skip to content</a>
       {/* nav */}
       <nav className={s.nav}>
         <div className={s.navInner}>
@@ -193,7 +194,7 @@ export default function Landing() {
       </nav>
 
       {/* hero */}
-      <header className={s.hero}>
+      <header className={s.hero} id="main">
         <div className={s.wrap}>
           <span className={s.eyebrow}>◇ Open-source universal agent client</span>
           <h1 className={s.h1}>Prove any AI agent works.</h1>

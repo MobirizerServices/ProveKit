@@ -112,6 +112,12 @@
 .qsList li::before { content: counter(q); font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 700; }
 .qsList b { color: var(--text); }
 .qsList span { color: var(--muted); font-size: 13.5px; }
+.qsList code { font-family: var(--mono); font-size: 12px; color: var(--accent-2); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+/* Skip-to-content — visible only on keyboard focus. */
+.skip { position: absolute; left: -9999px; top: 8px; z-index: 50; background: var(--accent); color: var(--accent-ink);
+  padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; }
+.skip:focus { left: 12px; }
 
 .cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 28px; }
 .case { background: var(--panel); border: 1px solid var(--border-2); border-radius: 12px; padding: 16px; color: var(--text-dim); font-size: 14px; }

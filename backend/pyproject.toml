@@ -1,12 +1,12 @@
 [project]
 name = "provekit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Drop-in agent tracing — add one decorator, get a project key, review every run your agent makes."
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "ProveKit contributors" }]
-keywords = ["agent", "llm", "testing", "evals", "mcp", "ci", "prompt", "openai", "anthropic"]
+keywords = ["agent", "llm", "tracing", "observability", "opentelemetry", "openai", "anthropic", "otel"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -15,7 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Monitoring",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -24,15 +24,11 @@ classifiers = [
 # exact reproducible pins live in requirements.txt (the deployment lock) and drive Docker.
 # The web app / hosted server deps live in the `server` extra below — install with
 # `pip install provekit[server]`.
+# Core is deliberately tiny: the tracing SDK (provekit.trace) only needs httpx. The web
+# app / hosted server deps live in the `server` extra (`pip install provekit[server]`), and
+# the OpenTelemetry pieces in `trace` — so `pip install "provekit[trace]"` stays lean.
 dependencies = [
-    "sqlalchemy>=2.0,<3",
-    "pydantic>=2.10,<3",
-    "pydantic-settings>=2.7,<3",
     "httpx>=0.28,<1",
-    "jsonschema>=4.23,<5",
-    "cryptography>=42,<50",
-    "pyyaml>=6,<7",
-    "anyio>=4,<5",
 ]
 
 [project.urls]
@@ -46,6 +42,11 @@ Issues = "https://github.com/MobirizerServices/ProveKit/issues"
 server = [
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.34,<1",
+    "sqlalchemy>=2.0,<3",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.7,<3",
+    "cryptography>=42,<50",
+    "anyio>=4,<5",
     "alembic>=1.18,<2",
     "psycopg[binary]>=3.3,<4",
     "email-validator>=2.2,<3",

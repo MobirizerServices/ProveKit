@@ -1,47 +1,49 @@
 # ProveKit
 
-**Prove your agent works.** ProveKit tests any AI agent — an LLM API, an MCP server, an
-HTTP agent, or an A2A agent — turns a run into a regression test, and runs the suite
-headless in CI. Open-source, local-first, no account.
-
-This package is the **`provekit` CLI** — the headless test runner. The full visual app
-(console, flow builder, live step-debugger) runs as a server; see the
-[repo](https://github.com/MobirizerServices/ProveKit).
+**One decorator. The whole agent flow.** Add one `@pk.trace` at your agent's entrypoint and
+review every run — the model calls, tools, and steps — as a nested flow in your ProveKit
+portal. OpenAI/Anthropic calls capture themselves. Open source, self-hostable, no framework
+lock-in.
 
 ## Install
 
 ```bash
-pip install provekit
+pip install "provekit[trace]"
 ```
 
-## Use in CI
+## Use
 
-Write plain-text, git-diffable tests under `.provekit/` (connections referenced by name,
-secrets via `${ENV_VAR}` — never in the files), commit them, and run:
+```python
+import provekit.trace as pk
+
+# .env
+#   PROVEKIT_API_KEY=pk_...        (create a project + key in the portal)
+#   PROVEKIT_ENDPOINT=https://your-provekit-host
+
+@pk.trace(name="support-agent")
+def run_agent(question: str) -> str:
+    docs = retrieve(question)          # wrap sub-steps with `with pk.span("retrieve"):`
+    return chat(question, docs)        # the OpenAI/Anthropic call captures itself
+```
+
+Run your agent, open **Traces** in the portal, and every run shows up as a nested waterfall
+with per-span input, output, and token usage.
+
+It's OpenTelemetry under the hood, so your data is portable and nothing is locked in — but
+you never have to touch OTel. Fail-open by design: if the key/endpoint are unset or the
+portal is unreachable, your app runs completely unaffected.
+
+## Run the portal (self-host)
+
+The web app + ingest server ship in the same package:
 
 ```bash
-provekit run .provekit/tests/                      # pretty output, non-zero exit on failure
-provekit run .provekit/tests/ --format junit -o results.xml
-provekit import-promptfoo promptfooconfig.yaml -o .provekit/tests/   # migrate from promptfoo
+pip install "provekit[server]"
+uvicorn provekit.main:app --port 8100
 ```
 
-Connections resolve from `.provekit/connections.yaml`:
+See the [repo](https://github.com/MobirizerServices/ProveKit) for Docker/compose and the
+full [tracing guide](https://github.com/MobirizerServices/ProveKit/blob/main/docs/TRACING.md).
 
-```yaml
-connections:
-  OpenAI (prod):
-    provider: openai
-    api_key: ${OPENAI_API_KEY}
-    models: [gpt-4o-mini]
-```
-
-## Assertions
-
-`contains` · `equals` · `regex` · `json_path` · `json_schema` · `tool_called` ·
-`latency_lt` · `llm_judge` — pass/fail per assertion, non-zero exit on failure.
-
-## Links
-
-- Repository & full app: https://github.com/MobirizerServices/ProveKit
-- File format: see `docs/FILE_FORMAT.md` in the repo
+- Repository: https://github.com/MobirizerServices/ProveKit
 - License: MIT

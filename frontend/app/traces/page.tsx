@@ -88,29 +88,61 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
     const p = s.parent_span_id && ids.has(s.parent_span_id) ? s.parent_span_id : "__root__";
     (kids[p] ||= []).push(s);
   }
+
+  // Time-proportional waterfall: epoch-ns overflow JS floats, so anchor at the trace start
+  // and work in BigInt deltas (a trace spans at most seconds, well within Number range).
+  const startNs = (s: TraceSpan): bigint | null => {
+    const v = s.result?.meta?.start_ns;
+    return v ? BigInt(v) : null;
+  };
+  const starts = spans.map(startNs).filter((x): x is bigint => x !== null);
+  const t0 = starts.length ? starts.reduce((a, b) => (b < a ? b : a)) : 0n;
+  let totalNs = 1;
+  for (const s of spans) {
+    const st = startNs(s);
+    if (st === null) continue;
+    const end = Number(st - t0) + (s.duration_ms || 0) * 1e6;
+    if (end > totalNs) totalNs = end;
+  }
+  const bar = (s: TraceSpan) => {
+    const st = startNs(s);
+    if (st === null) return null;
+    const left = (Number(st - t0) / totalNs) * 100;
+    const width = Math.max(((s.duration_ms || 0) * 1e6 / totalNs) * 100, 1.2);
+    return { left: Math.min(left, 99), width: Math.min(width, 100 - Math.min(left, 99)) };
+  };
+
   const render = (parent: string, depth: number): React.ReactNode =>
-    (kids[parent] || []).map((s) => (
-      <div key={s.span_id}>
-        <button onClick={() => setOpen(open === s.span_id ? null : s.span_id)} style={spanRow(open === s.span_id)}>
-          <span style={{ paddingLeft: depth * 18, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-            <span style={badge(s.type)}>{s.type}</span>
-            <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
-          </span>
-          <span className="muted" style={{ fontSize: 11.5, flexShrink: 0 }}>
-            {s.status === "failed" ? <span style={{ color: "var(--red)" }}>failed · </span> : null}{s.duration_ms}ms
-          </span>
-        </button>
-        {open === s.span_id && (
-          <div style={{ padding: `4px 0 10px ${depth * 18 + 14}px` }}>
-            {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
-            <Field label="Input">{textOf(s.request?.input)}</Field>
-            <Field label="Output">{textOf(s.result?.text)}</Field>
-            {s.error && <Field label="Error">{s.error}</Field>}
-          </div>
-        )}
-        {render(s.span_id, depth + 1)}
-      </div>
-    ));
+    (kids[parent] || []).map((s) => {
+      const b = bar(s);
+      return (
+        <div key={s.span_id}>
+          <button onClick={() => setOpen(open === s.span_id ? null : s.span_id)} style={spanRow(open === s.span_id)}>
+            <span style={{ paddingLeft: depth * 16, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, flex: "0 0 46%" }}>
+              <span style={badge(s.type)}>{s.type}</span>
+              <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
+            </span>
+            <span style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", borderRadius: 4 }}>
+              {b && <span style={{ position: "absolute", top: 3, height: 10, borderRadius: 3,
+                left: `${b.left}%`, width: `${b.width}%`, minWidth: 3,
+                background: s.status === "failed" ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)"), opacity: 0.85 }} />}
+            </span>
+            <span className="muted" style={{ fontSize: 11, flexShrink: 0, width: 58, textAlign: "right" }}>
+              {s.duration_ms}ms
+            </span>
+          </button>
+          {open === s.span_id && (
+            <div style={{ padding: `4px 0 10px ${depth * 16 + 14}px` }}>
+              {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
+              <Field label="Input">{textOf(s.request?.input)}</Field>
+              <Field label="Output">{textOf(s.result?.text)}</Field>
+              {s.error && <Field label="Error">{s.error}</Field>}
+            </div>
+          )}
+          {render(s.span_id, depth + 1)}
+        </div>
+      );
+    });
   return <div>{render("__root__", 0)}</div>;
 }
 

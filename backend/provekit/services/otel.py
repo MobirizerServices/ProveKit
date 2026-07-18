@@ -97,7 +97,10 @@ def map_span(span: dict) -> dict:
         rtype, op = "step", operation or (span.get("name") or "step")
 
     label = f"{op} {model}" if model else (span.get("name") or op)
-    meta = {"provider": provider, "model": model, "usage": usage, "source": "otel"}
+    # start_ns as a STRING: epoch-nanoseconds overflow JS's 53-bit floats, but the client
+    # only needs per-span *offsets* within a trace (a small delta) — computed via BigInt.
+    meta = {"provider": provider, "model": model, "usage": usage, "source": "otel",
+            "start_ns": str(start)}
     if tool:
         meta["tool"] = tool
     return {

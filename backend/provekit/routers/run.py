@@ -9,9 +9,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
-from ..models import Environment, Run, Workspace, iso_utc
+from ..models import Environment, Request, Run, Workspace, iso_utc
 from ..services import assertions as assertion_engine
-from ..services import dispatch, otel
+from ..services import dispatch, otel, tracetest
 from ..services.limits import check_rate, clamp_max_tokens, enforce_dataset_size, prune_runs
 from ..services.masking import mask_body, mask_headers
 from ..services.workspace import current_workspace
@@ -185,9 +185,13 @@ async def dataset_run(payload: DatasetPayload, db: Session = Depends(get_db), ws
 
 
 @router.get("/runs")
-def list_runs(limit: int = 30, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+def list_runs(limit: int = 30, type: str | None = None, db: Session = Depends(get_db),
+              ws: Workspace = Depends(current_workspace)):
     limit = max(1, min(limit, 200))  # bound the page (SQLite treats LIMIT -1 as unlimited)
-    rows = db.query(Run).filter(Run.workspace_id == ws.id).order_by(Run.id.desc()).limit(limit).all()
+    q = db.query(Run).filter(Run.workspace_id == ws.id)
+    if type:  # e.g. ?type=trace for the Traces view (OTEL-ingested runs)
+        q = q.filter(Run.type == type)
+    rows = q.order_by(Run.id.desc()).limit(limit).all()
     return [{"id": r.id, "type": r.type, "label": r.label, "status": r.status,
              "duration_ms": r.duration_ms, "created_at": iso_utc(r.created_at)}
             for r in rows]
@@ -201,3 +205,26 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
     return {"id": r.id, "type": r.type, "label": r.label, "request": r.request,
             "result": r.result, "status": r.status, "duration_ms": r.duration_ms,
             "error": r.error, "created_at": iso_utc(r.created_at)}
+
+
+class _ToTest(BaseModel):
+    name: str | None = None
+    collection_id: int | None = None
+
+
+@router.post("/runs/{rid}/to-test")
+def run_to_test(rid: int, body: _ToTest, db: Session = Depends(get_db),
+                ws: Workspace = Depends(current_workspace)):
+    """Turn a captured run into a saved Request (a prompt test seeded from the run's input
+    and output). It's then runnable in the console and exportable to a .provekit file."""
+    r = db.get(Run, rid)
+    if not r or r.workspace_id != ws.id:
+        raise HTTPException(404, "Run not found")
+    payload = tracetest.run_to_request_payload(r.request, r.result)
+    name = (body.name or r.label or "trace test")[:160]
+    req = Request(workspace_id=ws.id, name=name, type=payload["type"],
+                  payload=payload, collection_id=body.collection_id)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return {"id": req.id, "name": req.name, "type": req.type}

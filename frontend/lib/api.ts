@@ -97,8 +97,10 @@ export const api = {
   updateEnvironment: (id: number, e: Partial<EnvironmentT>) => j<EnvironmentT>(`/api/environments/${id}`, { method: "PUT", body: JSON.stringify(e) }),
   deleteEnvironment: (id: number) => j(`/api/environments/${id}`, { method: "DELETE" }),
   // runs
-  runs: () => j<RunSummary[]>("/api/runs"),
+  runs: (type?: string) => j<RunSummary[]>(`/api/runs${type ? `?type=${encodeURIComponent(type)}` : ""}`),
   getRun: (id: number) => j<any>(`/api/runs/${id}`),
+  runToTest: (id: number, body: { name?: string; collection_id?: number | null } = {}) =>
+    j<{ id: number; name: string; type: string }>(`/api/runs/${id}/to-test`, { method: "POST", body: JSON.stringify(body) }),
   runOnce: (request: any, variables: Record<string, any> = {}) =>
     j<{ result: any; status: string; duration_ms: number; assertions: any[] }>("/api/run", { method: "POST", body: JSON.stringify({ request, variables, save: false }) }),
   datasetRun: (request: any, rows: { name: string; variables: Record<string, string> }[]) =>

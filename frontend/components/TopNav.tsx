@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/", label: "Console" },
   { href: "/flows", label: "Flows" },
   { href: "/prompts", label: "Prompts" },
+  { href: "/traces", label: "Traces" },
   { href: "/deployments", label: "Deployments" },
   { href: "/api-keys", label: "API Keys" },
 ];

@@ -126,6 +126,16 @@ Console ─ single-shot runner    Flows ─ visual node canvas     Prompts ─ r
   `extract.json`, …) with name/description/body. Edit once; every flow prompt node bound to
   that key uses the new content on its next run.
 
+### Traces — capture real runs, turn one into a test
+
+- **`@pk.trace` decorator** — `pip install "provekit[trace]"`, add a decorator to your
+  agent's entrypoint, and every real call is captured as a run. It's OpenTelemetry-native,
+  so any OpenAI/Anthropic instrumentation you already have is captured too — and fail-open,
+  so it never affects your app. Or point any OTLP exporter at `/v1/traces`.
+- **Save as test** — pick a captured run and turn it into a runnable `.provekit` regression
+  test in one click, seeded with an `llm_judge` assertion against the captured output. The
+  bridge from a real production run to a committed CI test. See [docs/TRACING.md](docs/TRACING.md).
+
 ## CLI — run tests in CI
 
 Export any saved request or flow to a plain-text, git-diffable `.provekit` file

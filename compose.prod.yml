@@ -1,5 +1,5 @@
 # Production stack: Caddy (TLS) → frontend + backend, Postgres, Redis.
-# Bring up:  DOMAIN=agentman.example.com SECRET_KEY=... docker compose -f compose.prod.yml up -d --build
+# Bring up:  DOMAIN=provekit.example.com SECRET_KEY=... docker compose -f compose.prod.yml up -d --build
 # No service ports are published except Caddy's 80/443.
 services:
   caddy:
@@ -22,13 +22,13 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: agentman
+      POSTGRES_USER: provekit
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
-      POSTGRES_DB: agentman
+      POSTGRES_DB: provekit
     volumes:
-      - agentman-pg:/var/lib/postgresql/data
+      - provekit-pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentman"]
+      test: ["CMD-SHELL", "pg_isready -U provekit"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -45,10 +45,10 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    command: ["uvicorn", "agentman.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "4"]
+    command: ["uvicorn", "provekit.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "4"]
     environment:
       HOSTED: "true"
-      DATABASE_URL: "postgresql+psycopg://agentman:${POSTGRES_PASSWORD:?}@db:5432/agentman"
+      DATABASE_URL: "postgresql+psycopg://provekit:${POSTGRES_PASSWORD:?}@db:5432/provekit"
       REDIS_URL: "redis://redis:6379/0"
       SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY}"
       CORS_ORIGINS: "https://${DOMAIN}"
@@ -83,6 +83,6 @@ services:
       - backend
 
 volumes:
-  agentman-pg:
+  provekit-pg:
   caddy-data:
   caddy-config:

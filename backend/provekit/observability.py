@@ -45,9 +45,9 @@ def init_sentry() -> None:
     try:
         import sentry_sdk
         sentry_sdk.init(dsn=dsn, traces_sample_rate=0.1)
-        logging.getLogger("agentman").info("sentry enabled")
+        logging.getLogger("provekit").info("sentry enabled")
     except ImportError:
-        logging.getLogger("agentman").warning("SENTRY_DSN set but sentry-sdk not installed")
+        logging.getLogger("provekit").warning("SENTRY_DSN set but sentry-sdk not installed")
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):

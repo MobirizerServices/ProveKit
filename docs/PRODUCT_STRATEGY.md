@@ -1,4 +1,4 @@
-# AgentMan — Product Strategy (finalized July 16, 2026)
+# ProveKit — Product Strategy (finalized July 16, 2026)
 
 > Synthesis of a 4-track deep research effort (competitive landscape in testing/evals,
 > builders/deployment, protocol standards, and OSS business playbooks). ~180 sources,
@@ -9,7 +9,7 @@
 
 ## 1. The finalized idea
 
-**AgentMan is the open-source universal agent client.**
+**ProveKit is the open-source universal agent client.**
 
 > *Test, debug, and evaluate any AI agent — any provider, any protocol, no SDK required.
 > Point it at an LLM API, an MCP server, or a deployed HTTP agent; chat and stream with it;
@@ -61,7 +61,7 @@ instrument your code with, and not another canvas to rebuild your agent in.
   assertions/datasets/regression + deploy. Everyone has at most two legs
   (LangSmith: evals+debug but LangGraph-locked; Vellum: closest combo but closed and
   sales-led; Dify: best OSS step-debug, zero evals; Flowise: evals paywalled;
-  n8n: evals young, no step-debugger). AgentMan keeps its flow builder + step-debugger
+  n8n: evals young, no step-debugger). ProveKit keeps its flow builder + step-debugger
   as a supporting leg — **the pitch is verification, deploy is retention glue.**
 
 ### The wedge decision (was: test-first vs deploy-first vs both)
@@ -101,7 +101,7 @@ March 2026, credit-metered, closed, with a documented trust deficit).
 | OpenAI Chat Completions | The lingua franca; already have it. |
 | OpenAI Responses / "Open Responses" | All agentic features are Responses-only; open spec cloned by vLLM/Ollama/HF/OpenRouter. Support stateful + stateless modes. |
 | Anthropic Messages (native) | Content blocks, tool_use round-trips, SSE, stop_reason, beta headers. Do NOT use the OpenAI-compat shim. |
-| OTel GenAI trace ingest (`gen_ai.*`) | Every framework emits it by default now. Thin mapping layer (schema still churning: accept legacy + OpenInference + v1.37+ shapes). Also emit spans from AgentMan's own runs. |
+| OTel GenAI trace ingest (`gen_ai.*`) | Every framework emits it by default now. Thin mapping layer (schema still churning: accept legacy + OpenInference + v1.37+ shapes). Also emit spans from ProveKit's own runs. |
 | AGENTS.md awareness | Read/validate; treat CLAUDE.md as overlay. |
 
 **Strategic bets:** A2A agent-card client (JSON-RPC first — official A2A Inspector is
@@ -183,7 +183,7 @@ start on the empty seat. What the research changes:
 
 **Now (weeks 1–6) — the wedge, single-player:**
 - P0 security fixes (tasks #2–#6) — unchanged, still first.
-- **NEW: git-diffable test/suite file format + `agentman` CLI runner with CI exit codes**
+- **NEW: git-diffable test/suite file format + `provekit` CLI runner with CI exit codes**
   — the viral artifact + the CI story. This outranks multi-tenant cloud.
 - **NEW: protocol coverage** — OpenAI Responses/Open Responses; Anthropic Messages
   upgrades; MCP OAuth 2.1 + stdio + dual-spec (July 28 revision lands in ~2 weeks).

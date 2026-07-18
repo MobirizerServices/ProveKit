@@ -4,7 +4,7 @@ import asyncio
 import httpx
 import pytest
 
-from agentman.services.providers import a2a_client as a2a
+from provekit.services.providers import a2a_client as a2a
 
 _REAL = httpx.AsyncClient  # capture before patching (a2a.httpx is the same module object)
 

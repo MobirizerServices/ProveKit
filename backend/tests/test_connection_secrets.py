@@ -3,9 +3,9 @@ values must be encrypted at rest (seal_config) and masked in API responses (_pub
 and must survive an edit that echoes the masked values back (update preserve)."""
 from fastapi.testclient import TestClient
 
-from agentman.main import app
-from agentman.services.masking import MASK
-from agentman.services.sealing import _PREFIX, seal_config, unseal_config
+from provekit.main import app
+from provekit.services.masking import MASK
+from provekit.services.sealing import _PREFIX, seal_config, unseal_config
 
 
 def test_seal_config_round_trips_oauth_and_env():
@@ -45,8 +45,8 @@ def test_api_masks_and_preserves_oauth_and_env():
     c.put(f"/api/connections/{cid}", json={"name": "MCP", "kind": "mcp",
                                            "config": got["config"]})
     # Prove the real values still dispatch: unseal the stored config directly.
-    from agentman.database import SessionLocal
-    from agentman.models import Connection
+    from provekit.database import SessionLocal
+    from provekit.models import Connection
     db = SessionLocal()
     try:
         stored = db.get(Connection, cid).config  # SealedJSON unseals on read
@@ -57,8 +57,8 @@ def test_api_masks_and_preserves_oauth_and_env():
 
 
 def _stored_config(cid: int) -> dict:
-    from agentman.database import SessionLocal
-    from agentman.models import Connection
+    from provekit.database import SessionLocal
+    from provekit.models import Connection
     db = SessionLocal()
     try:
         return db.get(Connection, cid).config  # SealedJSON unseals on read

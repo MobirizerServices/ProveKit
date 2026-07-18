@@ -8,7 +8,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from agentman.main import app
+from provekit.main import app
 
 
 @pytest.fixture(scope="module")
@@ -95,7 +95,7 @@ def test_request_404s(c):
 
 def test_export_with_and_without_connection(c):
     conn = _mock_conn(c)
-    # with a connection_id -> connection name appears in the .agentman doc
+    # with a connection_id -> connection name appears in the .provekit doc
     saved = c.post("/api/requests", json={
         "name": "Exp", "type": "prompt", "collection_id": None,
         "payload": {"type": "prompt", "connection_id": conn["id"], "model": "demo-mock",
@@ -211,7 +211,7 @@ def test_import_flow_unresolved_connection(c):
 
 
 def test_import_flow_node_cap_400(c, monkeypatch):
-    from agentman.config import get_settings
+    from provekit.config import get_settings
     monkeypatch.setattr(get_settings(), "max_flow_nodes", 2)
     nodes = [{"id": f"n{i}", "type": "input", "position": {"x": 0, "y": 0}, "data": {}, "config": {}}
              for i in range(3)]

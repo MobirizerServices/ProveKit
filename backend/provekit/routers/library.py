@@ -1,4 +1,4 @@
-"""Collections, saved requests, environments (variables), and .agentman import/export.
+"""Collections, saved requests, environments (variables), and .provekit import/export.
 Everything here is scoped to the caller's workspace."""
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -111,7 +111,7 @@ def delete_request(rid: int, db: Session = Depends(get_db), ws: Workspace = Depe
     return {"deleted": True}
 
 
-# ---- .agentman file import/export (the git-diffable test format) ----
+# ---- .provekit file import/export (the git-diffable test format) ----
 @router.get("/requests/{rid}/export", response_class=PlainTextResponse)
 def export_request(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     r = _scoped(db, Request, rid, ws)
@@ -129,7 +129,7 @@ class ImportIn(BaseModel):
 
 @router.post("/import")
 def import_file(payload: ImportIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
-    """Import an .agentman document (test or flow). Connection names resolve within this
+    """Import an .provekit document (test or flow). Connection names resolve within this
     workspace; an unresolved name imports fine but needs a connection re-pick."""
     try:
         doc = testfile.load(payload.content)

@@ -2,8 +2,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.main import app
-from agentman.services import otel
+from provekit.main import app
+from provekit.services import otel
 
 
 def _span(attrs: dict, name="chat", start=1_000_000_000, end=1_500_000_000, status_code=1):
@@ -98,7 +98,7 @@ def test_ingest_endpoint_persists_and_shows_in_history():
 
 def test_ingest_with_bearer_key():
     """Real OTLP exporters authenticate with a Bearer ingest key (no cookies)."""
-    from agentman.config import get_settings
+    from provekit.config import get_settings
     with TestClient(app) as client:
         # mint a key for the (local) workspace
         key = client.post("/api/workspace/ingest-key").json()["ingest_key"]

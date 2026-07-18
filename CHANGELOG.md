@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to AgentMan. This project is pre-1.0; expect breaking changes.
+All notable changes to ProveKit. This project is pre-1.0; expect breaking changes.
 
 ## Unreleased
 
@@ -9,7 +9,7 @@ All notable changes to AgentMan. This project is pre-1.0; expect breaking change
   and A2A agents from one console with live streaming and structured output.
 - **Assertions & evals** — contains / equals / regex / json_path / json_schema /
   tool_called / latency / llm_judge; one-click "assert from this run"; dataset test suites.
-- **`.agentman` file format + `agentman` CLI** — git-diffable tests/flows, run headless in
+- **`.provekit` file format + `provekit` CLI** — git-diffable tests/flows, run headless in
   CI (JUnit/JSON output), plus a promptfoo importer.
 - **Visual flows** — build prompt/tool/condition/agent graphs, step-debug with breakpoints,
   and **deploy a flow as a versioned hosted API** (`POST /v1/d/{slug}`) with logs & metrics.
@@ -18,7 +18,7 @@ All notable changes to AgentMan. This project is pre-1.0; expect breaking change
   generations), A2A agent cards, OpenTelemetry GenAI trace ingest + emit.
 
 - **MCP tools for the agent under test** — attach MCP servers to a prompt (console or flow
-  node) and the model can call them: it picks a tool, AgentMan executes it over MCP, feeds
+  node) and the model can call them: it picks a tool, ProveKit executes it over MCP, feeds
   the result back, and the loop continues to a `max_tool_rounds` cap. Works on OpenAI Chat
   Completions, Responses/Open Responses, Anthropic, and the keyless mock agent (so the whole
   loop is demoable offline). Expose all discovered tools or an allowlist; **dry run** records
@@ -67,7 +67,7 @@ All notable changes to AgentMan. This project is pre-1.0; expect breaking change
   user's one link with no way to reissue it — with `REQUIRE_EMAIL_VERIFICATION` they could
   neither verify nor log in. A completed reset now proves the mailbox and verifies the email.
 - **`pip install`ed wheels can boot.** Migrations moved into the package
-  (`agentman/migrations/`) and are resolved from `__file__`, so a non-editable install no
+  (`provekit/migrations/`) and are resolved from `__file__`, so a non-editable install no
   longer fails `alembic upgrade head` at startup for want of `alembic.ini`.
 - **Rolled-back deployments report the version that is actually serving.** The list endpoint
   showed the newest version, so a rolled-back slug read as "inactive" while an older version

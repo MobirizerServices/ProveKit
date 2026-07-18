@@ -1,5 +1,5 @@
 """OTLP/HTTP trace ingest — point any OpenTelemetry GenAI exporter at /v1/traces and
-its LLM/agent spans show up in AgentMan's history, no SDK swap required.
+its LLM/agent spans show up in ProveKit's history, no SDK swap required.
 
 Auth: a workspace ingest key via `Authorization: Bearer <key>` (what real exporters can
 send), or a session cookie for interactive/local use. Mint the key from

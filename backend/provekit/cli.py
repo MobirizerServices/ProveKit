@@ -1,11 +1,11 @@
-"""`agentman` — headless runner for .agentman test files (CI).
+"""`provekit` — headless runner for .provekit test files (CI).
 
-    agentman run .agentman/tests/            # run every test file under a dir
-    agentman run support-bot.yaml --format junit -o results.xml
-    agentman import-promptfoo promptfooconfig.yaml -o .agentman/tests/
+    provekit run .provekit/tests/            # run every test file under a dir
+    provekit run support-bot.yaml --format junit -o results.xml
+    provekit import-promptfoo promptfooconfig.yaml -o .provekit/tests/
 
-Connections resolve from a local file (default: .agentman/connections.yaml, then
-~/.agentman/connections.yaml), NEVER from the test files. Secrets in that file may
+Connections resolve from a local file (default: .provekit/connections.yaml, then
+~/.provekit/connections.yaml), NEVER from the test files. Secrets in that file may
 be written as ${ENV_VAR} and are expanded from the environment at run time.
 
 Exit code is non-zero when any assertion fails or any run errors — so CI gates on it.
@@ -59,8 +59,8 @@ def _expand_env(obj):
 
 
 def _load_connections(explicit: str | None) -> _Registry:
-    paths = [explicit] if explicit else [".agentman/connections.yaml",
-                                         str(Path.home() / ".agentman/connections.yaml")]
+    paths = [explicit] if explicit else [".provekit/connections.yaml",
+                                         str(Path.home() / ".provekit/connections.yaml")]
     for p in paths:
         if p and Path(p).exists():
             doc = yaml.safe_load(Path(p).read_text()) or {}
@@ -117,7 +117,7 @@ def cmd_run(args) -> int:
     cli_vars = dict(kv.split("=", 1) for kv in args.env) if args.env else {}
     files = list(_iter_test_files(args.paths))
     if not files:
-        print("no .agentman test files found", file=sys.stderr)
+        print("no .provekit test files found", file=sys.stderr)
         return 2
 
     suites = []
@@ -232,18 +232,18 @@ def cmd_import_promptfoo(args) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="agentman", description="Run .agentman agent tests.")
+    parser = argparse.ArgumentParser(prog="provekit", description="Run .provekit agent tests.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", help="run test files or directories")
     run.add_argument("paths", nargs="+")
-    run.add_argument("--connections", help="connections YAML (default: .agentman/connections.yaml)")
+    run.add_argument("--connections", help="connections YAML (default: .provekit/connections.yaml)")
     run.add_argument("--env", action="append", metavar="KEY=VAL", help="extra template variables")
     run.add_argument("--format", choices=["pretty", "json", "junit"], default="pretty")
     run.add_argument("-o", "--output", help="write the report to a file instead of stdout")
     run.set_defaults(func=cmd_run)
 
-    imp = sub.add_parser("import-promptfoo", help="convert a promptfoo config to .agentman tests")
+    imp = sub.add_parser("import-promptfoo", help="convert a promptfoo config to .provekit tests")
     imp.add_argument("config")
     imp.add_argument("-o", "--output", help="output directory (default: cwd)")
     imp.set_defaults(func=cmd_import_promptfoo)

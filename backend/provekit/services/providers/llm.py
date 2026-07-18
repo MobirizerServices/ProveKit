@@ -31,20 +31,20 @@ def _mock_reply(user: str, system: str | None) -> str:
     u = (user or "").lower()
     sys = (system or "").lower()
     if not user:
-        return "Hi — I'm the AgentMan demo agent. Ask me anything. I run with no API key, so you can try the console instantly."
+        return "Hi — I'm the ProveKit demo agent. Ask me anything. I run with no API key, so you can try the console instantly."
     if "classify" in sys or "classify" in u:
         return "support_request"
     if "extract" in sys or "json" in sys:
         return '{"summary": "demo extraction", "priority": "normal", "is_demo": true}'
     if "agent" in u and any(k in u for k in ("what", "explain", "define")):
         return ("An AI agent is a program that reads context, decides on an action, and uses tools or model "
-                "calls to reach a goal — often looping until the task is done. This reply came from AgentMan's "
+                "calls to reach a goal — often looping until the task is done. This reply came from ProveKit's "
                 "built-in mock provider, so no API key was needed.")
     if any(k in u for k in ("urgent", "angry", "complaint", "refund", "cancel", "asap")):
         return "This looks urgent — it mentions a time-sensitive or negative signal, so I'd route it to a human. (Demo mock response.)"
     short = " ".join((user or "").split())[:160]
     return (f"Here's a demo answer to: \"{short}\". In a live run this would come from your OpenAI or Anthropic "
-            "connection — swap one in from the Connections tab. For now this is AgentMan's keyless mock agent.")
+            "connection — swap one in from the Connections tab. For now this is ProveKit's keyless mock agent.")
 
 
 def _mock_tool_args(schema: dict, user: str) -> dict:

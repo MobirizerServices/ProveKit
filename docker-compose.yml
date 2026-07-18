@@ -1,17 +1,17 @@
-# AgentMan — run backend + frontend together.
+# ProveKit — run backend + frontend together.
 #   OPENAI_API_KEY=sk-… docker compose up --build
 # Then open http://localhost:3001
 services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: agentman
-      POSTGRES_PASSWORD: agentman
-      POSTGRES_DB: agentman
+      POSTGRES_USER: provekit
+      POSTGRES_PASSWORD: provekit
+      POSTGRES_DB: provekit
     volumes:
-      - agentman-pg:/var/lib/postgresql/data
+      - provekit-pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentman"]
+      test: ["CMD-SHELL", "pg_isready -U provekit"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -29,7 +29,7 @@ services:
     ports:
       - "8100:8100"
     environment:
-      DATABASE_URL: "postgresql+psycopg://agentman:agentman@db:5432/agentman"
+      DATABASE_URL: "postgresql+psycopg://provekit:provekit@db:5432/provekit"
       REDIS_URL: "redis://redis:6379/0"
       SECRET_KEY: "${SECRET_KEY:-dev-only-change-me}"
       CORS_ORIGINS: "http://localhost:3001"
@@ -54,4 +54,4 @@ services:
       - backend
 
 volumes:
-  agentman-pg:
+  provekit-pg:

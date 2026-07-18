@@ -2,9 +2,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.config import get_settings
-from agentman.main import _guard_production_config, app
-from agentman.services import limits
+from provekit.config import get_settings
+from provekit.main import _guard_production_config, app
+from provekit.services import limits
 
 
 @pytest.fixture(autouse=True)

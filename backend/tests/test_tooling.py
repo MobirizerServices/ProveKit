@@ -2,7 +2,7 @@
 
 The end-to-end tests drive the keyless mock provider against the real stdio MCP server in
 `mcp_stdio_server.py` (a genuine subprocess), so the whole loop — model asks for a tool,
-AgentMan runs it over MCP, result goes back, model answers — is exercised for real.
+ProveKit runs it over MCP, result goes back, model answers — is exercised for real.
 """
 import sys
 from pathlib import Path
@@ -11,11 +11,11 @@ import anyio
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.database import SessionLocal
-from agentman.main import app
-from agentman.models import Connection
-from agentman.services import assertions as ae
-from agentman.services import dispatch, tooling
+from provekit.database import SessionLocal
+from provekit.main import app
+from provekit.models import Connection
+from provekit.services import assertions as ae
+from provekit.services import dispatch, tooling
 
 SERVER = str(Path(__file__).parent / "mcp_stdio_server.py")
 
@@ -209,7 +209,7 @@ CONV = [
 
 
 def test_openai_message_translation():
-    from agentman.services.providers.llm import _openai_messages
+    from provekit.services.providers.llm import _openai_messages
     out = _openai_messages(CONV)
     assert out[1]["tool_calls"][0]["function"] == {"name": "check", "arguments": '{"sku": "A"}'}
     assert out[1]["tool_calls"][0]["type"] == "function"
@@ -221,7 +221,7 @@ def test_openai_message_translation():
 def test_anthropic_message_translation_merges_tool_results():
     """Anthropic rejects one message per tool_result — consecutive results must share a
     single user turn, and tool_use goes in the assistant turn's content blocks."""
-    from agentman.services.providers.llm import _anthropic_messages
+    from provekit.services.providers.llm import _anthropic_messages
     out = _anthropic_messages(CONV)
     assert [m["role"] for m in out] == ["user", "assistant", "user"]
     assert out[1]["content"][0] == {"type": "text", "text": "checking"}
@@ -232,14 +232,14 @@ def test_anthropic_message_translation_merges_tool_results():
 
 
 def test_anthropic_translation_omits_empty_assistant_text():
-    from agentman.services.providers.llm import _anthropic_messages
+    from provekit.services.providers.llm import _anthropic_messages
     out = _anthropic_messages([{"role": "assistant", "content": "",
                                 "tool_calls": [{"id": "c1", "name": "t", "args": {}}]}])
     assert [b["type"] for b in out[0]["content"]] == ["tool_use"]  # no empty text block
 
 
 def test_responses_input_translation():
-    from agentman.services.providers.llm import _responses_input
+    from provekit.services.providers.llm import _responses_input
     out = _responses_input(CONV)
     assert out[0] == {"role": "user", "content": "stock?"}
     assert out[2] == {"type": "function_call", "call_id": "c1", "name": "check",
@@ -249,7 +249,7 @@ def test_responses_input_translation():
 
 def test_tool_arguments_that_are_not_valid_json_degrade_to_empty():
     """A model can emit malformed arguments; that's a bad tool call, not a broken run."""
-    from agentman.services.providers.llm import _args
+    from provekit.services.providers.llm import _args
     assert _args('{"a": 1}') == {"a": 1}
     assert _args("{not json") == {}
     assert _args("[1,2]") == {}   # a non-object is not usable as arguments
@@ -257,7 +257,7 @@ def test_tool_arguments_that_are_not_valid_json_degrade_to_empty():
 
 
 def test_mock_fills_required_args_from_the_user_text():
-    from agentman.services.providers.llm import _mock_tool_args
+    from provekit.services.providers.llm import _mock_tool_args
     schema = {"type": "object", "required": ["q", "n", "flag"],
               "properties": {"q": {"type": "string"}, "n": {"type": "integer"}, "flag": {"type": "boolean"}}}
     assert _mock_tool_args(schema, "find the Berge") == {"q": "find the Berge", "n": 1, "flag": True}
@@ -321,7 +321,7 @@ def test_a_hallucinated_tool_name_is_fed_back_so_the_model_can_recover(llm_conn,
     It must not be conflated with `execute: false` — doing so ended the run with no answer
     and told the user "tool execution is off" on a request that never asked for a dry run.
     """
-    from agentman.services.providers import llm as llm_mod
+    from provekit.services.providers import llm as llm_mod
 
     calls = {"n": 0}
     real = llm_mod._stream_mock
@@ -348,7 +348,7 @@ def test_a_hallucinated_tool_name_is_fed_back_so_the_model_can_recover(llm_conn,
 
 
 def test_max_tool_rounds_handling():
-    from agentman.services.dispatch import _rounds
+    from provekit.services.dispatch import _rounds
     assert _rounds(None) == 5           # absent -> default
     assert _rounds(0) == 0              # explicit 0 must survive (a plain `or 5` breaks this)
     assert _rounds(-3) == 0             # clamped
@@ -367,7 +367,7 @@ def test_null_max_tool_rounds_is_a_clear_error_not_a_typeerror(llm_conn):
 
 
 def test_usage_is_summed_across_turns_including_nested_breakdowns():
-    from agentman.services.dispatch import _add_usage
+    from provekit.services.dispatch import _add_usage
     a = {"input_tokens": 10, "output_tokens": 2,
          "input_tokens_details": {"cached_tokens": 4}, "model": "m"}
     b = {"input_tokens": 20, "output_tokens": 3,
@@ -502,7 +502,7 @@ def _assert_responses_roundtrip(body):
     (_RESPONSES, _assert_responses_roundtrip),
 ], ids=["openai", "anthropic", "responses"])
 def test_real_provider_tool_loop_translates_the_round_trip(spec, check, mcp_conn, monkeypatch):
-    from agentman.services.providers import llm
+    from provekit.services.providers import llm
     http = _MultiRoundHTTP([spec["round1"], spec["round2"]])
     monkeypatch.setattr(llm.httpx, "AsyncClient", http.factory())
 

@@ -2,9 +2,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.config import get_settings
-from agentman.main import app
-from agentman.services import limits
+from provekit.config import get_settings
+from provekit.main import app
+from provekit.services import limits
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +63,7 @@ def test_prune_runs_keeps_last_n(client, monkeypatch):
 
 
 def test_agent_body_secrets_masked_in_history(client):
-    from agentman.routers.run import _sanitize
+    from provekit.routers.run import _sanitize
     req = {"type": "agent", "path": "/x", "body": {"user": "ada", "password": "hunter2secret", "nested": {"token": "abc123xyz"}}}
     out = _sanitize(req)
     assert out["body"]["password"].startswith("••••") and "hunter2secret" not in str(out)

@@ -2,7 +2,7 @@
 get_current_user dependency.
 
 Local mode (HOSTED=false): auth is optional — an unauthenticated request is transparently
-the built-in `local@agentman` user, so single-user local use needs no login.
+the built-in `local@provekit` user, so single-user local use needs no login.
 Hosted mode (HOSTED=true): a valid session cookie is required; unauthenticated → 401.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from ..models import User
 
 COOKIE = "agm_session"
 _TTL = 30 * 24 * 3600
-LOCAL_EMAIL = "local@agentman"
+LOCAL_EMAIL = "local@provekit"
 
 
 def _b64(b: bytes) -> str:
@@ -63,7 +63,7 @@ def verify_password(pw: str, stored: str) -> bool:
 
 # Verify against this when the account is missing/OAuth-only, so the not-found login branch
 # spends the same PBKDF2 time as a real check and doesn't leak account existence via timing.
-DUMMY_HASH = hash_password("agentman-timing-equalizer")
+DUMMY_HASH = hash_password("provekit-timing-equalizer")
 
 
 # ---- signed tokens (compact HS256 JWT). purpose separates sessions from reset/verify;

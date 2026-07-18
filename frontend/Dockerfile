@@ -1,4 +1,4 @@
-# AgentMan frontend image (Next.js standalone). Same-origin: the browser calls /api and
+# ProveKit frontend image (Next.js standalone). Same-origin: the browser calls /api and
 # /v1 on this origin and the Next server rewrites them to the backend. With output:
 # "standalone" the rewrite destination is fixed at build time, so the proxy target is a
 # build ARG (default = the compose service name). Override with

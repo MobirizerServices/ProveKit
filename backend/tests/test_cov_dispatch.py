@@ -9,12 +9,12 @@ import asyncio
 import httpx
 import pytest
 
-from agentman.database import SessionLocal
-from agentman.models import Connection
-from agentman.services import dispatch
-from agentman.services.masking import MASK
-from agentman.services.providers import a2a_client as a2a
-from agentman.services.providers import agent_http
+from provekit.database import SessionLocal
+from provekit.models import Connection
+from provekit.services import dispatch
+from provekit.services.masking import MASK
+from provekit.services.providers import a2a_client as a2a
+from provekit.services.providers import agent_http
 
 _REAL = httpx.AsyncClient  # real client, captured before any patching
 

@@ -37,8 +37,8 @@ def _send_verify(u: User) -> None:
     s = get_settings()
     token = auth.make_token(u.id, ttl=2 * 24 * 3600, purpose="verify", ver=u.token_version)
     link = f"{s.web_base_url.rstrip('/')}/verify?token={token}"
-    email.send(u.email, "Verify your AgentMan email",
-               f"Confirm your email to finish setting up AgentMan:\n\n{link}\n\nThis link expires in 48 hours.")
+    email.send(u.email, "Verify your ProveKit email",
+               f"Confirm your email to finish setting up ProveKit:\n\n{link}\n\nThis link expires in 48 hours.")
 
 
 @router.post("/register")
@@ -98,7 +98,7 @@ def forgot(body: Email, request: Request, db: Session = Depends(get_db)):
     if u and u.password_hash:
         token = auth.make_token(u.id, ttl=3600, purpose="reset", ver=u.token_version)
         link = f"{get_settings().web_base_url.rstrip('/')}/reset?token={token}"
-        email.send(u.email, "Reset your AgentMan password",
+        email.send(u.email, "Reset your ProveKit password",
                    f"Reset your password with this link (valid 1 hour):\n\n{link}\n\n"
                    "If you didn't request this, ignore this email.")
     return {"ok": True}

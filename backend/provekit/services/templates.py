@@ -58,7 +58,7 @@ def total() -> int:
 
 
 def load(slug: str) -> dict | None:
-    """Return the parsed .agentman flow doc for a template slug (None if unknown)."""
+    """Return the parsed .provekit flow doc for a template slug (None if unknown)."""
     # Reject separators/traversal (incl. Windows drive-relative "C:foo"), then confirm the
     # resolved path stays inside the templates dir before reading.
     if not slug or any(ch in slug for ch in ("/", "\\", ":")) or ".." in slug:

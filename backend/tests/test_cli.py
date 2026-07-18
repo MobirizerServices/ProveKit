@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from agentman import cli
-from agentman.services.promptfoo import import_promptfoo
+from provekit import cli
+from provekit.services.promptfoo import import_promptfoo
 
 CONNECTIONS = """\
 connections:
@@ -49,8 +49,8 @@ assertions:
 
 @pytest.fixture
 def workspace(tmp_path):
-    (tmp_path / ".agentman").mkdir()
-    (tmp_path / ".agentman/connections.yaml").write_text(CONNECTIONS)
+    (tmp_path / ".provekit").mkdir()
+    (tmp_path / ".provekit/connections.yaml").write_text(CONNECTIONS)
     (tmp_path / "tests").mkdir()
     return tmp_path
 
@@ -72,7 +72,7 @@ def test_run_failing_exits_nonzero(workspace, monkeypatch):
 
 def test_env_var_expansion_in_connections(workspace, monkeypatch):
     monkeypatch.setenv("MY_TEST_KEY", "sk-from-env")
-    reg = cli._load_connections(str(workspace / ".agentman/connections.yaml"))
+    reg = cli._load_connections(str(workspace / ".provekit/connections.yaml"))
     assert reg.get(None, reg.id_of("Keyed")).config["api_key"] == "sk-from-env"
     assert reg.get(None, reg.id_of("Mock")).config["provider"] == "mock"
 
@@ -102,8 +102,8 @@ def test_dataset_runs_each_row(workspace, monkeypatch):
             variables: {}
         """))
     monkeypatch.chdir(workspace)
-    reg = cli._load_connections(str(workspace / ".agentman/connections.yaml"))
-    import agentman.services.testfile as tf
+    reg = cli._load_connections(str(workspace / ".provekit/connections.yaml"))
+    import provekit.services.testfile as tf
     doc = tf.load((workspace / "tests/ds.yaml").read_text())
     req, _ = cli._resolve_request(doc, reg)
     assert len(doc["dataset"]) == 2
@@ -132,7 +132,7 @@ def test_import_promptfoo():
     files, warnings = import_promptfoo(pf)
     assert len(files) == 1
     name, text = files[0]
-    import agentman.services.testfile as tf
+    import provekit.services.testfile as tf
     doc = tf.load(text)
     assert doc["connection"] == "openai"
     assert doc["request"]["model"] == "gpt-4o-mini"

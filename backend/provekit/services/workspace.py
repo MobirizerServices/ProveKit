@@ -16,7 +16,7 @@ from ..database import get_db
 from ..models import Connection, Flow, Prompt, Workspace, WorkspaceMember
 from .auth import get_current_user
 
-log = logging.getLogger("agentman.workspace")
+log = logging.getLogger("provekit.workspace")
 
 
 def get_or_create_default_workspace(db: Session, user) -> Workspace:

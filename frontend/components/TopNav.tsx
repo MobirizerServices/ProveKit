@@ -45,7 +45,7 @@ export default function TopNav() {
 
   return (
     <>
-    {down && <div className="down-banner" role="status">⚠ Can’t reach the AgentMan backend. Retrying… — check that it’s running on the API port.</div>}
+    {down && <div className="down-banner" role="status">⚠ Can’t reach the ProveKit backend. Retrying… — check that it’s running on the API port.</div>}
     <div className="topbar">
       <div className="brand"><span className="logo">◇</span>Agent<b>Man</b></div>
       <nav className="topnav">

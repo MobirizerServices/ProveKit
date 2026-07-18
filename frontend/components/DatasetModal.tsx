@@ -110,7 +110,7 @@ export default function DatasetModal({ request, onClose }: { request: any; onClo
         </div>
         <div className="modal-foot">
           {result && <button className="btn btn-ghost" style={{ marginRight: "auto" }} onClick={() => setResult(null)}>← Edit rows</button>}
-          {result && <button className="btn btn-ghost" onClick={() => downloadHtml("agentman-eval-report.html", datasetReportHtml(request, result))}>⬇ Export HTML</button>}
+          {result && <button className="btn btn-ghost" onClick={() => downloadHtml("provekit-eval-report.html", datasetReportHtml(request, result))}>⬇ Export HTML</button>}
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
           {!result && <button className="btn btn-run" onClick={run} disabled={running}>{running ? "Running…" : `▶ Run ${rows.length} rows`}</button>}
         </div>

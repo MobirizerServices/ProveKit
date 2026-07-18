@@ -6,11 +6,11 @@ Please report security issues privately to the maintainers (open a GitHub securi
 advisory or email the address in the repo profile) rather than a public issue. We aim to
 acknowledge within 72 hours. Please include reproduction steps and the affected version.
 
-## How AgentMan handles secrets
+## How ProveKit handles secrets
 
 - **Connection credentials** (API keys, auth headers) are **encrypted at rest** with
   Fernet (`services/sealing.py`). The database never stores plaintext; the app decrypts
-  on read. The key comes from `SECRET_KEY`, or an auto-generated `.agentman.key` for local
+  on read. The key comes from `SECRET_KEY`, or an auto-generated `.provekit.key` for local
   SQLite. Hosted mode **refuses to boot** unless `SECRET_KEY` is at least 16 characters and
   isn't one of the known dev defaults (`main.py`). Running a non-SQLite database with a weak
   key and `HOSTED=false` boots, but logs a loud warning.
@@ -18,7 +18,7 @@ acknowledge within 72 hours. Please include reproduction steps and the affected 
   `••••last4` (`services/masking.py`).
 - **Run history masks secrets** — secret-looking fields in persisted request bodies and
   headers are masked before storage.
-- **`.agentman` files never contain secrets** — connections are referenced by name and
+- **`.provekit` files never contain secrets** — connections are referenced by name and
   resolved from the environment (`${VAR}`) at run time; a file with an `api_key` is
   rejected on import.
 - **Session tokens** are signed (HS256) with a `purpose` claim, so a reset/verify token
@@ -59,7 +59,7 @@ acknowledge within 72 hours. Please include reproduction steps and the affected 
   Two lower-severity advisories remain (1 high, 1 moderate/postcss), both DoS/cache-class
   and only fixed in Next 16 — a two-major upgrade that requires migrating the client-hook
   pages (`/forgot`, `/reset`, `/verify`) and is tracked as follow-up work, not a
-  pre-launch rush. When AgentMan runs behind the reverse proxy in `docs/DEPLOY.md`, the
+  pre-launch rush. When ProveKit runs behind the reverse proxy in `docs/DEPLOY.md`, the
   proxy mitigates the request-smuggling/cache-poisoning classes. Run `npm audit` to review.
 
 ## What is NOT yet done (be aware before exposing publicly)

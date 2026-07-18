@@ -15,16 +15,16 @@ first (some require a ratio of contribution to self-posts).
 *Culture: practitioners, local-first zealots, allergic to SaaS and hype. Lead with
 offline + no-account. They will respect "MIT, runs with no key" more than any feature.*
 
-**Title:** `AgentMan: open-source client to test/eval any agent (LLM, MCP, HTTP) — runs offline, no account`
+**Title:** `ProveKit: open-source client to test/eval any agent (LLM, MCP, HTTP) — runs offline, no account`
 
 **Body:**
 > I kept ending up with three tabs open to test one agent — curl for the HTTP endpoint, the
 > MCP Inspector for the tools, and a Python script for the eval — and none of them shared
 > anything. So I built one client that does all three.
 >
-> AgentMan lets you point at an LLM API, an MCP server, an HTTP agent, or an A2A agent, run
+> ProveKit lets you point at an LLM API, an MCP server, an HTTP agent, or an A2A agent, run
 > it with live streaming, then turn that run into an assertion (contains / json_path /
-> latency / llm-judge / …) and save it as a plain-text `.agentman` file you can run in CI.
+> latency / llm-judge / …) and save it as a plain-text `.provekit` file you can run in CI.
 >
 > It's MIT and **local-first** — no account, no telemetry, and it ships with a keyless mock
 > agent so you can try the whole thing offline before pointing it at anything real. Works
@@ -53,10 +53,10 @@ observability-vs-evals gap and the CI story.*
 > (~52%) — because evals are code-first and annoying to write. I tried to close that gap with
 > an interactive-first tool.
 >
-> AgentMan: point it at any agent (LLM / MCP / HTTP / A2A), poke at it live, then click once
+> ProveKit: point it at any agent (LLM / MCP / HTTP / A2A), poke at it live, then click once
 > to turn the run you just watched into an assertion. Save the request + assertions as
-> git-diffable `.agentman` files (connections referenced by name, so no secrets in the repo)
-> and run the suite headless with `agentman run` — JUnit output, non-zero exit on failure.
+> git-diffable `.provekit` files (connections referenced by name, so no secrets in the repo)
+> and run the suite headless with `provekit run` — JUnit output, non-zero exit on failure.
 >
 > It's a *client*, not another SDK — you don't instrument your code, you point at a deployed
 > thing. It also ingests OpenTelemetry GenAI traces, so you can see runs from agents you
@@ -79,7 +79,7 @@ their server.*
 
 **Message (discussion post or thread reply):**
 > If you're writing MCP servers, I built an open-source client that might save you the
-> manual-Inspector loop: AgentMan connects over stdio or Streamable HTTP (with OAuth 2.1),
+> manual-Inspector loop: ProveKit connects over stdio or Streamable HTTP (with OAuth 2.1),
 > auto-discovers your tools/resources/prompts, and lets you call a tool, assert on the
 > structured result, and save that as a regression test you can run in CI.
 >
@@ -94,7 +94,7 @@ their server.*
 > Repo: <link>
 
 **When replying to someone's "I shipped an MCP server for X" post** (the give-first move):
-> Nice — just pointed AgentMan at it, here's a 60s clip of it discovering your tools and
+> Nice — just pointed ProveKit at it, here's a 60s clip of it discovering your tools and
 > asserting `<tool>` returns valid <shape>: <clip>. If you want the test as a committable
 > file it's one export. Repo if useful: <link>
 
@@ -107,7 +107,7 @@ outside, and you don't have to rip out their tracing.*
 
 **Message:**
 > For anyone with an agent built in <framework> — I made an open-source client to test it
-> from the outside (no SDK to add): point AgentMan at the deployed endpoint, run it, assert
+> from the outside (no SDK to add): point ProveKit at the deployed endpoint, run it, assert
 > on the output, and freeze that into a CI test. It also ingests your OpenTelemetry GenAI
 > traces, so it sits alongside whatever tracing you already have rather than replacing it.
 > MIT, runs locally. Demo: <link> · Repo: <link> — curious if the black-box testing angle is
@@ -120,7 +120,7 @@ outside, and you don't have to rip out their tracing.*
 **Standalone (post with the 30s video):**
 > Testing an AI agent shouldn't need 3 tabs (curl + MCP Inspector + a python eval script).
 >
-> AgentMan is one open-source client: point it at any agent (LLM / MCP / HTTP / A2A), run it
+> ProveKit is one open-source client: point it at any agent (LLM / MCP / HTTP / A2A), run it
 > live, turn the run into a test in one click, run the suite in CI.
 >
 > MIT, local-first, runs offline. 🧵/link

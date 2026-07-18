@@ -1,4 +1,4 @@
-"""The .agentman file format — plain-text, git-diffable tests and flows.
+"""The .provekit file format — plain-text, git-diffable tests and flows.
 
 A *test* file bundles one request (prompt | tool | agent), its assertions, and an
 optional dataset of input rows — enough to re-run it anywhere, including CI.
@@ -91,7 +91,7 @@ def dump_flow(name: str, description: str, nodes: list, edges: list,
 
 
 def load(text: str) -> dict:
-    """Parse + validate an .agentman document. Returns the normalized dict; the caller
+    """Parse + validate an .provekit document. Returns the normalized dict; the caller
     resolves `connection` names to ids against its own workspace."""
     try:
         doc = yaml.safe_load(text)
@@ -109,7 +109,7 @@ def load(text: str) -> dict:
         if not isinstance(req, dict) or req.get("type") not in ("prompt", "tool", "agent"):
             raise ValueError("test needs a request with type prompt | tool | agent")
         if "api_key" in req:
-            raise ValueError("credentials do not belong in .agentman files — use a connection name")
+            raise ValueError("credentials do not belong in .provekit files — use a connection name")
         for a in doc.get("assertions") or []:
             if not isinstance(a, dict) or not a.get("type"):
                 raise ValueError("each assertion needs a type")

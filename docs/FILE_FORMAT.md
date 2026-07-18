@@ -1,4 +1,4 @@
-# The `.agentman` file format
+# The `.provekit` file format
 
 Plain-text, git-diffable agent tests and flows. A test file is the unit you commit,
 review, and run in CI; it bundles one request, its assertions, and an optional
@@ -8,7 +8,7 @@ referenced by name and resolve against the local workspace at import/run time.
 Suggested repo layout:
 
 ```
-.agentman/
+.provekit/
   tests/
     support-bot.yaml
     latency-slo.yaml
@@ -94,4 +94,4 @@ edges:
 - `GET  /api/flows/{id}/export` → YAML flow file
 - `POST /api/import {content}` → creates the request (+ dataset) or flow
 
-The `agentman` CLI runs these files headless for CI.
+The `provekit` CLI runs these files headless for CI.

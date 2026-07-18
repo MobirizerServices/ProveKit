@@ -1,4 +1,4 @@
-# Deploying AgentMan
+# Deploying ProveKit
 
 Two ways to run it: **local** (single user, zero config) and **hosted** (multi-user,
 behind TLS).
@@ -8,7 +8,7 @@ behind TLS).
 ```bash
 # backend — SQLite, in-memory everything, no login
 cd backend && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
-./venv/bin/uvicorn agentman.main:app --port 8100
+./venv/bin/uvicorn provekit.main:app --port 8100
 
 # frontend
 cd frontend && npm install && npm run dev   # http://localhost:3001
@@ -22,7 +22,7 @@ stored credentials. `HOSTED` is off, so there's no login wall.
 Prerequisites: a VM with Docker, a domain pointed at it (A record), ports 80/443 open.
 
 ```bash
-export DOMAIN=agentman.example.com
+export DOMAIN=provekit.example.com
 export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
 export POSTGRES_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
 export OPENAI_API_KEY=sk-...        # optional, prefills the example connection

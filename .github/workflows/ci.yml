@@ -20,7 +20,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Lint
         working-directory: backend
-        run: ruff check agentman
+        run: ruff check provekit
       - name: Test
         working-directory: backend
         run: python -m pytest tests/ -q
@@ -49,6 +49,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
-        run: docker build -t agentman-backend ./backend
+        run: docker build -t provekit-backend ./backend
       - name: Build frontend image
-        run: docker build -t agentman-frontend ./frontend
+        run: docker build -t provekit-frontend ./frontend

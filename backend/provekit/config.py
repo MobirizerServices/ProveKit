@@ -1,4 +1,4 @@
-"""AgentMan configuration."""
+"""ProveKit configuration."""
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "sqlite:///./agentman.db"
+    database_url: str = "sqlite:///./provekit.db"
     cors_origins: str = "http://localhost:3001,http://localhost:3000"
 
     # Hosted mode: stricter outbound-URL guarding (block private/internal ranges).
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # required for any other database.
     secret_key: str = ""
 
-    # Optional OTLP/HTTP collector to mirror AgentMan's own runs as gen_ai spans.
+    # Optional OTLP/HTTP collector to mirror ProveKit's own runs as gen_ai spans.
     otel_export_url: str = ""
 
     # Public base URL shown in deployment endpoints (where /v1/d/{slug} is reachable).

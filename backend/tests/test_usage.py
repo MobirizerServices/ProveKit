@@ -1,7 +1,7 @@
 """Usage aggregation: normalizes provider usage shapes; totals + per-model breakdown."""
 from fastapi.testclient import TestClient
 
-from agentman.main import app
+from provekit.main import app
 
 
 def test_usage_aggregates_tokens(monkeypatch):
@@ -20,7 +20,7 @@ def test_usage_aggregates_tokens(monkeypatch):
 
 
 def test_usage_normalizes_anthropic_shape():
-    from agentman.routers.usage import _tokens
+    from provekit.routers.usage import _tokens
     assert _tokens({"input_tokens": 5, "output_tokens": 2}) == (5, 2)
     assert _tokens({"prompt_tokens": 7, "completion_tokens": 3}) == (7, 3)
     assert _tokens({}) == (0, 0)

@@ -2,9 +2,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.config import get_settings
-from agentman.main import app
-from agentman.services import auth
+from provekit.config import get_settings
+from provekit.main import app
+from provekit.services import auth
 
 
 def test_password_hash_roundtrip():
@@ -19,8 +19,8 @@ def test_local_user_creation_is_concurrency_safe():
     # get-or-create the singleton local user. The losing INSERTs must be absorbed, not 500.
     import threading
 
-    from agentman.database import SessionLocal
-    from agentman.models import User
+    from provekit.database import SessionLocal
+    from provekit.models import User
 
     d = SessionLocal()
     d.query(User).filter(User.email == auth.LOCAL_EMAIL).delete()

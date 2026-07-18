@@ -1,4 +1,4 @@
-# Contributing to AgentMan
+# Contributing to ProveKit
 
 ## Quickstart (clone → running in ~2 minutes)
 
@@ -29,7 +29,7 @@ backend and frontend Docker images, so a Dockerfile break fails the build too.
 
 ## Layout
 
-- `backend/` — FastAPI, package `agentman`. Providers in `agentman/services/providers/`,
+- `backend/` — FastAPI, package `provekit`. Providers in `provekit/services/providers/`,
   the unified event schema in `services/dispatch.py`. See `AGENTS.md` for conventions.
 - `frontend/` — Next.js 14 (app router) + React Flow.
 - `docs/` — file format, deployment, product strategy.
@@ -39,5 +39,5 @@ backend and frontend Docker images, so a Dockerfile break fails the build too.
 - The venv is git-ignored and machine-local; if `./venv/bin/uvicorn` ever fails with a
   bad interpreter (a moved venv), run `make clean && make setup`. The Makefile always
   invokes tools via `./venv/bin/python -m <tool>`, which is immune to stale shebangs.
-- Never put secrets in `.agentman` files — connections are referenced by name and secrets
+- Never put secrets in `.provekit` files — connections are referenced by name and secrets
   come from the environment (`${VAR}`) at run time.

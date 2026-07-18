@@ -14,8 +14,8 @@ import asyncio
 import httpx
 import pytest
 
-from agentman.services.providers import llm
-from agentman.services.providers import mcp_client as mc
+from provekit.services.providers import llm
+from provekit.services.providers import mcp_client as mc
 
 
 # =====================================================================
@@ -78,7 +78,7 @@ def test_mock_empty_user_greeting():
     evs = _collect(provider="mock", base_url="", api_key="", model="m",
                    system=None, messages=[])
     text = "".join(e["text"] for e in evs if e["type"] == "delta")
-    assert "AgentMan demo agent" in text
+    assert "ProveKit demo agent" in text
     assert any(e["type"] == "usage" for e in evs)
 
 
@@ -545,7 +545,7 @@ def test_stdio_close_falls_back_to_kill():
 # promptfoo.py — remaining mapping branches
 # =====================================================================
 
-from agentman.services.promptfoo import (  # noqa: E402
+from provekit.services.promptfoo import (  # noqa: E402
     _map_assert,
     _provider_to_request,
     import_promptfoo,
@@ -653,7 +653,7 @@ tests:
 """
     files, warnings = import_promptfoo(text)
     assert len(files) == 1
-    import agentman.services.testfile as tf
+    import provekit.services.testfile as tf
     doc = tf.load(files[0][1])
     assert doc["request"]["type"] == "agent"
     assert doc["request"]["method"] == "POST"

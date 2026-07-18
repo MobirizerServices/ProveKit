@@ -18,7 +18,7 @@ needed (most people watch muted); on-screen captions carry it. Keep it under 90s
 ## The shot list (target times are cumulative)
 
 **0:00–0:08 — The hook: it's already running.**
-- Open on the Console with the demo agent selected. Caption: **"Point AgentMan at any agent
+- Open on the Console with the demo agent selected. Caption: **"Point ProveKit at any agent
   — no SDK."**
 - Click **Run**. Tokens stream in live. Let the stream finish visibly.
 
@@ -43,10 +43,10 @@ needed (most people watch muted); on-screen captions carry it. Keep it under 90s
 **0:55–1:20 — The CI beat (this is what makes devs trust it).**
 - Cut to the terminal. Run:
   ```
-  agentman run .agentman/tests/
+  provekit run .provekit/tests/
   ```
 - Show the green output: `✓ passed`, and the `1/1 passed` / exit 0 line. Caption: **"Run the
-  same tests headless in CI. Plain-text .agentman files, no secrets."**
+  same tests headless in CI. Plain-text .provekit files, no secrets."**
 
 **1:20–1:30 — Close.**
 - Cut back to the Console. Caption: **"Open source · local-first · runs offline.

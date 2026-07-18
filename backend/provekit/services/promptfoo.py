@@ -1,4 +1,4 @@
-"""Convert a promptfoo config into .agentman test files.
+"""Convert a promptfoo config into .provekit test files.
 
 Promptfoo is the de-facto eval format and OpenAI's official migration target after it
 shut down its own hosted Evals — so importing it is the on-ramp for that user base.

@@ -1,6 +1,6 @@
 """OpenTelemetry GenAI ingest + emit.
 
-Ingest: accept OTLP/HTTP-JSON trace exports and map gen_ai.* spans into AgentMan runs,
+Ingest: accept OTLP/HTTP-JSON trace exports and map gen_ai.* spans into ProveKit runs,
 so a user SEES traces from an agent built in ANY framework (ADK, Strands, Pydantic AI,
 CrewAI, Semantic Kernel, OpenAI Agents SDK…) without swapping in our SDK.
 
@@ -11,7 +11,7 @@ and accepts three dialects:
   - legacy   gen_ai.prompt / gen_ai.completion / gen_ai.system
   - OpenInference  llm.* / input.value / output.value
 
-Emit: optionally export AgentMan's own runs as gen_ai spans to an OTLP collector, the
+Emit: optionally export ProveKit's own runs as gen_ai spans to an OTLP collector, the
 dual-export escape hatch buyers now expect.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 
-log = logging.getLogger("agentman.otel")
+log = logging.getLogger("provekit.otel")
 
 
 def _attr_value(v: dict):
@@ -118,7 +118,7 @@ def ingest(payload: dict) -> list[dict]:
 
 # ---- emit (best-effort) ----
 def emit_run(run_row) -> None:
-    """Export one AgentMan run as a gen_ai span to an OTLP collector, if configured."""
+    """Export one ProveKit run as a gen_ai span to an OTLP collector, if configured."""
     from ..config import get_settings
     url = get_settings().otel_export_url
     if not url:

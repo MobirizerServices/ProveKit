@@ -1,4 +1,4 @@
-# Copy this to your project's .agentman/connections.yaml and fill in real values.
+# Copy this to your project's .provekit/connections.yaml and fill in real values.
 # Secrets use ${ENV_VAR} — they are read from the environment at run time and never
 # stored in your test files.
 connections:

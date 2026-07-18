@@ -211,7 +211,7 @@ class MCPSession:
             self._rpc("initialize", {
                 "protocolVersion": _STATEFUL if self.spec == "auto" else self.spec,
                 "capabilities": {},
-                "clientInfo": {"name": "agentman", "version": "0.1.0"},
+                "clientInfo": {"name": "provekit", "version": "0.1.0"},
             })
             self._t.notify({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
             self._inited = True

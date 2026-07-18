@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.main import app
+from provekit.main import app
 
 
 @pytest.fixture(scope="module")

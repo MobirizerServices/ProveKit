@@ -4,9 +4,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-from agentman.config import get_settings
-from agentman.database import Base
-from agentman import models  # noqa: F401  (register all tables on Base.metadata)
+from provekit.config import get_settings
+from provekit.database import Base
+from provekit import models  # noqa: F401  (register all tables on Base.metadata)
 
 config = context.config
 if config.config_file_name is not None:

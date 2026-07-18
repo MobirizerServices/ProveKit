@@ -1,8 +1,14 @@
 # Secrets & local state — never commit.
 **/.env
 **/.DS_Store
-**/agentman.db*
+# Local SQLite DBs and the Fernet sealing key — under any product name, so a rename can't
+# silently un-ignore an old one (this exact bug once swept a key into a commit).
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/.provekit.key
 **/.agentman.key
+**/*.key
 **/venv/
 **/.venv*/
 **/node_modules/

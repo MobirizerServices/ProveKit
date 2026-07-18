@@ -1,4 +1,4 @@
-"""Coverage-focused unit tests for the visual-flow engine (agentman/services/flow.py).
+"""Coverage-focused unit tests for the visual-flow engine (provekit/services/flow.py).
 
 No real network/subprocess: prompt/tool/agent nodes call dispatch.run_collect, which we
 monkeypatch with an async fake. run_stream is an async generator driven via asyncio.run.
@@ -7,10 +7,10 @@ import asyncio
 
 import pytest
 
-from agentman.database import SessionLocal
-from agentman.services import dispatch
-from agentman.services import flow as engine
-from agentman.services.masking import MASK
+from provekit.database import SessionLocal
+from provekit.services import dispatch
+from provekit.services import flow as engine
+from provekit.services.masking import MASK
 
 
 # --------------------------------------------------------------------------- helpers
@@ -255,7 +255,7 @@ def test_compare_non_numeric_operands_return_false():
 
 # --------------------------------------------------------------------------- _registry_prompt
 def test_registry_prompt_found_and_missing_and_workspace_filter():
-    from agentman.models import Prompt
+    from provekit.models import Prompt
     db = _db()
     try:
         db.query(Prompt).delete()
@@ -319,7 +319,7 @@ def test_exec_node_condition_true_and_false():
 
 
 def test_exec_node_prompt_uses_registry(monkeypatch):
-    from agentman.models import Prompt
+    from provekit.models import Prompt
     db = _db()
     captured = []
     monkeypatch.setattr(dispatch, "run_collect",

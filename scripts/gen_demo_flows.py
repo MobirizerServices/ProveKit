@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Generate a gallery of demo agent flows as .agentman files.
+"""Generate a gallery of demo agent flows as .provekit files.
 
 Produces 100+ distinct, valid flow templates across real patterns (linear prompt,
 classify-then-route, extract-then-validate, tool-then-branch, two-step chains, agent
 calls, moderation gates, ...) over a range of domains. Every file validates via
-agentman.services.testfile.load. Connections are referenced by name so the files import
+provekit.services.testfile.load. Connections are referenced by name so the files import
 into any workspace.
 
-    python scripts/gen_demo_flows.py            # writes examples/.agentman/flows/*.yaml
+    python scripts/gen_demo_flows.py            # writes examples/.provekit/flows/*.yaml
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "backend"))
-from agentman.services import testfile  # noqa: E402
+from provekit.services import testfile  # noqa: E402
 
 # Bundled with the package so the app serves them at runtime (incl. in Docker).
-OUT = pathlib.Path(__file__).resolve().parent.parent / "backend" / "agentman" / "templates" / "flows"
+OUT = pathlib.Path(__file__).resolve().parent.parent / "backend" / "provekit" / "templates" / "flows"
 LLM = "Demo Assistant (mock)"   # seeded, keyless — every flow runs offline out of the box
 MODEL = "demo-mock"
 

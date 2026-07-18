@@ -1,4 +1,4 @@
-"""AgentMan — a generic "Postman for agents": create, run, and debug prompts, MCP tools,
+"""ProveKit — a generic "Postman for agents": create, run, and debug prompts, MCP tools,
 and agent endpoints across any provider."""
 import logging
 from contextlib import asynccontextmanager
@@ -50,7 +50,7 @@ def _guard_production_config() -> None:
     # Not hosted but using a server database with a weak key = credentials encrypted under a
     # public constant. Legitimate for the dev compose; warn loudly if it reaches a real server.
     if not s.hosted and weak_key and not s.database_url.startswith("sqlite"):
-        logging.getLogger("agentman").warning(
+        logging.getLogger("provekit").warning(
             "Weak/default SECRET_KEY with a non-SQLite database and HOSTED=false — stored "
             "credentials are encrypted under a public constant. Set a strong SECRET_KEY (and "
             "HOSTED=true) before exposing this to a network.")
@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="AgentMan", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="ProveKit", version="0.1.0", lifespan=lifespan)
 
 # add_middleware inserts at the front, so the LAST one added is the OUTERMOST. Resulting
 # order: CORS -> SecurityHeaders -> RequestID -> BodySizeLimit -> app. Both SecurityHeaders
@@ -107,7 +107,7 @@ app.include_router(usage.router)
 
 @app.get("/")
 def root():
-    return {"service": "AgentMan", "docs": "/docs"}
+    return {"service": "ProveKit", "docs": "/docs"}
 
 
 @app.get("/healthz")

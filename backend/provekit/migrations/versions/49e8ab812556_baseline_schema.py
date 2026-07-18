@@ -6,7 +6,7 @@ Create Date: 2026-07-16 23:49:32.276669
 """
 from alembic import op
 import sqlalchemy as sa
-import agentman.models
+import provekit.models
 
 
 revision = '49e8ab812556'
@@ -54,7 +54,7 @@ def upgrade() -> None:
     sa.Column('workspace_id', sa.Integer(), nullable=True),
     sa.Column('name', sa.String(length=120), nullable=False),
     sa.Column('kind', sa.String(length=16), nullable=False),
-    sa.Column('config', agentman.models.SealedJSON(), nullable=False),
+    sa.Column('config', provekit.models.SealedJSON(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['workspace_id'], ['workspaces.id'], name=op.f('fk_connections_workspace_id_workspaces')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_connections'))

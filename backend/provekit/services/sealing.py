@@ -3,7 +3,7 @@ plaintext values from older databases are accepted on read and upgraded by the
 one-shot reseal pass at startup (and on any subsequent write).
 
 Key source: SECRET_KEY env var (any string — derived to a Fernet key), or, for local
-SQLite use, an auto-generated key file stored next to the database (.agentman.key).
+SQLite use, an auto-generated key file stored next to the database (.provekit.key).
 Rotation: set the new SECRET_KEY, then re-enter credentials (values sealed with the
 old key decrypt to "" with a logged warning rather than crashing).
 """
@@ -22,7 +22,7 @@ from ..config import get_settings
 from .masking import is_secret_header
 
 _PREFIX = "enc:"
-log = logging.getLogger("agentman.sealing")
+log = logging.getLogger("provekit.sealing")
 
 
 def _key_file() -> Path | None:
@@ -30,7 +30,7 @@ def _key_file() -> Path | None:
     if url.startswith("sqlite:///"):
         db_path = Path(url.removeprefix("sqlite:///"))
         parent = db_path.parent if str(db_path.parent) else Path(".")
-        return parent / ".agentman.key"
+        return parent / ".provekit.key"
     return None
 
 

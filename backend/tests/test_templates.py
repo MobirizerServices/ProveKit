@@ -1,8 +1,8 @@
 """Flow template gallery: search + create-from-template."""
 from fastapi.testclient import TestClient
 
-from agentman.main import app
-from agentman.services import templates
+from provekit.main import app
+from provekit.services import templates
 
 
 def test_manifest_loaded():

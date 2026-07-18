@@ -2,8 +2,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.config import get_settings
-from agentman.main import app
+from provekit.config import get_settings
+from provekit.main import app
 
 
 @pytest.fixture

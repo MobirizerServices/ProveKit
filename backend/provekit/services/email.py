@@ -8,7 +8,7 @@ from email.message import EmailMessage
 
 from ..config import get_settings
 
-log = logging.getLogger("agentman.email")
+log = logging.getLogger("provekit.email")
 
 
 def send(to: str, subject: str, body: str) -> None:
@@ -23,7 +23,7 @@ def send(to: str, subject: str, body: str) -> None:
             log.info("EMAIL (no SMTP configured) to=%s subject=%s\n%s", to, subject, body)
         return
     msg = EmailMessage()
-    msg["From"] = s.smtp_from or s.smtp_user or "no-reply@agentman.local"
+    msg["From"] = s.smtp_from or s.smtp_user or "no-reply@provekit.local"
     msg["To"] = to
     msg["Subject"] = subject
     msg.set_content(body)

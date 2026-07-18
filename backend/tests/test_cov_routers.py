@@ -10,7 +10,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.main import app
+from provekit.main import app
 
 
 @pytest.fixture
@@ -59,8 +59,8 @@ def test_connections_crud_and_masking(client):
     client.put(f"/api/connections/{cid}", json={
         "name": "OpenAI-renamed", "kind": "llm", "config": listed["config"],
     })
-    from agentman.database import SessionLocal
-    from agentman.models import Connection
+    from provekit.database import SessionLocal
+    from provekit.models import Connection
     db = SessionLocal()
     try:
         stored = db.get(Connection, cid).config
@@ -117,7 +117,7 @@ def test_test_connection_llm_no_key_and_no_base(client):
 
 
 def test_test_connection_llm_http_variants(client, monkeypatch):
-    import agentman.routers.connections as conn
+    import provekit.routers.connections as conn
 
     captured = {}
 
@@ -157,7 +157,7 @@ def test_test_connection_llm_http_variants(client, monkeypatch):
 
 
 def test_test_connection_mcp(client, monkeypatch):
-    import agentman.routers.connections as conn
+    import provekit.routers.connections as conn
 
     class FakeMCP:
         def __init__(self, *a, **k):
@@ -192,7 +192,7 @@ def test_test_connection_mcp(client, monkeypatch):
 
 
 def test_test_connection_a2a(client, monkeypatch):
-    from agentman.services.providers import a2a_client
+    from provekit.services.providers import a2a_client
 
     monkeypatch.setattr(a2a_client, "fetch_card",
                         lambda base, headers=None: {"name": "Booker", "_version": "1.0"})
@@ -207,7 +207,7 @@ def test_test_connection_a2a(client, monkeypatch):
 
 
 def test_test_connection_agent(client, monkeypatch):
-    import agentman.routers.connections as conn
+    import provekit.routers.connections as conn
     monkeypatch.setattr(conn.httpx, "get", lambda url, headers=None, timeout=None: httpx.Response(204))
 
     empty = _make(client, "agent-empty", "agent", {})
@@ -223,7 +223,7 @@ def test_test_connection_agent(client, monkeypatch):
 # connections: POST /{cid}/authenticate
 # --------------------------------------------------------------------------- #
 def test_authenticate_stores_header(client, monkeypatch):
-    import agentman.routers.connections as conn
+    import provekit.routers.connections as conn
 
     def fake_request(method, url, json=None, timeout=None):
         assert method == "POST" and url.endswith("/api/auth/login")
@@ -238,8 +238,8 @@ def test_authenticate_stores_header(client, monkeypatch):
     assert r["ok"] is True and r["header"] == "Authorization"
 
     # the token is now stored as an Authorization header on the connection
-    from agentman.database import SessionLocal
-    from agentman.models import Connection
+    from provekit.database import SessionLocal
+    from provekit.models import Connection
     db = SessionLocal()
     try:
         stored = db.get(Connection, c["id"]).config
@@ -249,7 +249,7 @@ def test_authenticate_stores_header(client, monkeypatch):
 
 
 def test_authenticate_error_paths(client, monkeypatch):
-    import agentman.routers.connections as conn
+    import provekit.routers.connections as conn
 
     # not an agent connection
     llm = _mock_conn(client)
@@ -279,7 +279,7 @@ def test_authenticate_error_paths(client, monkeypatch):
 # connections: GET /{cid}/tools and /{cid}/agent-card
 # --------------------------------------------------------------------------- #
 def test_list_tools(client, monkeypatch):
-    import agentman.routers.connections as conn
+    import provekit.routers.connections as conn
 
     class FakeMCP:
         def __init__(self, *a, **k):
@@ -311,7 +311,7 @@ def test_list_tools(client, monkeypatch):
 
 
 def test_agent_card(client, monkeypatch):
-    from agentman.services.providers import a2a_client
+    from provekit.services.providers import a2a_client
 
     # wrong kind → 400
     llm = _mock_conn(client)
@@ -341,8 +341,8 @@ def test_connection_not_found_scoping(client):
 
 def test_guard_url_blocked_returns_400(client, monkeypatch):
     """_guard_url turns a BlockedURL from netguard into a 400 for the caller."""
-    import agentman.routers.connections as conn
-    from agentman.services.netguard import BlockedURL
+    import provekit.routers.connections as conn
+    from provekit.services.netguard import BlockedURL
 
     def blocked(url):
         raise BlockedURL("blocked host")
@@ -366,8 +366,8 @@ class _Run:
 
 
 def test_emit_run_disabled_without_endpoint(monkeypatch):
-    from agentman.config import get_settings
-    from agentman.services import otel
+    from provekit.config import get_settings
+    from provekit.services import otel
     monkeypatch.setattr(get_settings(), "otel_export_url", "")
     # should return early without importing httpx / posting anything
     otel.emit_run(_Run())  # no exception
@@ -375,11 +375,11 @@ def test_emit_run_disabled_without_endpoint(monkeypatch):
 
 def test_emit_run_posts_span_with_attrs(monkeypatch):
     import httpx as _httpx
-    from agentman.config import get_settings
-    from agentman.services import otel
+    from provekit.config import get_settings
+    from provekit.services import otel
 
     monkeypatch.setattr(get_settings(), "otel_export_url", "https://collector.example/v1/traces")
-    monkeypatch.setattr("agentman.services.netguard.guard_url", lambda u: None)
+    monkeypatch.setattr("provekit.services.netguard.guard_url", lambda u: None)
 
     posted = {}
 
@@ -407,11 +407,11 @@ def test_emit_run_posts_span_with_attrs(monkeypatch):
 
 def test_emit_run_failed_status_and_minimal_meta(monkeypatch):
     import httpx as _httpx
-    from agentman.config import get_settings
-    from agentman.services import otel
+    from provekit.config import get_settings
+    from provekit.services import otel
 
     monkeypatch.setattr(get_settings(), "otel_export_url", "https://collector.example/v1/traces")
-    monkeypatch.setattr("agentman.services.netguard.guard_url", lambda u: None)
+    monkeypatch.setattr("provekit.services.netguard.guard_url", lambda u: None)
     posted = {}
     monkeypatch.setattr(_httpx, "post",
                         lambda url, json=None, **k: posted.setdefault("body", json) or _httpx.Response(200))
@@ -427,11 +427,11 @@ def test_emit_run_failed_status_and_minimal_meta(monkeypatch):
 
 def test_emit_run_swallows_exceptions(monkeypatch):
     import httpx as _httpx
-    from agentman.config import get_settings
-    from agentman.services import otel
+    from provekit.config import get_settings
+    from provekit.services import otel
 
     monkeypatch.setattr(get_settings(), "otel_export_url", "https://collector.example/v1/traces")
-    monkeypatch.setattr("agentman.services.netguard.guard_url", lambda u: None)
+    monkeypatch.setattr("provekit.services.netguard.guard_url", lambda u: None)
 
     def boom(*a, **k):
         raise _httpx.ConnectError("collector down")
@@ -623,7 +623,7 @@ def test_flow_list_templates_and_crud(client):
 
 
 def test_flow_from_template_and_export(client):
-    from agentman.services import templates
+    from provekit.services import templates
     slug = next(it["slug"] for it in templates.search("", 20)
                 if (templates.load(it["slug"]) or {}).get("kind") == "flow")
     f = client.post("/api/flows/from-template", json={"slug": slug}).json()
@@ -702,7 +702,7 @@ def test_flow_continue_stream_resumes(client):
 
 
 def test_flow_max_nodes_guard(client, monkeypatch):
-    from agentman.config import get_settings
+    from provekit.config import get_settings
     monkeypatch.setattr(get_settings(), "max_flow_nodes", 1)
     r = client.post("/api/flows", json={"name": "big", "nodes": [{"id": "a"}, {"id": "b"}], "edges": []})
     assert r.status_code == 400 and "too large" in r.json()["detail"]
@@ -712,7 +712,7 @@ def test_flow_max_nodes_guard(client, monkeypatch):
 # runtime: public invoke edge cases (410 for deactivated, 404 unknown, rate limit)
 # --------------------------------------------------------------------------- #
 def test_runtime_rate_limit(client, monkeypatch):
-    from agentman.config import get_settings
+    from provekit.config import get_settings
     dep = _deploy_flow(client)
     monkeypatch.setattr(get_settings(), "rate_limit_per_min", 1)
     key, slug = dep["api_key"], dep["slug"]
@@ -760,7 +760,7 @@ def test_runtime_bad_key_403(client):
 
 
 def test_runtime_rate_limit_disabled(client, monkeypatch):
-    from agentman.config import get_settings
+    from provekit.config import get_settings
     monkeypatch.setattr(get_settings(), "rate_limit_per_min", 0)  # disabled → _rate_ok True (line 41)
     dep = _deploy_flow(client)
     r = client.post(f"/v1/d/{dep['slug']}", headers={"X-API-Key": dep["api_key"]}, json={"question": "hi"})
@@ -770,8 +770,8 @@ def test_runtime_rate_limit_disabled(client, monkeypatch):
 def test_runtime_timeout(client, monkeypatch):
     """Snapshot run exceeding the deployment timeout → 504, run persisted as failed (87-99)."""
     import anyio
-    from agentman.config import get_settings
-    from agentman.services import deploy as deploy_svc
+    from provekit.config import get_settings
+    from provekit.services import deploy as deploy_svc
 
     dep = _deploy_flow(client)
     monkeypatch.setattr(get_settings(), "deployment_timeout_s", 0.05)
@@ -841,21 +841,21 @@ def test_traces_ingest_via_session_cookie(client):
 # otel: ingest / map_span (direct, so this file is self-sufficient for otel.py)
 # --------------------------------------------------------------------------- #
 def test_otel_ingest_maps_genai_span():
-    from agentman.services import otel
+    from provekit.services import otel
     rows = otel.ingest(_otlp_span(model="claude", completion="done"))
     assert len(rows) == 1 and rows[0]["result"]["meta"]["model"] == "claude"
     assert rows[0]["result"]["text"] == "done" and rows[0]["status"] == "completed"
 
 
 def test_otel_ingest_ignores_non_genai():
-    from agentman.services import otel
+    from provekit.services import otel
     span = {"resourceSpans": [{"scopeSpans": [{"spans": [{
         "name": "GET /x", "attributes": [{"key": "http.method", "value": {"stringValue": "GET"}}]}]}]}]}
     assert otel.ingest(span) == []
 
 
 def test_otel_attr_value_types_and_failed_status():
-    from agentman.services import otel
+    from provekit.services import otel
     span = {
         "name": "tool", "startTimeUnixNano": "0", "endTimeUnixNano": "0",
         "status": {"code": 2, "message": "boom"},
@@ -882,6 +882,6 @@ def test_otel_attr_value_types_and_failed_status():
 
 
 def test_otel_as_text_unserializable():
-    from agentman.services import otel
+    from provekit.services import otel
     # a value json.dumps can't handle exercises the except branch → str() fallback
     assert otel._as_text({1, 2}) == str({1, 2})

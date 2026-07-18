@@ -1,7 +1,7 @@
 """Paused-run store: in-memory + Redis-shaped backend, atomic pop, size cap."""
 import pytest
 
-from agentman.services import runstore
+from provekit.services import runstore
 
 
 def test_memory_store_roundtrip_and_atomic_pop():

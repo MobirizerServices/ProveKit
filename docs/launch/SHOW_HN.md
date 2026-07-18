@@ -8,7 +8,7 @@
 
 ## Title options (pick one — keep it literal, no adjectives)
 
-1. **Show HN: AgentMan – open-source "Postman for AI agents"**
+1. **Show HN: ProveKit – open-source "Postman for AI agents"**
 2. **Show HN: Test and eval any AI agent (LLM, MCP server, HTTP agent) – no SDK**
 3. **Show HN: A universal client to test, debug, and deploy AI agents (MIT)**
 
@@ -19,7 +19,7 @@ HN favors #1 or #2 — a concrete metaphor or a concrete capability. Avoid "worl
 
 ## Post body
 
-> AgentMan is an open-source client for testing and evaluating AI agents. You point it at
+> ProveKit is an open-source client for testing and evaluating AI agents. You point it at
 > an LLM API, an MCP server, an HTTP agent, or an A2A agent — no SDK, no code changes — then
 > chat with it, stream the output, assert on the result, and freeze that into a regression
 > test you can run in CI.
@@ -30,11 +30,11 @@ HN favors #1 or #2 — a concrete metaphor or a concrete capability. Avoid "worl
 > builders (n8n, Flowise) want you to rebuild your agent in their canvas. Nobody had the
 > Postman thing: a client you point at an agent you already have and just *poke at it*.
 >
-> So AgentMan is that. Concretely:
+> So ProveKit is that. Concretely:
 > - Connect an LLM / MCP server / HTTP agent / A2A agent; run it and stream tokens live.
 > - Turn any run into an assertion in one click (contains / json_path / latency / llm-judge…).
-> - Save requests + assertions as plain-text `.agentman` files (git-diffable, no secrets in
->   them) and run the suite headless with the `agentman` CLI — JUnit output for CI.
+> - Save requests + assertions as plain-text `.provekit` files (git-diffable, no secrets in
+>   them) and run the suite headless with the `provekit` CLI — JUnit output for CI.
 > - Build multi-step flows visually, step-debug them with breakpoints, and deploy a flow as
 >   a versioned hosted API endpoint.
 > - MCP is first-class: stdio + Streamable HTTP, OAuth 2.1, and it can test a server against
@@ -45,7 +45,7 @@ HN favors #1 or #2 — a concrete metaphor or a concrete capability. Avoid "worl
 >
 > Try it:
 > ```
-> git clone … && cd agentman && make setup && make backend  # + make frontend
+> git clone … && cd provekit && make setup && make backend  # + make frontend
 > ```
 > Open localhost:3001, hit Run on the seeded demo agent.
 >
@@ -66,14 +66,14 @@ HN favors #1 or #2 — a concrete metaphor or a concrete capability. Avoid "worl
 >
 > I built this because I was testing an agent that used an MCP server plus a couple of model
 > calls, and I had three tabs open: curl for the HTTP agent, the MCP Inspector for the tools,
-> and a Python script for the eval. They didn't share anything. AgentMan collapses that into
+> and a Python script for the eval. They didn't share anything. ProveKit collapses that into
 > one client where the same run you just watched becomes the test you commit.
 >
 > Design decisions I'm not sure about and want to hear opinions on:
 > - **Assertions.** Right now it's contains/equals/regex/json_path/json_schema/tool_called/
 >   latency/llm-judge. Is llm-judge enough for "did the agent do the right thing", or do
 >   people want trajectory/goal-based checks (did it call tool X before Y)?
-> - **The `.agentman` file format.** I made it plain-text YAML, connections referenced by
+> - **The `.provekit` file format.** I made it plain-text YAML, connections referenced by
 >   name so no secrets leak into the repo. Curious if people would actually commit these.
 > - **Deploy.** A flow can become a hosted endpoint. I'm treating that as retention glue, not
 >   the pitch — the pitch is testing. Push back if you think that's backwards.

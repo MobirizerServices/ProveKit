@@ -1,4 +1,4 @@
-"""AgentMan data model. Everything the console persists: connections (providers),
+"""ProveKit data model. Everything the console persists: connections (providers),
 collections + saved requests, environments (variables), and run history."""
 from datetime import datetime, timezone
 

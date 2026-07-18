@@ -1,7 +1,7 @@
-"""Round-trip and validation tests for the .agentman file format."""
+"""Round-trip and validation tests for the .provekit file format."""
 import pytest
 
-from agentman.services import testfile
+from provekit.services import testfile
 
 REQ = {
     "type": "prompt", "connection_id": 3, "model": "gpt-4o-mini",

@@ -2,9 +2,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.config import get_settings
-from agentman.main import app
-from agentman.services import auth, email, limits
+from provekit.config import get_settings
+from provekit.main import app
+from provekit.services import auth, email, limits
 
 
 @pytest.fixture(autouse=True)

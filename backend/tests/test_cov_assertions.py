@@ -5,13 +5,13 @@ netguard hosted mode is toggled via monkeypatching get_settings().hosted.
 """
 import pytest
 
-from agentman.config import get_settings
-from agentman.database import SessionLocal
-from agentman.models import Connection
-from agentman.services import assertions as A
-from agentman.services import masking as M
-from agentman.services import netguard as NG
-from agentman.services.providers import llm
+from provekit.config import get_settings
+from provekit.database import SessionLocal
+from provekit.models import Connection
+from provekit.services import assertions as A
+from provekit.services import masking as M
+from provekit.services import netguard as NG
+from provekit.services.providers import llm
 
 
 # --------------------------------------------------------------------------- #

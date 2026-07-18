@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from agentman.config import get_settings
-from agentman.services.netguard import BlockedURL
-from agentman.services.providers import mcp_client as mc
+from provekit.config import get_settings
+from provekit.services.netguard import BlockedURL
+from provekit.services.providers import mcp_client as mc
 
 SERVER = str(Path(__file__).parent / "mcp_stdio_server.py")
 

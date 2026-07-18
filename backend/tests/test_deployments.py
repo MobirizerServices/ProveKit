@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.main import app
+from provekit.main import app
 
 
 @pytest.fixture
@@ -93,8 +93,8 @@ def test_deactivate_and_rollback(client):
 
 
 def test_deployment_timeout(client, monkeypatch):
-    from agentman.config import get_settings
-    from agentman.services import deploy as deploy_svc
+    from provekit.config import get_settings
+    from provekit.services import deploy as deploy_svc
     f = _mock_flow(client)
     dep = client.post("/api/deployments", json={"flow_id": f["id"]}).json()
     monkeypatch.setattr(get_settings(), "deployment_timeout_s", 0.05)

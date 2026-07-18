@@ -1,13 +1,13 @@
 # First-10-users outreach plan
 
 The goal of the first 10 isn't growth — it's **truth**. You need 10 developers running
-AgentMan against *their own real agents* so the parts that only break in the real world
+ProveKit against *their own real agents* so the parts that only break in the real world
 (a weird MCP server, a slow agent endpoint, an auth flow you didn't anticipate) surface
 while you can still fix them fast. Optimize for depth, not reach.
 
 ## The one-liner (use it everywhere, verbatim)
 
-> **AgentMan — the open-source universal agent client. Test, debug, and evaluate any AI
+> **ProveKit — the open-source universal agent client. Test, debug, and evaluate any AI
 > agent (LLM, MCP server, HTTP agent, A2A) with no SDK. MIT, local-first.**
 
 ## What "activated" means (measure this, not stars)
@@ -24,7 +24,7 @@ Ranked by fit. Go narrow and deep — one great thread beats ten shallow posts.
 1. **The MCP ecosystem.** People writing MCP servers have the exact pain (testing a server
    is currently: the official Inspector, manually). Modelcontextprotocol GitHub discussions,
    the MCP Discord, "I built an MCP server for X" posts on Twitter/Reddit. This is your
-   sharpest wedge — reply with "you can point AgentMan at it and turn the tools into a test
+   sharpest wedge — reply with "you can point ProveKit at it and turn the tools into a test
    suite" and *show* it on their server.
 2. **r/LocalLLaMA and r/LLMDevs.** Practitioners building agents, allergic to hype, love
    local-first + no-account. Post the demo, lead with "runs offline, no key needed."
@@ -39,7 +39,7 @@ Ranked by fit. Go narrow and deep — one great thread beats ten shallow posts.
 ## The motion: give first, ask second
 
 Don't pitch. **Offer to test their thing.** The killer move: someone posts an agent or MCP
-server → you spend 15 minutes actually pointing AgentMan at it, record a 60s clip of it
+server → you spend 15 minutes actually pointing ProveKit at it, record a 60s clip of it
 running + one assertion, and send *that*. You've done their work for them and proven the
 product in one shot. This is how you convert a skeptic into user #3.
 
@@ -76,7 +76,7 @@ anything, and the one question you do ask is specific and flattering (their expe
   traces after the fact; this is a client you point at a deployed agent, no SDK — and it can
   *ingest* their OTel traces too, so it's complementary, not a replacement.
 - **"How's this different from Promptfoo?"** Promptfoo is a great CLI/YAML batch runner (now
-  owned by OpenAI). AgentMan is interactive-first and vendor-neutral — you poke at the agent
+  owned by OpenAI). ProveKit is interactive-first and vendor-neutral — you poke at the agent
   live, then freeze it into a test. It can import promptfoo configs.
 - **"Why not just use Postman?"** Postman's agent support is closed, credit-metered, and
   OpenAI-compatible-only. This is MIT, local-first, protocol-native (MCP dual-spec, A2A), and

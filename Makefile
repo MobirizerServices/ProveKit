@@ -1,4 +1,4 @@
-# AgentMan — one-command dev workflow.
+# ProveKit — one-command dev workflow.
 .PHONY: help setup backend frontend dev test lint build clean
 
 # Pick the newest Python on PATH; the project needs 3.11+ (see .python-version). Using bare
@@ -16,14 +16,14 @@ help:
 
 setup:
 	@$(PYTHON) -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' || { \
-	  echo "✗ AgentMan needs Python 3.11+ (found '$(PYTHON)' = $$($(PYTHON) --version 2>&1))."; \
+	  echo "✗ ProveKit needs Python 3.11+ (found '$(PYTHON)' = $$($(PYTHON) --version 2>&1))."; \
 	  echo "  Install Python 3.13 (see .python-version), then re-run 'make setup'."; exit 1; }
 	cd backend && $(PYTHON) -m venv venv && ./venv/bin/pip install -U pip && ./venv/bin/pip install -r requirements-dev.txt
 	cd frontend && npm install
 	@echo "\n✓ Setup complete. Run 'make backend' and 'make frontend' in two terminals."
 
 backend:
-	cd backend && ./venv/bin/python -m uvicorn agentman.main:app --port 8100 --reload
+	cd backend && ./venv/bin/python -m uvicorn provekit.main:app --port 8100 --reload
 
 frontend:
 	cd frontend && npm run dev
@@ -33,11 +33,11 @@ test:
 	cd frontend && ./node_modules/.bin/tsc --noEmit
 
 lint:
-	cd backend && ./venv/bin/python -m ruff check agentman
+	cd backend && ./venv/bin/python -m ruff check provekit
 
 build:
 	cd frontend && npm run build
 
 clean:
-	rm -rf backend/venv backend/*.db backend/*.db-wal backend/*.db-shm backend/.agentman.key
+	rm -rf backend/venv backend/*.db backend/*.db-wal backend/*.db-shm backend/.provekit.key
 	rm -rf frontend/node_modules frontend/.next

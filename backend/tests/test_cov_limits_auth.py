@@ -5,11 +5,11 @@ import types
 import pytest
 from fastapi.testclient import TestClient
 
-from agentman.config import get_settings
-from agentman.database import SessionLocal
-from agentman.main import app
-from agentman.models import Run, User, Workspace
-from agentman.services import auth, limits
+from provekit.config import get_settings
+from provekit.database import SessionLocal
+from provekit.main import app
+from provekit.models import Run, User, Workspace
+from provekit.services import auth, limits
 
 
 def test_memory_window_evicts_lru_not_active():

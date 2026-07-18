@@ -1,5 +1,5 @@
 [project]
-name = "agentman"
+name = "provekit"
 version = "0.1.0"
 description = "The open-source universal agent client — test, debug, and evaluate any AI agent."
 requires-python = ">=3.11"
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agentman = "agentman.cli:main"
+provekit = "provekit.cli:main"
 
 [project.optional-dependencies]
 # Keep in sync with requirements-dev.txt — CI gates on both pytest and ruff.
@@ -32,11 +32,11 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["agentman", "agentman.routers", "agentman.services", "agentman.services.providers"]
+packages = ["provekit", "provekit.routers", "provekit.services", "provekit.services.providers"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-agentman = [
+provekit = [
     # the bundled flow-template gallery (served by the New-flow picker)
     "templates/flows/*.yaml",
     "templates/flows/_manifest.json",
@@ -48,10 +48,10 @@ agentman = [
 ]
 
 [tool.coverage.run]
-source = ["agentman"]
+source = ["provekit"]
 # Migrations are one-shot schema DDL replayed by Alembic, not application logic; they live
 # inside the package so wheels ship them, which would otherwise drag them into the report.
-omit = ["agentman/migrations/*"]
+omit = ["provekit/migrations/*"]
 
 [tool.ruff]
 line-length = 120

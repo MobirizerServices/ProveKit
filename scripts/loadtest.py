@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AgentMan load-test harness.
+"""ProveKit load-test harness.
 
 Fires N concurrent streaming runs against a running instance, reports latency
 percentiles / throughput / error rate, and checks the server stays responsive.
@@ -89,7 +89,7 @@ async def main(args) -> int:
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="AgentMan load test")
+    p = argparse.ArgumentParser(description="ProveKit load test")
     p.add_argument("--base", default="http://localhost:8100")
     p.add_argument("--n", type=int, default=50, help="concurrent streams")
     p.add_argument("--connection-id", type=int, default=0, help="use a specific connection (else the mock)")

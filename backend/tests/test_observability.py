@@ -1,7 +1,7 @@
 """Health check + request-id propagation."""
 from fastapi.testclient import TestClient
 
-from agentman.main import app
+from provekit.main import app
 
 
 def test_healthz_ok():

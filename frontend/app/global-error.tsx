@@ -8,7 +8,7 @@ export default function GlobalError({ error, reset }: { error: Error; reset: () 
         <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
           <div style={{ textAlign: "center", maxWidth: 420 }}>
             <div style={{ fontSize: 40 }}>⚠</div>
-            <h2>AgentMan hit an unexpected error</h2>
+            <h2>ProveKit hit an unexpected error</h2>
             <p style={{ color: "#8b91a4" }}>{error?.message || "Please reload."}</p>
             <button onClick={reset} style={{ marginTop: 12, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7c6cff", color: "#fff", cursor: "pointer" }}>Reload</button>
           </div>

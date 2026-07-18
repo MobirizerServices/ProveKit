@@ -50,7 +50,7 @@ export default function Console() {
       setConnections(cs);
       const llm = pickDefaultLlm(cs);
       if (llm) setReq((r: any) => ({ ...r, connection_id: llm.id, model: (llm.config?.models || [""])[0] || "" }));
-    }).catch(() => setToast({ text: "Can't reach the AgentMan backend on :8100", err: true }));
+    }).catch(() => setToast({ text: "Can't reach the ProveKit backend on :8100", err: true }));
     loadCollections(); loadRuns();
     setObDismissed(typeof localStorage !== "undefined" && localStorage.getItem("agm-onboarded") === "1");
   }, []);

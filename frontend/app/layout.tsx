@@ -16,7 +16,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentMan — Postman for agents",
+  title: "ProveKit — Postman for agents",
   description: "Create, run, and debug prompts, MCP tools, and agents across any provider.",
 };
 

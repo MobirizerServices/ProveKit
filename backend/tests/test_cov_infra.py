@@ -63,14 +63,14 @@ class _CaptureLogs:
 # ---------------------------------------------------------------------------
 # email.py
 # ---------------------------------------------------------------------------
-from agentman.services import email as email_mod
+from provekit.services import email as email_mod
 
 
 def test_email_local_no_smtp_logs_body(monkeypatch):
     s = email_mod.get_settings()
     monkeypatch.setattr(s, "smtp_host", "", raising=False)
     monkeypatch.setattr(s, "hosted", False, raising=False)
-    with _CaptureLogs("agentman.email") as cap:
+    with _CaptureLogs("provekit.email") as cap:
         email_mod.send("u@x.com", "Reset", "click https://reset/abc")
     # dev/self-host without SMTP surfaces the body (incl. link) in the logs
     assert "click https://reset/abc" in cap.text
@@ -80,7 +80,7 @@ def test_email_hosted_no_smtp_never_logs_body(monkeypatch):
     s = email_mod.get_settings()
     monkeypatch.setattr(s, "smtp_host", "", raising=False)
     monkeypatch.setattr(s, "hosted", True, raising=False)
-    with _CaptureLogs("agentman.email") as cap:
+    with _CaptureLogs("provekit.email") as cap:
         email_mod.send("u@x.com", "Reset", "SECRET-LINK-abc")
     # hosted mode must fail loudly and NOT leak the body
     assert "EMAIL NOT SENT" in cap.text
@@ -145,7 +145,7 @@ def test_email_smtp_send_failure_warns(monkeypatch):
             raise OSError("connection refused")
 
     monkeypatch.setattr(email_mod.smtplib, "SMTP", _Boom)
-    with _CaptureLogs("agentman.email", logging.WARNING) as cap:
+    with _CaptureLogs("provekit.email", logging.WARNING) as cap:
         email_mod.send("dest@x.com", "Hi", "body")
     assert "email send failed" in cap.text
 
@@ -153,7 +153,7 @@ def test_email_smtp_send_failure_warns(monkeypatch):
 # ---------------------------------------------------------------------------
 # sealing.py
 # ---------------------------------------------------------------------------
-from agentman.services import sealing
+from provekit.services import sealing
 
 
 @pytest.fixture
@@ -186,7 +186,7 @@ def test_unseal_passthrough_nonstr_and_plaintext(secret_key_fernet):
 
 def test_unseal_bad_token_returns_empty_with_warning(secret_key_fernet):
     bad = sealing._PREFIX + "not-a-valid-fernet-token"
-    with _CaptureLogs("agentman.sealing", logging.WARNING) as cap:
+    with _CaptureLogs("provekit.sealing", logging.WARNING) as cap:
         assert sealing.unseal(bad) == ""
     assert "could not decrypt" in cap.text
 
@@ -215,7 +215,7 @@ def test_key_file_generated_for_sqlite(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "database_url", f"sqlite:///{dbfile}", raising=False)
     sealing._fernet.cache_clear()
     kf = sealing._key_file()
-    assert kf is not None and kf.name == ".agentman.key"
+    assert kf is not None and kf.name == ".provekit.key"
     # first call generates + writes the key file
     f1 = sealing._fernet()
     assert kf.exists()
@@ -236,7 +236,7 @@ def test_key_file_generation_tolerates_chmod_oserror(monkeypatch, tmp_path):
     monkeypatch.setattr(sealing.os, "chmod", lambda *a, **k: (_ for _ in ()).throw(OSError("no chmod")))
     sealing._fernet.cache_clear()
     f = sealing._fernet()  # OSError on chmod is swallowed (Windows/permission-less FS)
-    assert (tmp_path / ".agentman.key").exists()
+    assert (tmp_path / ".provekit.key").exists()
     assert f.decrypt(f.encrypt(b"ok")) == b"ok"
     sealing._fernet.cache_clear()
 
@@ -272,7 +272,7 @@ def test_seal_unseal_config_headers_oauth_env(secret_key_fernet):
 # ---------------------------------------------------------------------------
 # observability.py
 # ---------------------------------------------------------------------------
-from agentman import observability as obs
+from provekit import observability as obs
 
 
 def test_json_formatter_includes_request_id_and_exc():
@@ -283,7 +283,7 @@ def test_json_formatter_includes_request_id_and_exc():
             raise ValueError("boom")
         except ValueError:
             import sys
-            rec = logging.LogRecord("agentman", logging.ERROR, __file__, 1, "hi %s",
+            rec = logging.LogRecord("provekit", logging.ERROR, __file__, 1, "hi %s",
                                     ("there",), sys.exc_info())
         out = json.loads(fmt.format(rec))
     finally:
@@ -327,7 +327,7 @@ def test_init_sentry_dsn_set_but_missing_warns(monkeypatch):
         return real_import(name, *a, **k)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    with _CaptureLogs("agentman", logging.WARNING) as cap:
+    with _CaptureLogs("provekit", logging.WARNING) as cap:
         obs.init_sentry()
     assert "sentry-sdk not installed" in cap.text
 
@@ -341,7 +341,7 @@ def test_init_sentry_dsn_set_and_present(monkeypatch):
     calls = {}
     fake.init = lambda **kw: calls.update(kw)
     monkeypatch.setitem(sys.modules, "sentry_sdk", fake)
-    with _CaptureLogs("agentman", logging.INFO) as cap:
+    with _CaptureLogs("provekit", logging.INFO) as cap:
         obs.init_sentry()
     assert calls.get("dsn") == "https://x@sentry/1"
     assert "sentry enabled" in cap.text
@@ -544,7 +544,7 @@ def test_healthz_redis_configured_ok(monkeypatch):
                 return True
         _r = _R()
 
-    from agentman.services import runstore
+    from provekit.services import runstore
     monkeypatch.setattr(runstore, "_store", lambda: _Store())
     resp = obs.healthz()
     body = json.loads(bytes(resp.body))
@@ -562,7 +562,7 @@ def test_healthz_redis_configured_down(monkeypatch):
                 raise ConnectionError("no redis")
         _r = _R()
 
-    from agentman.services import runstore
+    from provekit.services import runstore
     monkeypatch.setattr(runstore, "_store", lambda: _Store())
     resp = obs.healthz()
     body = json.loads(bytes(resp.body))
@@ -573,7 +573,7 @@ def test_healthz_redis_configured_down(monkeypatch):
 # ---------------------------------------------------------------------------
 # cli.py
 # ---------------------------------------------------------------------------
-from agentman import cli
+from provekit import cli
 
 
 def test_expand_env_lists_and_missing(monkeypatch):
@@ -622,7 +622,7 @@ def test_cmd_run_no_files_returns_2(tmp_path, monkeypatch, capsys):
     empty.mkdir()
     rc = cli.main(["run", str(empty)])
     assert rc == 2
-    assert "no .agentman test files" in capsys.readouterr().err
+    assert "no .provekit test files" in capsys.readouterr().err
 
 
 def test_cmd_run_parse_error_reported(tmp_path, monkeypatch, capsys):
@@ -711,7 +711,7 @@ def test_cmd_import_promptfoo_writes_and_warns(tmp_path, monkeypatch, capsys):
 
 def test_main_entrypoint_dunder(monkeypatch):
     # cover the argv-less parse path through main() returning the func result
-    monkeypatch.setattr(cli.sys, "argv", ["agentman", "run", "no-such-dir"])
+    monkeypatch.setattr(cli.sys, "argv", ["provekit", "run", "no-such-dir"])
     # run() on a non-existent path -> warning + no files -> exit 2
     assert cli.main(None) == 2
 
@@ -719,7 +719,7 @@ def test_main_entrypoint_dunder(monkeypatch):
 # ---------------------------------------------------------------------------
 # database.py  (init_db in-memory branch + migration adoption/stamping)
 # ---------------------------------------------------------------------------
-from agentman import database as db_mod
+from provekit import database as db_mod
 
 
 def test_init_db_in_memory_creates_tables(monkeypatch):
@@ -845,7 +845,7 @@ def test_run_migrations_postgres_uses_advisory_lock(monkeypatch):
 # ---------------------------------------------------------------------------
 # runstore.py  (TTL eviction + RedisStore.drop + init dispatch)
 # ---------------------------------------------------------------------------
-from agentman.services import runstore
+from provekit.services import runstore
 
 
 def test_memory_store_ttl_eviction(monkeypatch):
@@ -925,7 +925,7 @@ def test_drop_ctx_module_helper(monkeypatch):
 # ---------------------------------------------------------------------------
 # deploy.py  (collect_output error + done/error events; keys)
 # ---------------------------------------------------------------------------
-from agentman.services import deploy
+from provekit.services import deploy
 
 
 def test_new_api_key_and_verify_and_slugify():
@@ -1001,7 +1001,7 @@ def test_run_snapshot_yields_engine_events(monkeypatch):
 # ---------------------------------------------------------------------------
 # testfile.py  (validation error branches)
 # ---------------------------------------------------------------------------
-from agentman.services import testfile
+from provekit.services import testfile
 
 
 def test_load_rejects_assertion_without_type():
@@ -1023,11 +1023,11 @@ def test_load_rejects_dataset_row_not_mapping():
 # ---------------------------------------------------------------------------
 # workspace.py  (seed_examples branch)
 # ---------------------------------------------------------------------------
-from agentman.services import workspace as ws_mod
+from provekit.services import workspace as ws_mod
 
 
 def _make_user_and_ws(db):
-    from agentman.models import User, Workspace
+    from provekit.models import User, Workspace
     u = User(email=f"seed{id(db)}@x.com", password_hash="x")
     db.add(u); db.commit(); db.refresh(u)
     w = Workspace(name="W", owner_user_id=u.id)
@@ -1036,8 +1036,8 @@ def _make_user_and_ws(db):
 
 
 def test_seed_workspace_with_examples(monkeypatch):
-    from agentman.database import SessionLocal
-    from agentman.models import Connection
+    from provekit.database import SessionLocal
+    from provekit.models import Connection
     s = ws_mod.get_settings()
     monkeypatch.setattr(s, "seed_examples", True, raising=False)
     monkeypatch.setattr(s, "hosted", False, raising=False)
@@ -1056,8 +1056,8 @@ def test_seed_workspace_with_examples(monkeypatch):
 
 
 def test_seed_connections_hosted_blanks_openai_key(monkeypatch):
-    from agentman.database import SessionLocal
-    from agentman.models import Connection
+    from provekit.database import SessionLocal
+    from provekit.models import Connection
     s = ws_mod.get_settings()
     monkeypatch.setattr(s, "seed_examples", True, raising=False)
     monkeypatch.setattr(s, "hosted", True, raising=False)
@@ -1074,8 +1074,8 @@ def test_seed_connections_hosted_blanks_openai_key(monkeypatch):
 
 
 def test_get_or_create_default_workspace_seeds_and_reuses(monkeypatch):
-    from agentman.database import SessionLocal
-    from agentman.models import User
+    from provekit.database import SessionLocal
+    from provekit.models import User
     s = ws_mod.get_settings()
     monkeypatch.setattr(s, "seed_examples", False, raising=False)
     db = SessionLocal()
@@ -1092,12 +1092,12 @@ def test_get_or_create_default_workspace_seeds_and_reuses(monkeypatch):
 # ---------------------------------------------------------------------------
 # main.py  (_reseal_connections + _guard_production_config warning/raise)
 # ---------------------------------------------------------------------------
-from agentman import main as main_mod
+from provekit import main as main_mod
 
 
 def test_reseal_connections_flags_and_commits(monkeypatch):
-    from agentman.database import SessionLocal
-    from agentman.models import Connection
+    from provekit.database import SessionLocal
+    from provekit.models import Connection
     db = SessionLocal()
     try:
         c = Connection(workspace_id=1, name="x", kind="llm",
@@ -1127,7 +1127,7 @@ def test_guard_production_config_warns_on_weak_server_key(monkeypatch):
         database_url = "postgresql://u@h/db"
 
     monkeypatch.setattr(main_mod, "settings", _S())
-    with _CaptureLogs("agentman", logging.WARNING) as cap:
+    with _CaptureLogs("provekit", logging.WARNING) as cap:
         main_mod._guard_production_config()
     assert "public constant" in cap.text
 
@@ -1136,7 +1136,7 @@ def test_guard_production_config_ok_for_local_sqlite(monkeypatch):
     class _S:
         hosted = False
         secret_key = ""
-        database_url = "sqlite:///./agentman.db"
+        database_url = "sqlite:///./provekit.db"
 
     monkeypatch.setattr(main_mod, "settings", _S())
     main_mod._guard_production_config()  # no raise, no warning
@@ -1153,11 +1153,11 @@ def test_lifespan_tolerates_anyio_limiter_failure(monkeypatch):
     monkeypatch.setattr(anyio.to_thread, "current_default_thread_limiter", boom)
     # TestClient(...) as context manager drives the lifespan (which swallows the error)
     with TestClient(main_mod.app) as c:
-        assert c.get("/").json()["service"] == "AgentMan"
+        assert c.get("/").json()["service"] == "ProveKit"
 
 
 def test_root_and_health_endpoints():
     from fastapi.testclient import TestClient
     with TestClient(main_mod.app) as c:
-        assert c.get("/").json()["service"] == "AgentMan"
+        assert c.get("/").json()["service"] == "ProveKit"
         assert c.get("/healthz").status_code in (200, 503)

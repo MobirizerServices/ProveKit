@@ -1,7 +1,7 @@
 """Provider SSE parsing — Responses + Anthropic — driven by synthetic async streams."""
 import asyncio
 
-from agentman.services.providers import llm
+from provekit.services.providers import llm
 
 
 class _FakeAsyncStream:
@@ -92,8 +92,8 @@ def test_tool_called_assertion_matches_streamed_tool_event(monkeypatch):
     """
     import anyio
 
-    from agentman.services import assertions as ae
-    from agentman.services import dispatch
+    from provekit.services import assertions as ae
+    from provekit.services import dispatch
 
     lines = [
         'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"t1","name":"get_weather"}}',

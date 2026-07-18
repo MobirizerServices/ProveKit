@@ -34,9 +34,6 @@ services:
       SECRET_KEY: "${SECRET_KEY:-dev-only-change-me}"
       CORS_ORIGINS: "http://localhost:3001"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      # In-container, reach host services (e.g. Magari's MCP/backend) via host.docker.internal.
-      MAGARI_MCP_URL: "http://host.docker.internal:8765/mcp"
-      MAGARI_BACKEND_URL: "http://host.docker.internal:8000"
     depends_on:
       db:
         condition: service_healthy

@@ -1,6 +1,10 @@
 # AgentMan — one-command dev workflow.
 .PHONY: help setup backend frontend dev test lint build clean
 
+# Pick the newest Python on PATH; the project needs 3.11+ (see .python-version). Using bare
+# `python3` silently built a broken venv when that happened to be an old interpreter.
+PYTHON := $(shell command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3)
+
 help:
 	@echo "make setup     - create backend venv + install deps, install frontend deps"
 	@echo "make backend   - run the API on :8100"
@@ -11,7 +15,10 @@ help:
 	@echo "make clean     - remove venv, node_modules, local db"
 
 setup:
-	cd backend && python3 -m venv venv && ./venv/bin/pip install -U pip && ./venv/bin/pip install -r requirements-dev.txt
+	@$(PYTHON) -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' || { \
+	  echo "✗ AgentMan needs Python 3.11+ (found '$(PYTHON)' = $$($(PYTHON) --version 2>&1))."; \
+	  echo "  Install Python 3.13 (see .python-version), then re-run 'make setup'."; exit 1; }
+	cd backend && $(PYTHON) -m venv venv && ./venv/bin/pip install -U pip && ./venv/bin/pip install -r requirements-dev.txt
 	cd frontend && npm install
 	@echo "\n✓ Setup complete. Run 'make backend' and 'make frontend' in two terminals."
 

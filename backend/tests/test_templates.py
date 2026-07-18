@@ -37,3 +37,30 @@ def test_unknown_and_traversal_rejected():
     with TestClient(app) as c:
         assert c.post("/api/flows/from-template", json={"slug": "nope-nope"}).status_code == 404
         assert c.post("/api/flows/from-template", json={"slug": "../../etc/passwd"}).status_code == 404
+
+
+def test_featured_showcase():
+    """The curated featured set is a fixed size, real (present in the manifest), all
+    runnable-keyless (reference the mock), and every entry is a distinct pattern+domain."""
+    feat = templates.featured()
+    assert len(feat) == len(templates._FEATURED)  # every curated slug resolved
+    manifest_slugs = {m["slug"] for m in templates._manifest()}
+    assert all(f["slug"] in manifest_slugs for f in feat)
+    # distinct patterns AND distinct domains — the point is a varied showcase, not 8 of one
+    assert len({f["category"] for f in feat}) == len(feat)
+    assert len({f["name"].split(" · ")[0] for f in feat}) == len(feat)
+
+
+def test_featured_survives_a_missing_slug(monkeypatch):
+    """A renamed/removed template must not break the picker — the bad slug is skipped."""
+    monkeypatch.setattr(templates, "_FEATURED",
+                        templates._FEATURED[:2] + ["this-template-was-removed"])
+    feat = templates.featured()
+    assert [f["slug"] for f in feat] == templates._FEATURED[:2]
+
+
+def test_templates_endpoint_exposes_featured():
+    with TestClient(app) as c:
+        r = c.get("/api/flows/templates").json()
+        assert len(r["featured"]) == len(templates._FEATURED)
+        assert r["featured"][0]["slug"] == templates._FEATURED[0]

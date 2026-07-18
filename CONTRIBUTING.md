@@ -17,12 +17,15 @@ Connections tab for real models.
 ## Common commands
 
 ```bash
+make lint         # ruff check on the backend
 make test         # backend pytest + frontend typecheck
 make build        # frontend production build
-make clean        # remove venv, node_modules, local db, then re-run make setup
+make clean        # remove venv, node_modules, local db (re-run make setup afterwards)
 ```
 
-Run these before opening a PR; CI (`.github/workflows/ci.yml`) runs the same.
+Run `make lint && make test && make build` before opening a PR. CI
+(`.github/workflows/ci.yml`) runs those same three gates and additionally builds the
+backend and frontend Docker images, so a Dockerfile break fails the build too.
 
 ## Layout
 

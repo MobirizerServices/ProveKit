@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Connection, Workspace, iso_utc
 from ..services.assertions import get_path
-from ..services.masking import MASK, mask_headers, mask_value
+from ..services.masking import is_masked, mask_headers, mask_value
 from ..services.netguard import BlockedURL, guard_url
 from ..services.providers.mcp_client import MCPSession
 from ..services.workspace import current_workspace
@@ -57,6 +57,23 @@ class ConnectionIn(BaseModel):
     config: dict = {}
 
 
+def _restore_secrets(incoming: dict, stored: dict) -> dict:
+    """Map each masked value back to the stored secret it stands for, by key.
+
+    A masked value is a display placeholder, never a credential. If the key has no stored
+    counterpart — the user renamed an env var or header without retyping its value — the
+    entry is dropped rather than persisted, which would otherwise seal the literal
+    "••••3456" as the credential and fail later with no clue why.
+    """
+    out = {}
+    for k, v in incoming.items():
+        if not is_masked(v):
+            out[k] = v
+        elif k in stored:
+            out[k] = stored[k]
+    return out
+
+
 @router.get("")
 def list_connections(db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     return [_public(c) for c in db.query(Connection).filter(Connection.workspace_id == ws.id).order_by(Connection.id).all()]
@@ -64,7 +81,18 @@ def list_connections(db: Session = Depends(get_db), ws: Workspace = Depends(curr
 
 @router.post("")
 def create_connection(payload: ConnectionIn, db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
-    c = Connection(workspace_id=ws.id, name=payload.name, kind=payload.kind, config=payload.config or {})
+    # A new connection has nothing stored to restore a mask from, so any masked value here
+    # (a UI "duplicate" that round-trips a GET response) is dropped, not saved as a secret.
+    cfg = dict(payload.config or {})
+    if is_masked(cfg.get("api_key")):
+        cfg["api_key"] = ""
+    if isinstance(cfg.get("oauth"), dict) and is_masked(cfg["oauth"].get("client_secret")):
+        cfg["oauth"] = {**cfg["oauth"], "client_secret": ""}
+    for field in ("headers", "env"):
+        if isinstance(cfg.get(field), dict):
+            cfg[field] = _restore_secrets(cfg[field], {})
+    cfg.pop("has_key", None)
+    c = Connection(workspace_id=ws.id, name=payload.name, kind=payload.kind, config=cfg)
     db.add(c); db.commit(); db.refresh(c)
     return _public(c)
 
@@ -76,25 +104,20 @@ def update_connection(cid: int, payload: ConnectionIn, db: Session = Depends(get
     stored = c.config or {}
     # Preserve the stored key if the client didn't send a fresh one.
     incoming = cfg.get("api_key", "")
-    if not incoming or incoming.startswith(MASK):
+    if not incoming or is_masked(incoming):
         cfg["api_key"] = stored.get("api_key", "")
     # Same for masked secret headers — don't let a masked value overwrite the real token.
-    hdrs = cfg.get("headers")
-    if isinstance(hdrs, dict):
-        stored_hdrs = stored.get("headers") or {}
-        cfg["headers"] = {k: (stored_hdrs.get(k, v) if isinstance(v, str) and v.startswith(MASK) else v) for k, v in hdrs.items()}
+    if isinstance(cfg.get("headers"), dict):
+        cfg["headers"] = _restore_secrets(cfg["headers"], stored.get("headers") or {})
     # Preserve a masked/blank MCP OAuth client_secret rather than clobbering the stored one.
     oauth = cfg.get("oauth")
     if isinstance(oauth, dict):
-        stored_oauth = stored.get("oauth") or {}
         cs = oauth.get("client_secret", "")
-        if isinstance(cs, str) and (not cs or cs.startswith(MASK)):
-            cfg["oauth"] = {**oauth, "client_secret": stored_oauth.get("client_secret", "")}
+        if isinstance(cs, str) and (not cs or is_masked(cs)):
+            cfg["oauth"] = {**oauth, "client_secret": (stored.get("oauth") or {}).get("client_secret", "")}
     # Same for masked stdio env values.
-    env = cfg.get("env")
-    if isinstance(env, dict):
-        stored_env = stored.get("env") or {}
-        cfg["env"] = {k: (stored_env.get(k, v) if isinstance(v, str) and v.startswith(MASK) else v) for k, v in env.items()}
+    if isinstance(cfg.get("env"), dict):
+        cfg["env"] = _restore_secrets(cfg["env"], stored.get("env") or {})
     cfg.pop("has_key", None)
     c.name, c.kind, c.config = payload.name, payload.kind, cfg
     db.commit(); db.refresh(c)

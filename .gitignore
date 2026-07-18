@@ -14,3 +14,6 @@ __pycache__/
 .pytest_cache/
 **/.coverage
 **/htmlcov/
+
+# isolated production-build output (keeps `next build` off the dev server's .next)
+**/.next-build/

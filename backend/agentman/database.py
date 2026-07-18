@@ -76,12 +76,27 @@ _BASELINE_REVISION = "49e8ab812556"
 _MIGRATION_LOCK_ID = 0x4147_4D4E
 
 
-def _run_migrations() -> None:
+def _migration_config():
+    """Alembic config built in code rather than read from alembic.ini.
+
+    The migrations ship *inside* the package, so script_location is resolved absolutely
+    from `__file__`. Reading alembic.ini instead would only work when the process runs
+    from a source checkout — a `pip install`ed wheel has no alembic.ini next to the
+    package, and the app would fail to boot. alembic.ini stays for `alembic` CLI use.
+    """
     import os
 
     from alembic.config import Config
 
-    cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+    cfg = Config()
+    cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "migrations"))
+    # No sqlalchemy.url here on purpose: env.py reads it from settings and builds the engine
+    # itself, which keeps a '%' in the password out of ConfigParser's interpolation.
+    return cfg
+
+
+def _run_migrations() -> None:
+    cfg = _migration_config()
     if settings.database_url.startswith("sqlite"):
         _migrate_to_head(cfg)  # single process — no cross-worker race
         return

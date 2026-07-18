@@ -11,7 +11,9 @@ acknowledge within 72 hours. Please include reproduction steps and the affected 
 - **Connection credentials** (API keys, auth headers) are **encrypted at rest** with
   Fernet (`services/sealing.py`). The database never stores plaintext; the app decrypts
   on read. The key comes from `SECRET_KEY`, or an auto-generated `.agentman.key` for local
-  SQLite. Hosted mode **refuses to boot** with a weak/default `SECRET_KEY`.
+  SQLite. Hosted mode **refuses to boot** unless `SECRET_KEY` is at least 16 characters and
+  isn't one of the known dev defaults (`main.py`). Running a non-SQLite database with a weak
+  key and `HOSTED=false` boots, but logs a loud warning.
 - **API responses mask secrets** — keys and `Authorization`-type headers are shown as
   `••••last4` (`services/masking.py`).
 - **Run history masks secrets** — secret-looking fields in persisted request bodies and
@@ -21,6 +23,12 @@ acknowledge within 72 hours. Please include reproduction steps and the affected 
   rejected on import.
 - **Session tokens** are signed (HS256) with a `purpose` claim, so a reset/verify token
   can't be used as a session. Cookies are `HttpOnly` and `Secure` in hosted mode.
+- **A password reset revokes every existing session** — tokens carry the user's
+  `token_version` (`services/auth.py`), which is bumped on reset (`routers/auth.py`), so
+  old sessions stop verifying and the reset link itself is single-use. Completing a reset
+  also marks the email verified: receiving the link proves the same mailbox control the
+  verification link tests, and the revocation would otherwise invalidate the one verify
+  link a user is ever sent.
 
 ## Threat model highlights
 
@@ -34,7 +42,14 @@ acknowledge within 72 hours. Please include reproduction steps and the affected 
 - **Cross-tenant access** — every resource is workspace-scoped; connection resolution in
   the run/flow/judge paths is workspace-checked, so one tenant can't run against another's
   stored credentials by passing an id.
+- **Local code execution (stdio MCP)** — an MCP connection can name a local command to
+  spawn. Hosted mode **refuses to launch one at all** (`netguard.guard_stdio()`, enforced in
+  `providers/mcp_client.py`), so a signed-up tenant can't turn a connection into remote code
+  execution on the server. Local mode keeps stdio, where it's your own machine by design.
 - **Brute force** — login and password-reset requests are rate-limited per email+IP.
+- **Response headers** — `X-Content-Type-Options`, `X-Frame-Options: DENY`,
+  `Referrer-Policy`, plus HSTS in hosted mode, are set by backend middleware
+  (`observability.py`) and again at the proxy for every response (`Caddyfile`).
 - **Resource abuse** — per-workspace run rate limits, dataset-row caps, request body-size
   limits, flow-node caps, per-deployment invocation timeouts, and run-history retention.
 
@@ -50,7 +65,8 @@ acknowledge within 72 hours. Please include reproduction steps and the affected 
 ## What is NOT yet done (be aware before exposing publicly)
 
 - No third-party penetration test or formal audit has been performed.
-- No CSP / security-header middleware on the frontend yet.
+- **No Content-Security-Policy yet.** The other security headers ship (see above), but
+  nothing constrains script sources, so an injected script is not defence-in-depth'd.
 - Deployment API keys are workspace-visible; rotation is manual (redeploy).
 - The SSRF guard does not defend against DNS rebinding without an egress proxy.
 - Next.js 16 upgrade pending (see dependency advisories above).

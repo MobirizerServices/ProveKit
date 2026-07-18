@@ -565,6 +565,33 @@ def test_deployment_redeploy_deactivate_rollback_and_stats(client):
     assert client.post(f"/v1/d/{slug}", headers={"X-API-Key": key}, json={}).status_code == 410
 
 
+def test_deployment_list_reports_the_version_actually_serving(client):
+    """After a rollback the list must describe the live row, not the newest one.
+
+    Reporting the highest version would render a rolled-back slug as "v2 · inactive"
+    while v1 keeps answering /v1/d/{slug} — and the UI hides Deactivate when
+    active is false, leaving no way to switch off a live, key-holding endpoint.
+    """
+    dep = _deploy_flow(client)
+    key, slug = dep["api_key"], dep["slug"]
+    flow_id = client.get(f"/api/deployments/{slug}").json()["flow_id"]
+    client.post("/api/deployments", json={"flow_id": flow_id})  # -> v2 active
+
+    client.post(f"/api/deployments/{slug}/rollback", json={"version": 1})
+    row = next(r for r in client.get("/api/deployments").json() if r["slug"] == slug)
+
+    # v1 is the row that serves traffic, so that is what the listing describes.
+    assert client.post(f"/v1/d/{slug}", headers={"X-API-Key": key}, json={"question": "hi"}).status_code == 200
+    assert row["version"] == 1
+    assert row["active"] is True, "a live endpoint must not be listed as inactive"
+    assert row["latest_version"] == 2 and row["versions"] == 2
+
+    # with every version off, the listing falls back to the latest and reports inactive
+    client.post(f"/api/deployments/{slug}/deactivate")
+    off = next(r for r in client.get("/api/deployments").json() if r["slug"] == slug)
+    assert off["active"] is False and off["version"] == 2
+
+
 # --------------------------------------------------------------------------- #
 # flows: node-types, from-template, export, run/stream, continue/stream
 # --------------------------------------------------------------------------- #

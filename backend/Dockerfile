@@ -11,7 +11,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY agentman ./agentman
 COPY alembic.ini .
-COPY migrations ./migrations
 
 # Writable data dir for the SQLite db (mount a volume here). Owned by the app
 # uid so the default DATABASE_URL (sqlite:////data/agentman.db) works standalone.

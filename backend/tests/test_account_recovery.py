@@ -89,3 +89,25 @@ def test_email_verification_gate(sent, monkeypatch):
         assert c.post("/api/auth/verify", json={"token": token}).status_code == 200
         # now login works
         assert c.post("/api/auth/login", json={"email": "v@x.com", "password": "verifypw12"}).status_code == 200
+
+
+def test_reset_before_verifying_does_not_lock_the_account_out(sent, monkeypatch):
+    """Resetting a password before clicking the verify link must not brick the account.
+
+    The verify link is minted once, at register. Since reset bumps token_version (revoking
+    every outstanding token, the verify link included) and there is no resend endpoint, a
+    version-bound verify link would leave the user unable to verify *or* log in — forever.
+    Receiving the reset link proves the same mailbox control, so it verifies the email.
+    """
+    monkeypatch.setattr(get_settings(), "require_email_verification", True)
+    with TestClient(app, base_url="https://testserver") as c:
+        c.post("/api/auth/register", json={"email": "lock@x.com", "password": "originalpw1"})
+        assert c.post("/api/auth/login", json={"email": "lock@x.com", "password": "originalpw1"}).status_code == 403
+        # reset the password without ever having clicked the verify link
+        c.post("/api/auth/forgot", json={"email": "lock@x.com"})
+        token = _link(sent, "/reset?token=").split("token=")[1]
+        assert c.post("/api/auth/reset", json={"token": token, "password": "brandnewpw2"}).status_code == 200
+        # the account is usable: reset proved the email, so the gate lets us in
+        r = c.post("/api/auth/login", json={"email": "lock@x.com", "password": "brandnewpw2"})
+        assert r.status_code == 200, "reset before verifying locked the account out"
+        assert r.json()["email_verified"] is True

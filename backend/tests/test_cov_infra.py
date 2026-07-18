@@ -360,9 +360,11 @@ def _obs_app():
     async def ping():
         return {"ok": True}
 
+    # Same order as main.py (last added = outermost): the size limit sits *inside* the two
+    # BaseHTTPMiddleware layers so its 413 still gets headers + a request id.
+    app.add_middleware(obs.BodySizeLimitMiddleware)
     app.add_middleware(obs.RequestIDMiddleware)
     app.add_middleware(obs.SecurityHeadersMiddleware)
-    app.add_middleware(obs.BodySizeLimitMiddleware)
     return app
 
 
@@ -428,6 +430,7 @@ def test_body_size_limit_handles_disconnect(monkeypatch):
     monkeypatch.setattr(s, "max_body_bytes", 10_000, raising=False)
 
     called = {"app": False}
+    sent = []
 
     async def inner_app(scope, receive, send):
         called["app"] = True  # must NOT be reached — the middleware returns on disconnect
@@ -439,10 +442,48 @@ def test_body_size_limit_handles_disconnect(monkeypatch):
         return {"type": "http.disconnect"}
 
     async def send(msg):
-        pass
+        sent.append(msg)
 
     anyio.run(mw.__call__, scope, receive, send)
     assert called["app"] is False
+    # It must still emit a response: this middleware runs inside BaseHTTPMiddleware, which
+    # raises "No response returned." if call_next produces nothing. Nobody reads the 499.
+    assert [m["type"] for m in sent] == ["http.response.start", "http.response.body"]
+    assert sent[0]["status"] == 499
+
+
+def test_disconnect_mid_upload_does_not_500_through_the_real_stack(monkeypatch):
+    """A cancelled upload must stay silent, not become a 500 + Sentry event.
+
+    Regression guard for middleware ordering: BodySizeLimitMiddleware sits inside the
+    BaseHTTPMiddleware layers so its 413 carries security headers, and a bare `return` on
+    disconnect would make call_next raise RuntimeError("No response returned.").
+    """
+    import anyio
+    s = obs.get_settings()
+    monkeypatch.setattr(s, "max_body_bytes", 10_000, raising=False)
+
+    async def inner_app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    # innermost -> outermost, mirroring main.py
+    stack = obs.SecurityHeadersMiddleware(obs.RequestIDMiddleware(obs.BodySizeLimitMiddleware(inner_app)))
+    messages = iter([{"type": "http.request", "body": b"x" * 10, "more_body": True},
+                     {"type": "http.disconnect"}])
+    scope = {"type": "http", "method": "POST", "path": "/echo", "query_string": b"",
+             "headers": [(b"content-type", b"application/json")]}
+
+    async def receive():
+        return next(messages)
+
+    sent = []
+
+    async def send(msg):
+        sent.append(msg)
+
+    anyio.run(stack.__call__, scope, receive, send)  # must not raise
+    assert sent[0]["status"] == 499
 
 
 def test_body_size_limit_passes_through_non_http():

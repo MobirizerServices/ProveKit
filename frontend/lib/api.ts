@@ -112,7 +112,7 @@ export const api = {
   flows: () => j<FlowSummary[]>("/api/flows"),
   getFlow: (id: number) => j<FlowT>(`/api/flows/${id}`),
   createFlow: (name: string, nodes: any[] = [], edges: any[] = []) => j<FlowT>("/api/flows", { method: "POST", body: JSON.stringify({ name, nodes, edges }) }),
-  flowTemplates: (q = "", limit = 60) => j<{ total: number; categories: string[]; items: { slug: string; name: string; description: string; category: string }[] }>(`/api/flows/templates?q=${encodeURIComponent(q)}&limit=${limit}`),
+  flowTemplates: (q = "", limit = 60) => j<{ total: number; categories: string[]; items: { slug: string; name: string; description: string; category: string }[]; featured: { slug: string; name: string; description: string; category: string }[] }>(`/api/flows/templates?q=${encodeURIComponent(q)}&limit=${limit}`),
   createFlowFromTemplate: (slug: string) => j<FlowT>("/api/flows/from-template", { method: "POST", body: JSON.stringify({ slug }) }),
   updateFlow: (id: number, f: Partial<FlowT>) => j<FlowT>(`/api/flows/${id}`, { method: "PUT", body: JSON.stringify(f) }),
   deleteFlow: (id: number) => j(`/api/flows/${id}`, { method: "DELETE" }),

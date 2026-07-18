@@ -30,7 +30,9 @@ export default function ResponsePanel({ run, onboarding, onAddAssertion }: { run
   const tok = usageTokens(meta?.usage);
   const asserts = assertResults || [];
   const passed = asserts.filter((a) => a.ok).length;
-  const done = status === "completed" || status === "failed";
+  // "interrupted" (Stop mid-stream) is a finished run too: the partial output is still
+  // there to select and assert on, so it keeps the assertion shortcuts.
+  const done = status === "completed" || status === "failed" || status === "interrupted";
 
   // Turn the actual run into an assertion — the conversion loop from "I ran it" to "it's a test".
   const assertContains = () => {

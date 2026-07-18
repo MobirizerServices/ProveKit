@@ -77,6 +77,10 @@ function Editor() {
   const [toast, setToast] = useState<string | null>(null);
   const [tplPicker, setTplPicker] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
+  // A flow id to auto-run once it finishes loading — set when a template is picked so a
+  // one-click template lands on the canvas already running (plug-and-play first touch). A
+  // ref, not state, so consuming it doesn't re-trigger the load effect.
+  const autoRunRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
   const nodesRef = useRef<RFNode[]>([]); nodesRef.current = rfNodes;
@@ -99,15 +103,27 @@ function Editor() {
     abortRef.current?.abort();  // stop a run still streaming from the previous flow
     setRunning(false);
     setSelected(null); setRunByNode({}); setStepsById({}); setRunStatus("idle"); setBreakpoints(new Set());
-    let cancelled = false; let timer: any;
+    let cancelled = false; let timer: any; let timer2: any;
     api.getFlow(activeId).then((f) => {
       if (cancelled) return;  // ignore an out-of-order response for a flow we've since left
       const { nodes, edges } = toRF(f);
       setRfNodes(nodes); setRfEdges(edges);
       setBaseline(JSON.stringify(toGraph(nodes, edges)));
       timer = setTimeout(() => { if (!cancelled) fitView({ padding: 0.2, duration: 0 }); }, 60);
+      // Auto-run a just-picked template so it lands already running. Guard on every
+      // model/tool node having a resolved connection, so we never auto-run into a red fail.
+      if (autoRunRef.current === activeId) {
+        autoRunRef.current = null;
+        const needsConn = (t: string) => t === "prompt" || t === "tool" || t === "agent";
+        const runnable = nodes.filter((n) => needsConn((n.data as any).nodeType))
+          .every((n) => (n.data as any).config?.connection_id);
+        if (runnable) {
+          flash("Running the demo — no API key needed");
+          timer2 = setTimeout(() => { if (!cancelled) actionsRef.current.run?.(false); }, 200);
+        }
+      }
     }).catch(() => {});
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { cancelled = true; clearTimeout(timer); clearTimeout(timer2); };
   }, [activeId]);
 
   // breakpoint toggle from node gutter
@@ -206,7 +222,10 @@ function Editor() {
   async function newFlowFromTemplate(slug: string) {
     try {
       const f = await api.createFlowFromTemplate(slug);
-      setTplPicker(false); await loadFlows(); setActiveId(f.id); flash("Flow created from template");
+      setTplPicker(false); await loadFlows();
+      // Queue an auto-run: the load effect populates the canvas, then fires the run once
+      // nodes are in place. Templates use the keyless mock, so this is free and safe.
+      autoRunRef.current = f.id; setActiveId(f.id);
     } catch (e: any) { flash(e.message); }
   }
 

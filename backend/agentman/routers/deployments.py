@@ -69,16 +69,24 @@ def _unique_slug(db, base: str) -> str:
 
 @router.get("")
 def list_deployments(db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
-    """One row per slug (the active/latest version), with version count."""
+    """One row per slug: the version actually being served, plus the version count.
+
+    Picks the *active* row, falling back to the latest when nothing is active. Always
+    picking the latest would misreport a rolled-back slug as inactive while an older
+    version keeps answering /v1/d/{slug} — see runtime.serve().
+    """
     rows = db.query(Deployment).filter(Deployment.workspace_id == ws.id).order_by(Deployment.id.desc()).all()
-    by_slug: dict[str, dict] = {}
+    serving: dict[str, Deployment] = {}
+    counts: dict[str, int] = {}
+    latest: dict[str, int] = {}
     for d in rows:
-        cur = by_slug.get(d.slug)
-        if not cur or d.version > cur["version"]:
-            by_slug[d.slug] = {**_public(d, _endpoint(d.slug)), "versions": 0}
-    for d in rows:
-        by_slug[d.slug]["versions"] += 1
-    return list(by_slug.values())
+        counts[d.slug] = counts.get(d.slug, 0) + 1
+        latest[d.slug] = max(latest.get(d.slug, 0), d.version)
+        cur = serving.get(d.slug)
+        if cur is None or (d.active, d.version) > (cur.active, cur.version):
+            serving[d.slug] = d
+    return [{**_public(d, _endpoint(slug)), "versions": counts[slug], "latest_version": latest[slug]}
+            for slug, d in serving.items()]
 
 
 @router.get("/{slug}")

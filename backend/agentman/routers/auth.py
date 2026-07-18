@@ -121,6 +121,11 @@ def reset(body: ResetIn, db: Session = Depends(get_db)):
     if not u or u.token_version != ver:  # a reset link is single-use and dies on the next reset
         raise HTTPException(400, "This reset link is invalid or has expired.")
     u.password_hash = auth.hash_password(body.password)
+    # Receiving this link proves control of the mailbox — the same proof the verify link
+    # provides — so consume it as verification too. Without this, bumping token_version
+    # below would kill the registration verify link (the only one ever minted) and, with
+    # REQUIRE_EMAIL_VERIFICATION, lock the account out permanently.
+    u.email_verified = True
     u.token_version += 1  # revoke every existing session + this now-used reset link
     db.commit()
     return {"ok": True}

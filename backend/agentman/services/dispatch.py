@@ -17,8 +17,45 @@ import uuid
 import anyio
 
 from ..models import Connection
+from . import tooling
 from .masking import is_masked
 from .providers import a2a_client, agent_http, llm, mcp_client
+
+
+def _add_usage(total: dict, add: dict) -> dict:
+    """Sum token counts across the turns of a tool loop — a run reports one usage total,
+    but a tool-calling run makes N model calls.
+
+    Recurses into the nested breakdowns every provider ships (`*_tokens_details`,
+    Anthropic's cache counters). Summing only the top level would leave the totals
+    internally inconsistent — parents summed over N turns, children from the last turn
+    alone — which reads as real data in a product people use to measure cost.
+    """
+    if not total:
+        return dict(add or {})
+    out = dict(total)
+    for k, v in (add or {}).items():
+        prev = out.get(k)
+        if isinstance(v, dict) and isinstance(prev, dict):
+            out[k] = _add_usage(prev, v)
+        elif isinstance(v, (int, float)) and isinstance(prev, (int, float)) and not isinstance(v, bool):
+            out[k] = prev + v
+        else:
+            out[k] = v
+    return out
+
+
+def _rounds(raw) -> int:
+    """max_tool_rounds, clamped. Absent → 5; explicit 0 means "never execute", so it must
+    survive (a plain `or 5` would turn it into 5). Null/garbage is a caller error worth
+    saying out loud rather than silently defaulting."""
+    if raw is None:
+        return 5
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"max_tool_rounds must be a number, got {raw!r}")
+    return max(0, min(n, tooling.MAX_TOOL_ROUNDS))
 
 _VAR = re.compile(r"\{\{\s*([\w.\-]+)\s*\}\}")
 
@@ -55,10 +92,15 @@ async def run_collect(db, req: dict, variables: dict | None = None, workspace_id
     """Run a request to completion (non-streaming) and return the collected result —
     used by the flow engine to execute prompt/tool/agent nodes."""
     text, output, meta, status, err, dur = [], None, {}, "completed", "", 0
+    events = []
     async for ev in run(db, req, variables, workspace_id):
         t = ev["type"]
         if t == "delta":
             text.append(ev.get("text", ""))
+        elif t == "node":
+            # Keep node events: they carry the tool calls a `tool_called` assertion reads.
+            # Dropping them made that assertion inert for anything run through a flow.
+            events.append(ev.get("data"))
         elif t == "result":
             output, meta = ev.get("data"), ev.get("meta", {})
         elif t == "error":
@@ -66,7 +108,7 @@ async def run_collect(db, req: dict, variables: dict | None = None, workspace_id
         elif t == "done":
             status, dur = ev.get("status", "completed"), ev.get("duration_ms", 0)
     return {"text": "".join(text) or None, "output": output, "meta": meta, "status": status,
-            "error": err, "duration_ms": dur}
+            "error": err, "duration_ms": dur, "events": events}
 
 
 def run_collect_sync(db, req: dict, variables: dict | None = None, workspace_id=None) -> dict:
@@ -127,18 +169,77 @@ async def _run_prompt(db, req, variables, workspace_id=None):
     if user or not messages:
         messages.append({"role": "user", "content": user})
 
+    # MCP tools the model may call, discovered up front so an unreachable server fails the
+    # run before any tokens are spent. The DB lookup is cheap and stays here; discovery is
+    # blocking (HTTP, or spawning a stdio server) and must not sit on the event loop.
+    plans = tooling.plan(db, req.get("tools"), workspace_id)
+    tools = await anyio.to_thread.run_sync(tooling.discover, plans) if plans else []
+    by_api = {t.api_name: t for t in tools}
+    defs = tooling.for_provider(tools, provider)
+    rounds_left = _rounds(req.get("max_tool_rounds"))
+    runner = tooling.Runner()
+
     parts, usage = [], {}
-    async for ev in llm.astream(provider=provider, base_url=base_url, api_key=api_key, model=model,
-                                system=system, messages=messages,
-                                temperature=float(req.get("temperature", 0.7)),
-                                max_tokens=int(req.get("max_tokens", 1024))):
-        if ev["type"] == "delta":
-            parts.append(ev["text"])
-            yield {"type": "delta", "text": ev["text"]}
-        elif ev["type"] == "node":
-            yield ev  # tool-call / stop_reason events
-        elif ev["type"] == "usage":
-            usage = ev["usage"]
+    # Sessions the loop opens must be torn down even if the model stream fails,
+    # or a stdio MCP subprocess would outlive the run.
+    try:
+        while True:
+            text, calls = [], []
+            async for ev in llm.astream(provider=provider, base_url=base_url, api_key=api_key, model=model,
+                                        system=system, messages=messages,
+                                        temperature=float(req.get("temperature", 0.7)),
+                                        max_tokens=int(req.get("max_tokens", 1024)), tools=defs):
+                if ev["type"] == "delta":
+                    text.append(ev["text"]); parts.append(ev["text"])
+                    yield {"type": "delta", "text": ev["text"]}
+                elif ev["type"] == "tool_call":
+                    calls.append(ev["call"])
+                elif ev["type"] == "node":
+                    yield ev  # stop_reason and other provider events
+                elif ev["type"] == "usage":
+                    usage = _add_usage(usage, ev["usage"])  # one result per run, N model turns
+            if not calls:
+                break
+            # Report the server's real tool name, not the sanitized one the model was given, so
+            # a `tool_called` assertion matches what the user sees in the MCP server.
+            yield {"type": "node", "data": {"tool_calls": [
+                {"id": c["id"], "name": (by_api[c["name"]].name if c["name"] in by_api else c["name"]),
+                 "args": c["args"]} for c in calls]}}
+            # Only an explicit `execute: false` (or the cap) stops the run. A name we don't know
+            # is the model's mistake, not the user's intent, and is handled below as a failed
+            # tool turn so it can correct itself.
+            dry = [c for c in calls if c["name"] in by_api and not by_api[c["name"]].execute]
+            if dry or rounds_left <= 0:
+                reason = ("tool execution is off for this request" if dry else "hit max_tool_rounds")
+                yield {"type": "node", "data": {"tools_stopped": reason}}
+                break
+            rounds_left -= 1
+            messages = messages + [{"role": "assistant", "content": "".join(text),
+                                    "tool_calls": [{"id": c["id"], "name": c["name"], "args": c["args"]}
+                                                   for c in calls]}]
+            for c in calls:
+                tool = by_api.get(c["name"])
+                if tool is None:
+                    # A hallucinated tool. Feed the error back rather than ending the run: the
+                    # model can pick a real tool on the next turn.
+                    known = ", ".join(sorted(by_api)) or "none"
+                    out, ok, err = (f"Tool error: no tool named '{c['name']}'. Available: {known}",
+                                    False, f"unknown tool '{c['name']}'")
+                    name = c["name"]
+                else:
+                    name = tool.name
+                    try:
+                        # MCP is sync and may spawn a process — never run it on the event loop.
+                        out = await anyio.to_thread.run_sync(runner.call, tool, c["args"])
+                        ok, err = True, ""
+                    except Exception as exc:  # a failed tool is a turn the model sees, not a dead run
+                        out, ok, err = f"Tool error: {exc}", False, str(exc)
+                yield {"type": "node", "data": {"tool_result": {"name": name, "ok": ok,
+                                                                "output": out, "error": err}}}
+                messages.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"],
+                                 "content": out})
+    finally:
+        runner.close()
     yield {"type": "result", "data": {"text": "".join(parts)},
            "meta": {"provider": provider, "model": model, "usage": usage}}
 

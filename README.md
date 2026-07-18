@@ -81,6 +81,12 @@ Console ─ single-shot runner    Flows ─ visual node canvas     Prompts ─ r
 - **Prompt** — pick model + system/user, stream tokens live, see usage/latency.
 - **Tool** — pick an MCP connection → tools are **auto-discovered**; the argument form is
   **generated from each tool's JSON input-schema**; results render as a JSON tree.
+- **Give the agent tools (MCP)** — attach one or more MCP servers to a **Prompt** and the
+  model under test can actually call them: it picks a tool, AgentMan runs it over MCP, feeds
+  the result back, and the model continues. That makes `tool_called` an assertion about the
+  agent's *decision*, not about a call you wired by hand. Narrow which tools are exposed, cap
+  the call→result loop (`max_tool_rounds`), or flip **dry run** to record the tool it picks
+  **without** executing it — so you can test routing without firing real side effects.
 - **Agent** — call any HTTP endpoint (method/path/headers/body), buffered or SSE-streamed.
   Optional **auth helper**: log in once (login path + credentials → token path) and the
   bearer token is attached to every call — credentials are never stored, only the token.
@@ -108,7 +114,11 @@ Console ─ single-shot runner    Flows ─ visual node canvas     Prompts ─ r
   **Continue / Step** through — an in-engine context store keeps the run paused between calls.
 - **Node inspector** — per-type config forms + the node's last-run input/output. A prompt
   node can **pull its system prompt from the Prompt Registry by key**, so the registry stays
-  the single source of truth.
+  the single source of truth, and can **attach MCP servers** so its model calls tools itself
+  rather than following a hand-wired tool node.
+
+- **Deploy** — publish a flow as a versioned hosted API (`POST /v1/d/{slug}`). You get a
+  URL, a one-time key, and a ready `curl`; invocations show up with logs and metrics.
 
 ### Prompts — registry
 
@@ -149,8 +159,14 @@ OPENAI_API_KEY=sk-… docker compose up --build
 # open http://localhost:3001
 ```
 
-The Postgres db persists in the `agentman-pg` volume. In-container, the seeded Magari
-example connections point at `host.docker.internal` so they reach services on your host.
+The Postgres db persists in the `agentman-pg` volume. The seeded **Demo Assistant (mock)**
+connection works in-container with no key; to reach an agent running on your host, point
+the connection at `host.docker.internal` rather than `127.0.0.1`.
+
+This stack is **for local use only** — it ships a default `SECRET_KEY`, so stored
+credentials are encrypted under a publicly-known constant and the backend says so in its
+logs. For anything reachable from a network, use the hosted stack (`HOSTED=true`, a real
+`SECRET_KEY`, TLS) — see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### Local dev (two processes)
 
@@ -168,11 +184,11 @@ npm install
 npm run dev                    # http://localhost:3001
 ```
 
-On first run the backend seeds example connections: **OpenAI**, **Anthropic**,
-**Magari · catalog (MCP)** (`http://127.0.0.1:8765/mcp`), and **Magari · backend (agent)** —
-plus three registry **prompts** and an **"Inventory check" flow** (input → MCP tool →
-condition → branch) so `/flows` and `/prompts` are populated on first load. Add your API
-key to the OpenAI connection (pencil ✎ in the sidebar) to run prompts.
+On first run each workspace is seeded with a **Demo Assistant (mock)** connection that
+streams a canned answer with no API key, plus (unless `SEED_EXAMPLES=false`) empty
+**OpenAI** and **Anthropic** connections to drop your own keys into (pencil ✎ in the
+sidebar). You also get two registry **prompts** and a **"Demo · Ask the agent"** flow
+(input → prompt → output), so `/flows` and `/prompts` are populated on first load.
 
 ## Architecture
 
@@ -198,8 +214,11 @@ Shipped: the console runner (prompt/tool/agent) · collections · environments +
 `{{variables}}` · assertions · datasets + **saved datasets** · **A/B compare** · the agent
 **auth helper** · run history · **exportable HTML eval reports** · Docker packaging ·
 the **visual Flow builder** (node canvas + branching + run/step-debug + inspector) ·
-the **Prompt Registry** (with flow prompt nodes bound by key).
+the **Prompt Registry** (with flow prompt nodes bound by key) · the **`.agentman` format +
+`agentman` CLI** (JUnit/JSON output, promptfoo importer) · **flow deployments** as a
+versioned hosted API · **A2A** agent cards · **OpenTelemetry** GenAI trace ingest + emit ·
+**auth + workspaces** with tenant isolation, Postgres + Alembic, rate limits and usage
+metering.
 
-Next ideas: **CI mode** (run a saved dataset from the CLI as a regression gate), team
-**export/import** of collections + flows, streaming dataset progress, and a **prompt node
-inside flows that streams tokens** on the canvas.
+Next ideas: team **export/import** of collections + flows, streaming dataset progress, and
+a **prompt node inside flows that streams tokens** on the canvas.

@@ -19,6 +19,7 @@ export default function TemplatePicker({ starters, onStarter, onTemplate, onClos
   const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
   const [items, setItems] = useState<Tmpl[]>([]);
+  const [featured, setFeatured] = useState<Tmpl[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const timer = useRef<any>(null);
@@ -34,6 +35,7 @@ export default function TemplatePicker({ starters, onStarter, onTemplate, onClos
         if (cancelled) return;
         setItems(r.items); setTotal(r.total);
         if (!categories.length) setCategories(r.categories);
+        if (!featured.length) setFeatured(r.featured || []);
       }).catch(() => { if (!cancelled) setItems([]); }).finally(() => { if (!cancelled) setLoading(false); });
     }, 180);
     return () => { cancelled = true; clearTimeout(timer.current); };
@@ -41,6 +43,17 @@ export default function TemplatePicker({ starters, onStarter, onTemplate, onClos
 
   const pick = async (slug: string) => { setBusy(slug); try { await onTemplate(slug); } finally { setBusy(null); } };
   const showStarters = useMemo(() => !q && !cat, [q, cat]);
+
+  const row = (t: Tmpl) => (
+    <button key={t.slug} className="tpl-item" disabled={busy === t.slug} onClick={() => pick(t.slug)}>
+      <div className="tpl-item-main">
+        <div className="tpl-item-name">{t.name}</div>
+        <div className="tpl-item-desc">{t.description}</div>
+      </div>
+      <span className="tpl-item-cat">{t.category}</span>
+      <span className="wp-arrow">{busy === t.slug ? "…" : "›"}</span>
+    </button>
+  );
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -56,8 +69,16 @@ export default function TemplatePicker({ starters, onStarter, onTemplate, onClos
             </div>
           )}
 
-          {showStarters && (
+          {showStarters ? (
+            // Default view: a curated few + build-from-scratch. The full 432 stay one search
+            // (or category chip) away, so the first screen isn't a wall of near-duplicates.
             <>
+              {featured.length > 0 && (
+                <>
+                  <div className="tpl-label">Featured <span className="hint" style={{ fontWeight: 400 }}>— one click runs it, no key needed</span></div>
+                  <div className="tpl-list">{featured.map(row)}</div>
+                </>
+              )}
               <div className="tpl-label">Start from scratch</div>
               <div className="wiz-grid" style={{ marginBottom: 6 }}>
                 {starters.map((t) => (
@@ -68,27 +89,16 @@ export default function TemplatePicker({ starters, onStarter, onTemplate, onClos
                   </button>
                 ))}
               </div>
-              <div className="tpl-label">Or a ready-made template</div>
+              <div className="jv-empty" style={{ padding: "14px 0 4px", textAlign: "center" }}>
+                Search or pick a category to browse all {total} templates.
+              </div>
             </>
-          )}
-
-          {loading && items.length === 0 ? (
+          ) : loading && items.length === 0 ? (
             <div className="jv-empty" style={{ padding: 24 }}>Searching…</div>
           ) : items.length === 0 ? (
             <div className="jv-empty" style={{ padding: 24 }}>No templates match “{q || cat}”.</div>
           ) : (
-            <div className="tpl-list">
-              {items.map((t) => (
-                <button key={t.slug} className="tpl-item" disabled={busy === t.slug} onClick={() => pick(t.slug)}>
-                  <div className="tpl-item-main">
-                    <div className="tpl-item-name">{t.name}</div>
-                    <div className="tpl-item-desc">{t.description}</div>
-                  </div>
-                  <span className="tpl-item-cat">{t.category}</span>
-                  <span className="wp-arrow">{busy === t.slug ? "…" : "›"}</span>
-                </button>
-              ))}
-            </div>
+            <div className="tpl-list">{items.map(row)}</div>
           )}
         </div>
       </div>

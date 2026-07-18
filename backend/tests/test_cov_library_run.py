@@ -448,3 +448,30 @@ def test_get_run_200_and_404(c):
     got = c.get(f"/api/runs/{rid}").json()
     assert got["id"] == rid and "result" in got and "request" in got
     assert c.get("/api/runs/999999").status_code == 404
+
+
+def test_dataset_run_mixed_pass_and_fail(c):
+    """The whole point of a dataset run is finding the rows that fail — yet every other
+    dataset test has every row passing, so the failing half (per-row pass=False,
+    summary.passed < total) was never exercised end to end."""
+    conn = _mock_conn(c)
+    req = _prompt_req(conn, "{{q}}")
+    req["assertions"] = [{"type": "contains", "value": "urgent"}]
+    body = c.post("/api/dataset/run", json={
+        "request": req,
+        "rows": [
+            {"name": "escalation", "variables": {"q": "urgent refund please"}},  # mock replies "urgent…"
+            {"name": "chit-chat", "variables": {"q": "what is an AI agent"}},     # generic reply, no "urgent"
+        ],
+    }).json()
+
+    assert body["summary"] == {"passed": 1, "total": 2}, "one row must fail"
+    by_name = {r["name"]: r for r in body["rows"]}
+    assert by_name["escalation"]["pass"] is True
+    assert by_name["chit-chat"]["pass"] is False
+    # the failing row still RAN — a failed row must not abort the batch or go unexecuted
+    assert by_name["chit-chat"]["status"] == "completed" and by_name["chit-chat"]["text"]
+    # per-row isolation: each row's output reflects its OWN input, no bleed
+    assert "urgent" in by_name["escalation"]["text"]
+    assert "urgent" not in by_name["chit-chat"]["text"]
+    assert by_name["chit-chat"]["assertions"][0]["ok"] is False

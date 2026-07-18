@@ -108,3 +108,49 @@ def test_deployment_timeout(client, monkeypatch):
 
     r = client.post(f"/v1/d/{dep['slug']}", headers={"X-API-Key": dep["api_key"]}, json={})
     assert r.status_code == 504 and "timeout" in r.json()["detail"]
+
+
+def _mock_flow_tagged(client, tag: str) -> dict:
+    """A deployable flow whose output node stamps `tag`, so different versions produce
+    visibly different output — otherwise v1 and v2 snapshots are byte-identical and 'which
+    version served' is untestable."""
+    conn = next(c for c in client.get("/api/connections").json() if c["config"].get("provider") == "mock")
+    return client.post("/api/flows", json={
+        "name": "Versioned bot",
+        "nodes": [
+            {"id": "input", "type": "input", "position": {"x": 0, "y": 0}, "data": {}, "config": {"sample": {"question": "hi"}}},
+            {"id": "ask", "type": "prompt", "position": {"x": 1, "y": 0}, "data": {"title": "Ask"},
+             "config": {"connection_id": conn["id"], "model": "demo-mock", "user": "{{input.question}}"}},
+            {"id": "out", "type": "output", "position": {"x": 2, "y": 0}, "data": {"title": "Answer"},
+             "config": {"value": f"{tag}: " + "{{ask.text}}"}},
+        ],
+        "edges": [{"id": "e1", "source": "input", "target": "ask"}, {"id": "e2", "source": "ask", "target": "out"}],
+    }).json()
+
+
+def test_rollback_and_redeploy_serve_the_right_version_output(client):
+    """The runtime must serve the snapshot of the version that is actually live — not merely
+    return 200. Every other test deploys v1/v2 from an unedited flow (identical snapshots), so
+    a runtime that served the wrong version would still pass. Here v1 and v2 differ visibly."""
+    f = _mock_flow_tagged(client, "V1")
+    dep = client.post("/api/deployments", json={"flow_id": f["id"]}).json()
+    key, slug = dep["api_key"], dep["slug"]
+
+    def invoke():
+        r = client.post(f"/v1/d/{slug}", headers={"X-API-Key": key}, json={"question": "hi"})
+        assert r.status_code == 200, r.text
+        return r.json()["output"]
+
+    assert invoke().startswith("V1:")  # v1 is live
+
+    # edit the flow to stamp V2, then redeploy → v2 becomes the live version
+    v2_nodes = [{**n, "config": ({**n["config"], "value": "V2: {{ask.text}}"} if n["id"] == "out" else n["config"])}
+                for n in f["nodes"]]
+    client.put(f"/api/flows/{f['id']}", json={"name": "Versioned bot", "nodes": v2_nodes, "edges": f["edges"]})
+    dep2 = client.post("/api/deployments", json={"flow_id": f["id"]}).json()
+    assert dep2["version"] == 2
+    assert invoke().startswith("V2:"), "redeploy must serve the NEW version's snapshot, not v1"
+
+    # rollback to v1 → the runtime must serve v1's snapshot again, not the latest
+    client.post(f"/api/deployments/{slug}/rollback", json={"version": 1})
+    assert invoke().startswith("V1:"), "after rollback the runtime must serve the rolled-back version"

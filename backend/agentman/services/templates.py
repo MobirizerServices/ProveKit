@@ -9,11 +9,34 @@ from . import testfile
 
 _DIR = pathlib.Path(__file__).resolve().parent.parent / "templates" / "flows"
 
+# A small, hand-picked showcase surfaced at the top of the New-flow picker. The gallery is a
+# regular 24-domain × 18-pattern grid (432 entries), which reads as a wall of near-duplicates;
+# these are eight *distinct patterns* across eight *distinct domains* — each a different
+# capability (branching, self-critique, structured output, safety gate, numeric gate,
+# language routing) — so a newcomer sees a few great starting points instead of everything.
+_FEATURED = [
+    "customer-support-triage-route",
+    "sales-lead-draft-critique-revise",
+    "healthcare-intake-extract-to-json",
+    "content-moderation-moderation-gate",
+    "legal-intake-summarize-then-decide",
+    "e-commerce-sentiment-route",
+    "recruiting-score-gate",
+    "travel-language-route",
+]
+
 
 @lru_cache
 def _manifest() -> list[dict]:
     f = _DIR / "_manifest.json"
     return json.loads(f.read_text()) if f.exists() else []
+
+
+def featured() -> list[dict]:
+    """The curated showcase, in order. Skips any slug missing from the manifest so a
+    renamed template can't break the picker."""
+    by_slug = {m["slug"]: m for m in _manifest()}
+    return [by_slug[s] for s in _FEATURED if s in by_slug]
 
 
 def search(q: str = "", limit: int = 60) -> list[dict]:

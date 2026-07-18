@@ -155,10 +155,18 @@ async def _exec_node(db, node, ctx, variables=None, workspace_id=None):
         req = {"type": "prompt", "connection_id": cfg.get("connection_id"), "model": cfg.get("model"),
                "system": _interp(system, ctx), "user": _interp(cfg.get("user", ""), ctx),
                "temperature": cfg.get("temperature", 0.7), "max_tokens": cfg.get("max_tokens", 1024)}
+        if cfg.get("tools"):  # MCP servers this node's model may call
+            req["tools"] = cfg["tools"]
+            req["max_tool_rounds"] = cfg.get("max_tool_rounds", 5)
         r = await dispatch.run_collect(db, req, variables, workspace_id)
         if r["status"] == "failed":
             raise RuntimeError(r["error"] or "prompt failed")
-        return {"text": r["text"]}, None
+        # Surface tool calls downstream only when there were some — a tool-free prompt node
+        # keeps its existing {"text": ...} output shape.
+        out = {"text": r["text"]}
+        if r.get("events"):
+            out["events"] = r["events"]
+        return out, None
     if t == "tool":
         req = {"type": "tool", "connection_id": cfg.get("connection_id"), "tool": cfg.get("tool"),
                "args": _interp_obj(cfg.get("args") or {}, ctx)}

@@ -9,6 +9,7 @@ Discovery:       tools · resources · prompts, all cursor-paginated.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import subprocess
 import threading
@@ -144,6 +145,11 @@ class MCPSession:
     stdio: MCPSession(command="python", args=["server.py"], env=...)
     """
 
+    # Class-level defaults so a session built via __new__ (tests inject a fake transport)
+    # still has them.
+    _inited = False
+    _keep_open = False
+
     def __init__(self, url: str | None = None, headers: dict | None = None, timeout: float = 30, *,
                  command: str | None = None, args: list | None = None, env: dict | None = None,
                  spec: str = "auto", oauth: dict | None = None):
@@ -151,6 +157,8 @@ class MCPSession:
         if oauth:
             headers.setdefault("Authorization", f"Bearer {_fetch_oauth_token(oauth)}")
         self.spec = spec
+        self._inited = False
+        self._keep_open = False
         self._stdio = command is not None
         if self._stdio:
             self._t = _StdioTransport(command, args, env, timeout)
@@ -168,8 +176,36 @@ class MCPSession:
             raise MCPError(str(data["error"].get("message", "MCP error")))
         return data.get("result", {})
 
+    def open(self) -> "MCPSession":
+        """Keep the transport open across calls until close(). list_tools()/call_tool()
+        otherwise close after each call, so a tool-calling loop would re-handshake every
+        time — and for stdio, spawn and kill a subprocess every time."""
+        self._keep_open = True
+        return self
+
+    def close(self) -> None:
+        self._keep_open = False
+        self._close()
+
+    @contextlib.contextmanager
+    def session(self):
+        """open() for the duration of a block. The session is spent afterwards, exactly as
+        it is after a bare call today."""
+        try:
+            yield self.open()
+        finally:
+            self.close()
+
+    def _close(self) -> None:
+        self._inited = False
+        self._t.close()
+
+    def _close_unless_kept(self) -> None:
+        if not self._keep_open:
+            self._close()
+
     def _init(self) -> None:
-        if not self._stateful:
+        if self._inited or not self._stateful:
             return  # stateless generation: no handshake, no session id
         try:
             self._rpc("initialize", {
@@ -178,6 +214,7 @@ class MCPSession:
                 "clientInfo": {"name": "agentman", "version": "0.1.0"},
             })
             self._t.notify({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+            self._inited = True
         except Exception:
             # auto: a server that rejects initialize is treated as stateless.
             if self.spec == "auto":
@@ -199,7 +236,7 @@ class MCPSession:
             return [{"name": t["name"], "description": t.get("description", ""),
                      "input_schema": t.get("inputSchema") or {}} for t in tools]
         finally:
-            self._t.close()
+            self._close_unless_kept()
 
     def list_resources(self) -> list[dict]:
         try:
@@ -208,7 +245,7 @@ class MCPSession:
             return [{"uri": r.get("uri"), "name": r.get("name", ""),
                      "mime_type": r.get("mimeType", "")} for r in res]
         finally:
-            self._t.close()
+            self._close_unless_kept()
 
     def list_prompts(self) -> list[dict]:
         try:
@@ -217,14 +254,14 @@ class MCPSession:
             return [{"name": p["name"], "description": p.get("description", ""),
                      "arguments": p.get("arguments", [])} for p in pr]
         finally:
-            self._t.close()
+            self._close_unless_kept()
 
     def call_tool(self, name: str, args: dict) -> dict:
         try:
             self._init()
             res = self._rpc("tools/call", {"name": name, "arguments": args or {}})
         finally:
-            self._t.close()
+            self._close_unless_kept()
         if res.get("isError"):
             raise MCPError(_text(res) or f"tool '{name}' failed")
         return _unwrap(res)

@@ -36,9 +36,10 @@ def node_types():
 
 @router.get("/templates")
 def list_templates(q: str = "", limit: int = 60):
-    """Searchable gallery of bundled flow templates (name/description/category)."""
+    """Searchable gallery of bundled flow templates (name/description/category), plus a
+    small curated `featured` showcase for the picker's default (no-search) view."""
     return {"total": templates.total(), "categories": templates.categories(),
-            "items": templates.search(q, limit)}
+            "items": templates.search(q, limit), "featured": templates.featured()}
 
 
 class FromTemplateIn(BaseModel):

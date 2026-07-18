@@ -95,7 +95,11 @@ class BodySizeLimitMiddleware:
         while True:
             message = await receive()
             if message["type"] == "http.disconnect":
-                return
+                # The client vanished mid-upload. Returning bare would satisfy a pure-ASGI
+                # parent, but this runs inside BaseHTTPMiddleware (RequestID/SecurityHeaders),
+                # whose call_next raises "No response returned." if nothing is sent — turning
+                # every cancelled upload into a 500 + Sentry event. Nobody reads this response.
+                return await self._respond(send, 499, "Client disconnected")
             body.extend(message.get("body", b""))
             if len(body) > max_bytes:
                 return await self._reject(send)
@@ -115,10 +119,14 @@ class BodySizeLimitMiddleware:
 
         await self.app(scope, replay, send)
 
+    @classmethod
+    async def _reject(cls, send):
+        return await cls._respond(send, 413, "Request body too large")
+
     @staticmethod
-    async def _reject(send):
-        body = json.dumps({"detail": "Request body too large"}).encode()
-        await send({"type": "http.response.start", "status": 413,
+    async def _respond(send, status: int, detail: str):
+        body = json.dumps({"detail": detail}).encode()
+        await send({"type": "http.response.start", "status": status,
                     "headers": [(b"content-type", b"application/json"),
                                 (b"content-length", str(len(body)).encode())]})
         await send({"type": "http.response.body", "body": body})

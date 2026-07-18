@@ -28,6 +28,8 @@ export default function DeploymentsPage() {
     try { await api.deactivateDeployment(slug); flash("Deactivated"); load(); }
     catch (e: any) { flash(e.message); }
   };
+  // `version` is the version currently being served, so each click steps back one from
+  // whatever is live — repeated rollbacks walk v3 → v2 → v1 instead of retargeting v2.
   const rollback = async (slug: string, version: number) => {
     if (version < 2 || !confirm(`Roll "${slug}" back to v${version - 1}?`)) return;
     try { await api.rollbackDeployment(slug, version - 1); flash(`Rolled back to v${version - 1}`); load(); }
@@ -58,14 +60,15 @@ export default function DeploymentsPage() {
           {deps.map((d) => (
             <div key={d.slug} className="pr-card">
               <div className="pr-top">
-                <span className="pr-key">{d.slug} <span className="hint">v{d.version} · {d.versions} version{d.versions === 1 ? "" : "s"}</span></span>
+                <span className="pr-key">{d.slug} <span className="hint">v{d.version} · {d.versions} version{d.versions === 1 ? "" : "s"}
+                  {d.latest_version > d.version && ` · rolled back from v${d.latest_version}`}</span></span>
                 <span className={`tag ${d.active ? "completed" : "failed"}`}>{d.active ? "active" : "inactive"}</span>
               </div>
               <div className="pr-name" style={{ fontWeight: 600 }}>{d.name}</div>
               <div className="dep-copy"><code>{d.url}</code></div>
               <div className="pr-actions">
                 <button className="btn btn-ghost btn-sm" onClick={() => setSel(sel === d.slug ? null : d.slug)}>{sel === d.slug ? "Hide" : "Metrics"}</button>
-                {d.versions > 1 && <button className="btn btn-ghost btn-sm" title={`Roll back to v${d.version - 1}`} onClick={() => rollback(d.slug, d.version)}>↩ Rollback</button>}
+                {d.version > 1 && <button className="btn btn-ghost btn-sm" title={`Roll back to v${d.version - 1}`} onClick={() => rollback(d.slug, d.version)}>↩ Rollback</button>}
                 {d.active && <button className="btn btn-ghost btn-sm btn-stop" onClick={() => deactivate(d.slug)}>Deactivate</button>}
               </div>
               {sel === d.slug && stats && (

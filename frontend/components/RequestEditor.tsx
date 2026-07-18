@@ -52,7 +52,7 @@ export default function RequestEditor({ req, setReq, connections }: {
           </select>
         </div>
 
-        {type === "prompt" && <PromptForm req={req} set={set} conn={conn} />}
+        {type === "prompt" && <PromptForm req={req} set={set} conn={conn} connections={connections} />}
         {type === "tool" && <ToolForm key={req._k} req={req} set={set} conn={conn} />}
         {type === "agent" && <AgentForm key={req._k} req={req} set={set} />}
         {type === "a2a" && <A2AForm req={req} set={set} conn={conn} />}
@@ -63,7 +63,7 @@ export default function RequestEditor({ req, setReq, connections }: {
   );
 }
 
-function PromptForm({ req, set, conn }: any) {
+function PromptForm({ req, set, conn, connections }: any) {
   const models: string[] = conn?.config?.models || [];
   return (
     <>
@@ -89,7 +89,97 @@ function PromptForm({ req, set, conn }: any) {
         <div className="field"><label>Temperature</label><input type="number" step="0.1" min="0" max="2" value={req.temperature ?? 0.7} onChange={(e) => { const v = parseFloat(e.target.value); set({ temperature: Number.isNaN(v) ? 0.7 : v }); }} /></div>
         <div className="field"><label>Max tokens</label><input type="number" value={req.max_tokens ?? 1024} onChange={(e) => set({ max_tokens: parseInt(e.target.value || "0") || 0 })} /></div>
       </div>
+      <ToolsPanel req={req} set={set} connections={connections || []} />
     </>
+  );
+}
+
+/** Attach MCP servers to the model under test, so it can actually call their tools. */
+function ToolsPanel({ req, set, connections }: any) {
+  const attached: any[] = req.tools || [];
+  const mcps: Connection[] = connections.filter((c: Connection) => c.kind === "mcp");
+  const free = mcps.filter((c) => !attached.some((a) => a.connection_id === c.id));
+
+  const patch = (i: number, p: any) => set({ tools: attached.map((a, n) => (n === i ? { ...a, ...p } : a)) });
+  const remove = (i: number) => {
+    const tools = attached.filter((_, n) => n !== i);
+    // Clear via an explicit undefined, not by deleting keys off a copy of req: `set` spreads
+    // req over the patch, so deleted keys just come back and the ✕ does nothing.
+    set(tools.length ? { tools } : { tools: undefined, max_tool_rounds: undefined });
+  };
+
+  return (
+    <div className="field">
+      <label>Tools <span className="hint">MCP servers this model may call</span></label>
+      {attached.map((a, i) => (
+        <ToolAttachment key={a.connection_id ?? i} att={a} conns={mcps}
+                        onChange={(p: any) => patch(i, p)} onRemove={() => remove(i)} />
+      ))}
+      {free.length > 0 && (
+        <select value="" className="mono"
+                onChange={(e) => e.target.value && set({ tools: [...attached, { connection_id: +e.target.value }] })}>
+          <option value="">+ attach an MCP server…</option>
+          {free.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      )}
+      {!mcps.length && <div className="hint">No MCP connections yet — add one from the sidebar.</div>}
+      {attached.length > 0 && (
+        <div className="row2" style={{ marginTop: 8 }}>
+          <div className="field">
+            <label>Max tool rounds <span className="hint">cap on the call → result loop</span></label>
+            <input type="number" min="0" max="25" value={req.max_tool_rounds ?? 5}
+                   onChange={(e) => set({ max_tool_rounds: parseInt(e.target.value || "0") || 0 })} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolAttachment({ att, conns, onChange, onRemove }: any) {
+  const [tools, setTools] = useState<ToolDef[]>([]);
+  const [err, setErr] = useState("");
+  const conn = conns.find((c: Connection) => c.id === att.connection_id);
+  useEffect(() => {
+    if (!att.connection_id) return;
+    setErr(""); setTools([]);
+    let cancelled = false;
+    api.tools(att.connection_id)
+      .then((r) => { if (!cancelled) setTools(r.tools); })
+      .catch((e) => { if (!cancelled) setErr(e.message || "could not list tools"); });
+    return () => { cancelled = true; };
+  }, [att.connection_id]);
+
+  // Absent means "every tool this server advertises"; a list means exactly that list, and
+  // an empty list means none — matching the backend. Conflating [] with "all" made the last
+  // untick re-check itself and hand the model the tool anyway.
+  const allow: string[] | undefined = att.tools;
+  const enabled = (name: string) => allow == null || allow.includes(name);
+  const toggle = (name: string) => {
+    const on = allow ?? tools.map((t) => t.name);
+    const next = on.includes(name) ? on.filter((n) => n !== name) : [...on, name];
+    onChange({ tools: next.length === tools.length ? undefined : next });
+  };
+
+  return (
+    <div className="pr-card" style={{ padding: 10, marginBottom: 8 }}>
+      <div className="pr-top">
+        <span className="pr-key">{conn?.name || `connection ${att.connection_id}`}</span>
+        <button className="btn btn-ghost btn-sm" onClick={onRemove} aria-label="Remove this MCP server">✕</button>
+      </div>
+      {err && <div className="hint" role="alert" style={{ color: "var(--err)" }}>{err}</div>}
+      {tools.map((t) => (
+        <label key={t.name} className="hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input type="checkbox" checked={enabled(t.name)} onChange={() => toggle(t.name)} />
+          <code>{t.name}</code> {t.description && <span>— {t.description.slice(0, 60)}</span>}
+        </label>
+      ))}
+      <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+        <input type="checkbox" checked={att.execute === false}
+               onChange={(e) => onChange({ execute: e.target.checked ? false : undefined })} />
+        Dry run — record which tool it picks, don’t actually call it
+      </label>
+    </div>
   );
 }
 
@@ -153,7 +243,7 @@ function ToolForm({ req, set, conn }: any) {
 
 function ArgField({ spec, value, onChange }: { spec: any; value: any; onChange: (v: any) => void }) {
   const t = spec.type;
-  if (t === "boolean") return <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} style={{ width: 18, height: 18 }} />;
+  if (t === "boolean") return <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
   if (t === "number" || t === "integer") return <input type="number" value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} />;
   if (t === "array" || t === "object") {
     return <textarea className="mono" rows={3} value={typeof value === "string" ? value : JSON.stringify(value ?? (t === "array" ? [] : {}), null, 2)}

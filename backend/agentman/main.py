@@ -77,9 +77,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AgentMan", version="0.1.0", lifespan=lifespan)
 
+# add_middleware inserts at the front, so the LAST one added is the OUTERMOST. Resulting
+# order: CORS -> SecurityHeaders -> RequestID -> BodySizeLimit -> app. Both SecurityHeaders
+# and RequestID must stay outside BodySizeLimit, whose 413 short-circuits the rest of the
+# stack — inside them, that response would carry no security headers and no X-Request-ID.
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

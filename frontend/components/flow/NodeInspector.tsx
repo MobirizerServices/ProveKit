@@ -56,6 +56,9 @@ export default function NodeInspector({ node, connections, runStep, onChange, on
             ? <div className="ni-reg">{regPrompt.content}</div>
             : <Field label="System"><textarea className="mono" rows={3} value={cfg.system || ""} onChange={(e) => set({ system: e.target.value })} /></Field>}
           <Field label="User" hint="use {{input.x}} or {{nodeId.field}}"><textarea rows={4} value={cfg.user || ""} onChange={(e) => set({ user: e.target.value })} /></Field>
+          <Field label="Tools" hint="MCP servers this model may call">
+            <NodeTools cfg={cfg} set={set} mcps={connections.filter((c) => c.kind === "mcp")} />
+          </Field>
         </>}
 
         {t === "tool" && <>
@@ -84,6 +87,39 @@ export default function NodeInspector({ node, connections, runStep, onChange, on
         )}
       </div>
     </aside>
+  );
+}
+
+/** Attach MCP servers to a prompt node's model, mirroring the console's Tools panel.
+ *  Same request shape the backend reads: tools: [{connection_id, execute?}]. */
+function NodeTools({ cfg, set, mcps }: { cfg: any; set: (p: any) => void; mcps: Connection[] }) {
+  const attached: any[] = cfg.tools || [];
+  const free = mcps.filter((c) => !attached.some((a) => a.connection_id === c.id));
+  const remove = (i: number) => {
+    const tools = attached.filter((_, n) => n !== i);
+    set({ tools: tools.length ? tools : undefined });
+  };
+  if (!mcps.length) return <div className="hint">No MCP connections yet.</div>;
+  return (
+    <>
+      {attached.map((a, i) => (
+        <div key={a.connection_id ?? i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+          <code style={{ flex: 1 }}>{mcps.find((c) => c.id === a.connection_id)?.name || a.connection_id}</code>
+          <label className="hint" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <input type="checkbox" checked={a.execute === false}
+                   onChange={(e) => set({ tools: attached.map((x, n) => (n === i ? { ...x, execute: e.target.checked ? false : undefined } : x)) })} />
+            dry run
+          </label>
+          <button className="btn btn-ghost btn-sm" onClick={() => remove(i)} aria-label="Remove this MCP server">✕</button>
+        </div>
+      ))}
+      {free.length > 0 && (
+        <select value="" onChange={(e) => e.target.value && set({ tools: [...attached, { connection_id: +e.target.value }] })}>
+          <option value="">+ attach an MCP server…</option>
+          {free.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      )}
+    </>
   );
 }
 

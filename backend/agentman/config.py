@@ -60,10 +60,9 @@ class Settings(BaseSettings):
     max_body_bytes: int = 2_000_000   # reject request bodies larger than this
     max_flow_nodes: int = 200         # cap nodes per flow
 
-    # Optional: seed a Magari example connection set on first run.
+    # Seed empty OpenAI + Anthropic example connections on first run. The keyless
+    # "Demo Assistant (mock)" connection is seeded regardless of this setting.
     seed_examples: bool = True
-    magari_backend_url: str = "http://127.0.0.1:8000"
-    magari_mcp_url: str = "http://127.0.0.1:8765/mcp"
 
     # A default OpenAI key can be provided to prefill the example LLM connection.
     openai_api_key: str = ""

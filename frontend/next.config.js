@@ -7,6 +7,9 @@ const API_TARGET = process.env.API_PROXY_TARGET || "http://localhost:8100";
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone", // slim container image; ignored by `next dev`
+  // Let a build target a separate dir (NEXT_BUILD_DIR=.next-build next build) so running the
+  // production build never overwrites a live `next dev` server's chunks out from under it.
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
   async rewrites() {
     // If NEXT_PUBLIC_API_BASE is set the client calls the backend directly (split domain),
     // so skip the proxy.

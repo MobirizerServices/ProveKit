@@ -54,8 +54,9 @@ services:
       CORS_ORIGINS: "https://${DOMAIN}"
       PUBLIC_BASE_URL: "https://${DOMAIN}"
       WEB_BASE_URL: "https://${DOMAIN}"
-      # Don't prefill example connections for tenants in a shared deployment (they would
-      # otherwise point at the operator's OpenAI key / internal Magari MCP endpoint).
+      # Don't seed example connections for tenants in a shared deployment; each workspace
+      # still gets the keyless Demo Assistant (mock). (Hosted mode also refuses to hand the
+      # operator's OPENAI_API_KEY to a tenant workspace — see services/workspace.py.)
       SEED_EXAMPLES: "false"
       SENTRY_DSN: "${SENTRY_DSN:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"

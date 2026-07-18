@@ -108,7 +108,12 @@ def _local_user(db: Session) -> User:
         # A concurrent first request created it (the mount fires several requests at once);
         # the unique-email constraint rejects the loser — fall back to the row that won.
         db.rollback()
-        return db.query(User).filter(User.email == LOCAL_EMAIL).first()
+        winner = db.query(User).filter(User.email == LOCAL_EMAIL).first()
+        if winner is None:
+            # Not the race we assumed: some other integrity failure. Returning None here
+            # would surface as an opaque AttributeError deep in workspace resolution.
+            raise
+        return winner
     db.refresh(u)
     return u
 

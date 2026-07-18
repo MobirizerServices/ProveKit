@@ -23,3 +23,7 @@ __pycache__/
 
 # isolated production-build output (keeps `next build` off the dev server's .next)
 **/.next-build/
+
+# python build artifacts
+**/dist/
+**/build/

@@ -1,8 +1,24 @@
 [project]
 name = "provekit"
 version = "0.1.0"
-description = "The open-source universal agent client — test, debug, and evaluate any AI agent."
+description = "Prove your agent works — test any AI agent (LLM/MCP/HTTP/A2A) and run the suite in CI."
 requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "ProveKit contributors" }]
+keywords = ["agent", "llm", "testing", "evals", "mcp", "ci", "prompt", "openai", "anthropic"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
 dependencies = [
     "fastapi==0.115.6",
     "uvicorn[standard]==0.34.0",
@@ -19,6 +35,11 @@ dependencies = [
     "redis==5.2.1",
     "sentry-sdk[fastapi]==2.20.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/MobirizerServices/ProveKit"
+Repository = "https://github.com/MobirizerServices/ProveKit"
+Issues = "https://github.com/MobirizerServices/ProveKit/issues"
 
 [project.scripts]
 provekit = "provekit.cli:main"

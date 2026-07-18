@@ -8,7 +8,7 @@
 Point it at an LLM API, an MCP server, an HTTP agent, or an A2A agent; run it with live
 streaming; turn a run into a regression test in one click; run the suite in CI.
 
-[![CI](https://github.com/ketanq4udev/provekit/actions/workflows/ci.yml/badge.svg)](https://github.com/ketanq4udev/provekit/actions/workflows/ci.yml)
+[![CI](https://github.com/MobirizerServices/ProveKit/actions/workflows/ci.yml/badge.svg)](https://github.com/MobirizerServices/ProveKit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.13](https://img.shields.io/badge/python-3.13-3776ab.svg)
 ![Next.js 14](https://img.shields.io/badge/next.js-14-black.svg)
@@ -42,7 +42,7 @@ trace ingest.
 ## Quickstart
 
 ```bash
-git clone https://github.com/ketanq4udev/provekit && cd provekit
+git clone https://github.com/MobirizerServices/ProveKit && cd ProveKit
 make setup      # backend venv + deps, frontend deps  (needs Python 3.13, Node 20)
 make backend    # API on :8100     (terminal 1)
 make frontend   # web app on :3001 (terminal 2)

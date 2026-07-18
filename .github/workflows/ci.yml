@@ -8,11 +8,15 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
       - name: Install
         working-directory: backend
         run: |
@@ -21,9 +25,9 @@ jobs:
       - name: Lint
         working-directory: backend
         run: ruff check provekit
-      - name: Test
+      - name: Test (with coverage gate)
         working-directory: backend
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q --cov --cov-report=term-missing
 
   frontend:
     runs-on: ubuntu-latest

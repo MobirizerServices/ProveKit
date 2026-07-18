@@ -74,6 +74,12 @@ source = ["provekit"]
 # inside the package so wheels ship them, which would otherwise drag them into the report.
 omit = ["provekit/migrations/*"]
 
+[tool.coverage.report]
+# CI gates on this: a PR that drops tests or adds uncovered code fails. Set below the
+# current ~99% to leave headroom for cross-interpreter variance, not so low it's toothless.
+fail_under = 90
+show_missing = true
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"

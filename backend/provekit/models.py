@@ -205,4 +205,8 @@ class Run(Base):
     status: Mapped[str] = mapped_column(String(16), default="completed")
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str] = mapped_column(Text, default="")
+    # OTel span identity — lets the portal rebuild spans of one run into a nested tree.
+    trace_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    span_id: Mapped[str] = mapped_column(String(16), default="")
+    parent_span_id: Mapped[str] = mapped_column(String(16), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

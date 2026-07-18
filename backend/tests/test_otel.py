@@ -43,7 +43,7 @@ def test_current_genai_dialect():
     rows = otel.ingest(_otlp(span))
     assert len(rows) == 1
     r = rows[0]
-    assert r["type"] == "trace" and r["status"] == "completed"
+    assert r["type"] == "llm" and r["status"] == "completed"
     assert r["result"]["meta"]["model"] == "gpt-4o-mini"
     assert r["result"]["meta"]["usage"] == {"input_tokens": 5, "output_tokens": 2}
     assert r["result"]["text"] == "hi there"
@@ -73,9 +73,24 @@ def test_tool_span_maps_operation_and_tool():
     assert r["request"]["operation"] == "execute_tool"
 
 
-def test_non_genai_span_ignored():
-    span = _span({"http.method": "GET", "http.url": "http://x"}, name="GET /x")
-    assert otel.ingest(_otlp(span)) == []
+def test_non_genai_span_kept_as_a_step():
+    # Every span is kept now (so the full flow survives), classified as a generic "step".
+    span = _span({"foo": "bar"}, name="retrieve-docs")
+    r = otel.ingest(_otlp(span))[0]
+    assert r["type"] == "step" and r["label"] == "retrieve-docs"
+
+
+def test_agent_operation_is_typed_agent():
+    span = _span({"gen_ai.operation.name": "invoke_agent", "gen_ai.input.messages": "q"}, name="my-agent")
+    r = otel.ingest(_otlp(span))[0]
+    assert r["type"] == "agent"
+
+
+def test_span_hierarchy_ids_are_carried():
+    span = _span({"gen_ai.request.model": "m"})
+    span.update(traceId="abc123", spanId="s1", parentSpanId="p0")
+    r = otel.ingest(_otlp(span))[0]
+    assert (r["trace_id"], r["span_id"], r["parent_span_id"]) == ("abc123", "s1", "p0")
 
 
 def test_failed_span_status():
@@ -93,7 +108,7 @@ def test_ingest_endpoint_persists_and_shows_in_history():
         assert resp.status_code == 200 and "partialSuccess" in resp.json()
         runs = client.get("/api/runs?limit=100").json()
         assert len(runs) == before + 1
-        assert runs[0]["type"] == "trace"
+        assert runs[0]["type"] == "llm"
 
 
 def test_ingest_with_bearer_key():

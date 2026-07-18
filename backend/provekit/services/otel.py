@@ -60,20 +60,20 @@ def _as_text(v) -> str:
         return str(v)
 
 
-def map_span(span: dict) -> dict | None:
-    """Map one OTLP span to Run kwargs, or None if it isn't a gen_ai/LLM span."""
+def map_span(span: dict) -> dict:
+    """Map one OTLP span to Run kwargs. Every span is kept (so the full nested flow
+    survives, not just the LLM calls) and classified: agent | llm | tool | step. The
+    trace/span/parent ids are carried so the portal can rebuild the tree."""
     attrs = flatten_attrs(span.get("attributes"))
     model = _first(attrs, "gen_ai.request.model", "gen_ai.response.model", "llm.model_name", "gen_ai.model")
     provider = _first(attrs, "gen_ai.provider.name", "gen_ai.system", "llm.provider")
     operation = _first(attrs, "gen_ai.operation.name")
     tool = _first(attrs, "gen_ai.tool.name")
-    is_genai = bool(model or provider or operation or tool
-                    or any(k.startswith(("gen_ai.", "llm.")) for k in attrs))
-    if not is_genai:
-        return None
 
-    prompt = _first(attrs, "gen_ai.input.messages", "gen_ai.prompt", "input.value", "llm.input_messages")
-    completion = _first(attrs, "gen_ai.output.messages", "gen_ai.completion", "output.value", "llm.output_messages")
+    prompt = _first(attrs, "gen_ai.input.messages", "gen_ai.prompt", "input.value",
+                    "llm.input_messages", "input")
+    completion = _first(attrs, "gen_ai.output.messages", "gen_ai.completion", "output.value",
+                        "llm.output_messages", "output")
     usage = {}
     it = _first(attrs, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.token_count.prompt")
     ot = _first(attrs, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.token_count.completion")
@@ -87,32 +87,41 @@ def map_span(span: dict) -> dict | None:
     dur_ms = round((end - start) / 1e6) if end > start else 0
     status = "failed" if (span.get("status") or {}).get("code") == 2 else "completed"
 
-    op = operation or ("execute_tool" if tool else "chat")
+    if tool:
+        rtype, op = "tool", "execute_tool"
+    elif operation == "invoke_agent":
+        rtype, op = "agent", "invoke_agent"
+    elif model or provider:   # a real model call, not just any span that carries gen_ai.* io
+        rtype, op = "llm", operation or "chat"
+    else:
+        rtype, op = "step", operation or (span.get("name") or "step")
+
     label = f"{op} {model}" if model else (span.get("name") or op)
     meta = {"provider": provider, "model": model, "usage": usage, "source": "otel"}
     if tool:
         meta["tool"] = tool
     return {
-        "type": "trace",
+        "type": rtype,
         "label": label[:200],
-        "request": {"type": "trace", "provider": provider, "model": model,
+        "request": {"type": rtype, "provider": provider, "model": model,
                     "operation": op, "input": _as_text(prompt)[:8000]},
         "result": {"text": _as_text(completion) or None, "output": None, "meta": meta},
         "status": status,
         "duration_ms": dur_ms,
         "error": (span.get("status") or {}).get("message", "") if status == "failed" else "",
+        "trace_id": span.get("traceId") or "",
+        "span_id": span.get("spanId") or "",
+        "parent_span_id": span.get("parentSpanId") or "",
     }
 
 
 def ingest(payload: dict) -> list[dict]:
-    """Turn an OTLP ExportTraceServiceRequest into a list of Run kwargs (gen_ai spans only)."""
+    """Turn an OTLP ExportTraceServiceRequest into a list of Run kwargs (one per span)."""
     runs = []
     for rs in payload.get("resourceSpans", []):
         for ss in rs.get("scopeSpans", []) + rs.get("instrumentationLibrarySpans", []):
             for span in ss.get("spans", []):
-                mapped = map_span(span)
-                if mapped:
-                    runs.append(mapped)
+                runs.append(map_span(span))
     return runs
 
 

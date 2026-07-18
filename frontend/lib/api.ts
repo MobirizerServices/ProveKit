@@ -15,6 +15,15 @@ export interface RunDetail {
   result?: { text?: string | null; output?: any; meta?: Record<string, any> };
 }
 
+// One trace = a decorated run and everything nested beneath it.
+export interface TraceSummary {
+  id: number; trace_id: string; label: string; type: string; status: string;
+  duration_ms: number; span_count: number; created_at: string;
+}
+export interface TraceSpan extends RunDetail {
+  span_id: string; parent_span_id: string;
+}
+
 // Redirect to /login on an unexpected 401 (expired session). Auth calls opt out via
 // `noAuthRedirect` so the login page can surface "invalid credentials" itself.
 async function j<T>(path: string, opts?: RequestInit & { noAuthRedirect?: boolean }): Promise<T> {
@@ -46,9 +55,12 @@ export const api = {
   apiKeys: () => j<ApiKey[]>("/api/api-keys"),
   createApiKey: (name: string) => j<ApiKey & { key: string }>("/api/api-keys", { method: "POST", body: JSON.stringify({ name }) }),
   revokeApiKey: (id: number) => j(`/api/api-keys/${id}`, { method: "DELETE" }),
-  // captured runs (traces)
+  // captured runs (flat) — kept for compatibility
   runs: () => j<RunSummary[]>("/api/runs"),
   getRun: (id: number) => j<RunDetail>(`/api/runs/${id}`),
+  // traces (a run + its nested spans, as a tree)
+  traces: () => j<TraceSummary[]>("/api/traces"),
+  trace: (traceId: string) => j<TraceSpan[]>(`/api/traces/${encodeURIComponent(traceId)}`),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {
     try { const r = await fetch(`${BASE}/healthz`, { credentials: "include" }); return r.ok; } catch { return false; }

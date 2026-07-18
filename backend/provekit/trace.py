@@ -1,26 +1,28 @@
-"""ProveKit tracing SDK — capture real agent runs, ship them to a ProveKit portal, then
-turn a run into a regression test (the "trace → test" bridge).
+"""ProveKit tracing SDK — one decorator at your agent's entrypoint captures the whole
+nested flow (LLM calls, tools, sub-steps) and ships it to your ProveKit portal to review.
 
     import provekit.trace as pk
 
     @pk.trace(name="support-agent")
     def run_agent(question: str) -> str:
-        ...
+        docs = retrieve(question)          # wrap sub-steps with pk.span() if you like
+        return llm(question, docs)         # OpenAI/Anthropic calls are captured automatically
 
 Configuration is by environment (12-factor):
-    PROVEKIT_API_KEY   the pk_ key minted in the portal (Settings → API keys)
+    PROVEKIT_API_KEY   the pk_ project key from the portal
     PROVEKIT_ENDPOINT  your ProveKit URL, e.g. https://provekit.your-co.com
 
-Each decorated call becomes an OpenTelemetry span carrying the function's input and output
-under the gen_ai conventions, so it lands as a run in the portal. Because it's real
-OpenTelemetry, any LLM instrumentation you've installed (OpenAI/Anthropic) nests its own
-gen_ai spans inside the same trace — no extra wiring.
+It's real OpenTelemetry underneath: the decorator opens a span and makes it the current
+context, so any instrumented library beneath it (OpenAI, Anthropic, and anything emitting
+OTel spans) nests as a child — you decorate the entrypoint ONCE and get the full tree, no
+per-function wiring and no OpenTelemetry knowledge required.
 
-Fail-open by construction: if PROVEKIT_API_KEY/ENDPOINT are unset, or the portal is
-unreachable, your app runs completely unaffected — tracing degrades to a no-op.
+Fail-open by construction: if the key/endpoint are unset, OTel isn't installed, or the
+portal is unreachable, your app runs completely unaffected — tracing degrades to a no-op.
 """
 from __future__ import annotations
 
+import contextlib
 import functools
 import json
 import logging
@@ -32,6 +34,14 @@ log = logging.getLogger("provekit.trace")
 _lock = threading.Lock()
 _tracer = None          # set once configured; None means tracing is a no-op
 _configured = False
+
+# Best-effort auto-instrumentation: whichever of these are installed get enabled so their
+# calls nest under the decorated entrypoint. All optional — a missing one is silently skipped.
+_INSTRUMENTORS = [
+    ("openinference.instrumentation.openai", "OpenAIInstrumentor"),
+    ("openinference.instrumentation.anthropic", "AnthropicInstrumentor"),
+    ("openinference.instrumentation.langchain", "LangChainInstrumentor"),
+]
 
 
 # ---- OTLP/JSON serialization (matches services.otel.ingest, which reads OTLP-JSON) ----
@@ -54,7 +64,12 @@ def _attr(value) -> dict:
 def _span_to_otlp(span) -> dict:
     attrs = [{"key": str(k), "value": _attr(v)} for k, v in (span.attributes or {}).items()]
     code = 2 if getattr(span.status, "status_code", None) and span.status.status_code.name == "ERROR" else 1
+    ctx = span.context
     out = {"name": span.name, "attributes": attrs,
+           # hex-encoded ids so the ingest can rebuild the parent/child tree
+           "traceId": format(ctx.trace_id, "032x") if ctx else "",
+           "spanId": format(ctx.span_id, "016x") if ctx else "",
+           "parentSpanId": format(span.parent.span_id, "016x") if span.parent else "",
            "startTimeUnixNano": str(span.start_time or 0),
            "endTimeUnixNano": str(span.end_time or 0),
            "status": {"code": code}}
@@ -92,6 +107,18 @@ class _ProveKitExporter:
         return True
 
 
+def _auto_instrument(provider) -> None:
+    """Enable whichever LLM instrumentors are installed, routed to our provider so their
+    spans nest under the decorated entrypoint. Best-effort; never raises."""
+    for module, cls in _INSTRUMENTORS:
+        try:
+            mod = __import__(module, fromlist=[cls])
+            getattr(mod, cls)().instrument(tracer_provider=provider)
+            log.debug("provekit: auto-instrumented %s", module)
+        except Exception:  # not installed / already instrumented / incompatible → skip
+            pass
+
+
 def configure(api_key: str | None = None, endpoint: str | None = None,
               *, batch: bool = True) -> bool:
     """Wire up the tracer. Returns True if tracing is active, False if it's a no-op.
@@ -117,6 +144,7 @@ def configure(api_key: str | None = None, endpoint: str | None = None,
             proc = BatchSpanProcessor(exporter) if batch else SimpleSpanProcessor(exporter)
             provider.add_span_processor(proc)
             _tracer = provider.get_tracer("provekit")
+            _auto_instrument(provider)   # LLM calls beneath the entrypoint capture themselves
             return True
         except Exception as exc:  # OTel missing or misconfigured → stay a no-op, never crash
             log.debug("provekit tracing could not start: %s", exc)
@@ -125,8 +153,7 @@ def configure(api_key: str | None = None, endpoint: str | None = None,
 
 
 def _payload(args: tuple, kwargs: dict):
-    """Best-effort JSON of a call's inputs — this is what the portal turns into a test's
-    request. Positional args are indexed; keywords by name."""
+    """Best-effort JSON of a call's inputs. Positional args are indexed; keywords by name."""
     data = {**{f"arg{i}": a for i, a in enumerate(args)}, **kwargs}
     try:
         return json.dumps(data, default=str)
@@ -134,8 +161,13 @@ def _payload(args: tuple, kwargs: dict):
         return str(data)
 
 
+def _as_attr(v):
+    return v if isinstance(v, (str, int, float, bool)) else _payload((v,), {})
+
+
 def trace(name: str | None = None, *, operation: str = "invoke_agent"):
-    """Decorate an agent entrypoint (or any function) so each call is captured as a run.
+    """Decorate an agent entrypoint (or any function) so each call is captured. Everything
+    that runs inside — instrumented LLM calls, pk.span() blocks — nests beneath it.
 
     @pk.trace(name="support-agent")
     def run_agent(q): ...
@@ -156,8 +188,29 @@ def trace(name: str | None = None, *, operation: str = "invoke_agent"):
                 except Exception as exc:
                     span.set_status(Status(StatusCode.ERROR, str(exc)))
                     raise
-                out = result if isinstance(result, str) else _payload((result,), {})
-                span.set_attribute("gen_ai.output.messages", out)
+                span.set_attribute("gen_ai.output.messages", _as_attr(result))
                 return result
         return wrapper
     return deco
+
+
+@contextlib.contextmanager
+def span(name: str, **attributes):
+    """Capture a sub-step (a retrieval, a tool call, a branch) as a child span:
+
+        with pk.span("retrieve", query=q) as s:
+            docs = search(q)
+            s and s.set_attribute("gen_ai.output.messages", str(docs))
+    """
+    if not configure():
+        yield None
+        return
+    from opentelemetry.trace import Status, StatusCode
+    with _tracer.start_as_current_span(name) as sp:
+        for k, v in attributes.items():
+            sp.set_attribute(k, _as_attr(v))
+        try:
+            yield sp
+        except Exception as exc:
+            sp.set_status(Status(StatusCode.ERROR, str(exc)))
+            raise

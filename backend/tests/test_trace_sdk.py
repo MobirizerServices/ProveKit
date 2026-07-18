@@ -140,6 +140,28 @@ def test_payload_falls_back_on_unserializable_input(monkeypatch):
     assert otel.ingest(captured["body"])[0]["result"]["text"] == "ok"
 
 
+def test_nested_spans_form_a_parent_child_tree(monkeypatch):
+    _reset()
+    bodies = []
+    monkeypatch.setattr(httpx, "post",
+                        lambda url, json=None, headers=None, timeout=None, follow_redirects=None:
+                        bodies.append(json))
+    pk.configure(api_key="pk_x", endpoint="http://p.test", batch=False)
+
+    @pk.trace(name="agent")
+    def run():
+        with pk.span("retrieve"):
+            pass
+        return "done"
+
+    run()
+    spans = [s for b in bodies for rs in b["resourceSpans"] for ss in rs["scopeSpans"] for s in ss["spans"]]
+    by_name = {s["name"]: s for s in spans}
+    assert "agent" in by_name and "retrieve" in by_name          # one decorator captured both
+    assert by_name["retrieve"]["traceId"] == by_name["agent"]["traceId"]      # same trace
+    assert by_name["retrieve"]["parentSpanId"] == by_name["agent"]["spanId"]  # nested under it
+
+
 def test_configure_stays_no_op_if_otel_missing(monkeypatch):
     _reset()
     import builtins

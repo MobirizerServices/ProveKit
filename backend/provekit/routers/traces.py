@@ -6,6 +6,7 @@ send), or a session cookie for interactive/local use. Mint the key from
 POST /api/workspace/ingest-key."""
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -88,3 +89,37 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
     return {"id": r.id, "type": r.type, "label": r.label, "request": r.request,
             "result": r.result, "status": r.status, "duration_ms": r.duration_ms,
             "error": r.error, "created_at": iso_utc(r.created_at)}
+
+
+# ---- traces (spans grouped into a nested tree) ----
+@runs_router.get("/traces")
+def list_traces(limit: int = 50, db: Session = Depends(get_db),
+                ws: Workspace = Depends(current_workspace)):
+    """One row per trace: its root span (the decorated entrypoint), with a span count."""
+    limit = max(1, min(limit, 200))
+    roots = (db.query(Run)
+             .filter(Run.workspace_id == ws.id, Run.parent_span_id == "")
+             .order_by(Run.id.desc()).limit(limit).all())
+    counts = dict(db.query(Run.trace_id, func.count(Run.id))
+                  .filter(Run.workspace_id == ws.id)
+                  .group_by(Run.trace_id).all())
+    return [{"id": r.id, "trace_id": r.trace_id, "label": r.label, "type": r.type,
+             "status": r.status, "duration_ms": r.duration_ms,
+             "span_count": counts.get(r.trace_id, 1) if r.trace_id else 1,
+             "created_at": iso_utc(r.created_at)} for r in roots]
+
+
+@runs_router.get("/traces/{trace_id}")
+def get_trace(trace_id: str, db: Session = Depends(get_db),
+              ws: Workspace = Depends(current_workspace)):
+    """All spans of one trace, in start order — the client rebuilds the tree from
+    span_id / parent_span_id."""
+    spans = (db.query(Run)
+             .filter(Run.workspace_id == ws.id, Run.trace_id == trace_id)
+             .order_by(Run.id.asc()).all())
+    if not spans:
+        raise HTTPException(404, "Trace not found")
+    return [{"id": s.id, "span_id": s.span_id, "parent_span_id": s.parent_span_id,
+             "type": s.type, "label": s.label, "status": s.status, "duration_ms": s.duration_ms,
+             "request": s.request, "result": s.result, "error": s.error,
+             "created_at": iso_utc(s.created_at)} for s in spans]

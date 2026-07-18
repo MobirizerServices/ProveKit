@@ -12,7 +12,7 @@ function VerifyInner() {
   useEffect(() => {
     if (!token) { setState("bad"); return; }
     api.verifyEmail(token)
-      .then(() => { setState("ok"); setTimeout(() => router.push("/"), 1500); })
+      .then(() => { setState("ok"); setTimeout(() => router.push("/console"), 1500); })
       .catch(() => setState("bad"));
   }, [token, router]);
 

@@ -1,6 +1,8 @@
 # ProveKit docs
 
+- [Features](../FEATURES.md) — the full inventory of what's built
 - [Tracing guide](TRACING.md) — the decorator, `pk.span()`, configuration, what's captured
+- [Publishing](PUBLISHING.md) — release `provekit` to PyPI
 - [Deployment](DEPLOY.md) — local vs hosted (TLS, Postgres, Redis)
 - [Contributing](../CONTRIBUTING.md) — clone to running
 - [Security](../SECURITY.md) — threat model, secret handling, disclosure

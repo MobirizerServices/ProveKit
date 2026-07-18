@@ -79,6 +79,7 @@ locked in.
 
 ## Docs
 
+- [Features](FEATURES.md) — the full inventory of what's built
 - [Tracing guide](docs/TRACING.md) — the decorator, `pk.span()`, configuration, what's captured
-- [Deployment](docs/DEPLOY.md) — local vs hosted
+- [Deployment](docs/DEPLOY.md) — local vs hosted · [Publishing](docs/PUBLISHING.md) — release to PyPI
 - [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)

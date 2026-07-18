@@ -65,6 +65,17 @@
 .termBody .fail { color: #ef6a5b; }
 .caret { display: inline-block; width: 8px; background: var(--accent); animation: blink 1s steps(1) infinite; color: transparent; }
 @keyframes blink { 50% { opacity: 0; } }
+/* interactive demo controls */
+.termControls { display: flex; align-items: center; gap: 12px; padding: 12px 20px 16px; border-top: 1px solid var(--hairline); flex-wrap: wrap; min-height: 56px; }
+.runBtn { background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: var(--accent-ink); border: 0;
+  border-radius: 8px; padding: 8px 16px; font-weight: 700; font-size: 13px; }
+.runBtn:hover { filter: brightness(1.06); }
+.assertChip { background: var(--panel-2); border: 1px dashed var(--accent-ring); color: var(--accent-2); border-radius: 8px;
+  padding: 7px 14px; font-family: var(--mono); font-size: 12.5px; }
+.assertChip:hover { border-style: solid; }
+.replayBtn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--muted); border-radius: 8px; padding: 7px 14px; font-size: 12.5px; }
+.replayBtn:hover { color: var(--text); border-color: var(--border-strong); }
+.demoHint { font-size: 13px; color: var(--muted); }
 
 /* ── sections ── */
 .section { padding: 56px 0; border-top: 1px solid var(--hairline); }

@@ -13,16 +13,7 @@ const INSTALLS: Record<string, string> = {
   docker: "docker run ghcr.io/mobirizerservices/provekit",
 };
 
-// The loop, as ProveKit actually prints it. Revealed line-by-line below.
-const TERM: { t: string; c: string; d: number }[] = [
-  { t: "$ provekit run .provekit/tests/", c: "p", d: 60 },
-  { t: "→ connect  mcp://localhost:8931", c: "dim", d: 500 },
-  { t: '→ stream   "Sure — let me pull up your order and check the refund window…"', c: "stream", d: 900 },
-  { t: "+ assert   tool_called(\"lookup_order\")            ✓", c: "assert", d: 380 },
-  { t: "+ assert   latency < 2000ms            (1180ms)   ✓", c: "assert", d: 380 },
-  { t: "+ assert   contains(\"refund\")                     ✓", c: "assert", d: 380 },
-  { t: "✓ passed · 3/3 assertions · 1.18s · $0.0004", c: "pass", d: 1600 },
-];
+const STREAM = "Sure — let me pull up your order and check the refund window…";
 
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
@@ -45,40 +36,94 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Interactive demo of the real loop from the README: Run → + contains → Run → ✓ passed.
+type Phase = "idle" | "running" | "ran" | "added" | "rerunning" | "passed";
+
 function Terminal() {
-  const [shown, setShown] = useState(0);
-  const [reduce, setReduce] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [typed, setTyped] = useState("");
+
   useEffect(() => {
-    setReduce(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    // Reduced motion: jump straight to the finished, passing state.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setTyped(STREAM);
+      setPhase("passed");
+    }
   }, []);
+
   useEffect(() => {
-    // Respect reduced motion: show the whole run at once, no typing loop.
-    if (reduce) {
-      setShown(TERM.length);
-      return;
+    if (phase !== "running") return;
+    if (typed.length >= STREAM.length) {
+      const t = setTimeout(() => setPhase("ran"), 420);
+      return () => clearTimeout(t);
     }
-    if (shown >= TERM.length) {
-      const r = setTimeout(() => setShown(0), 2600); // loop
-      return () => clearTimeout(r);
-    }
-    const t = setTimeout(() => setShown((n) => n + 1), TERM[shown].d);
+    const t = setTimeout(() => setTyped(STREAM.slice(0, typed.length + 2)), 22);
     return () => clearTimeout(t);
-  }, [shown, reduce]);
+  }, [phase, typed]);
+
+  useEffect(() => {
+    if (phase !== "rerunning") return;
+    const t = setTimeout(() => setPhase("passed"), 850);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  const streamed = phase !== "idle";
+  const showAssert = phase === "added" || phase === "rerunning" || phase === "passed";
+
   return (
     <div className={s.term}>
       <div className={s.termHead}>
         <span className={s.tdot} style={{ background: "#ef6a5b" }} />
         <span className={s.tdot} style={{ background: "#e5b24a" }} />
         <span className={s.tdot} style={{ background: "#3ddc84" }} />
-        <span className={s.tname}>provekit — run → assert → ✓ passed</span>
+        <span className={s.tname}>provekit — try the loop</span>
       </div>
       <div className={s.termBody}>
-        {TERM.slice(0, shown).map((l, i) => (
-          <div key={i} className={`${s.ln} ${s[l.c]}`}>
-            {l.t}
-            {i === shown - 1 && shown < TERM.length ? <span className={s.caret}>.</span> : null}
+        <div className={`${s.ln} ${s.p}`}>$ provekit run .provekit/tests/support-agent</div>
+        {streamed && <div className={`${s.ln} ${s.dim}`}>→ connect  mcp://localhost:8931  ✓</div>}
+        {streamed && (
+          <div className={`${s.ln} ${s.stream}`}>
+            → stream   &ldquo;{typed}
+            {phase === "running" ? <span className={s.caret}>.</span> : null}&rdquo;
           </div>
-        ))}
+        )}
+        {showAssert && (
+          <div className={`${s.ln} ${s.assert}`}>
+            + assert   contains(&quot;refund&quot;)
+            {phase === "passed" ? "   ✓" : phase === "rerunning" ? "   …" : ""}
+          </div>
+        )}
+        {phase === "passed" && (
+          <div className={`${s.ln} ${s.pass}`}>✓ passed · 1/1 assertions · 1.18s · $0.0004</div>
+        )}
+      </div>
+      <div className={s.termControls}>
+        {phase === "idle" && (
+          <>
+            <button className={s.runBtn} onClick={() => { setTyped(""); setPhase("running"); }}>▶ Run</button>
+            <span className={s.demoHint}>Run a real agent test — no keys, no signup.</span>
+          </>
+        )}
+        {phase === "running" && <span className={s.demoHint}>streaming…</span>}
+        {phase === "ran" && (
+          <>
+            <span className={s.demoHint}>Good answer. Now lock it in →</span>
+            <button className={s.assertChip} onClick={() => setPhase("added")}>+ contains &ldquo;refund&rdquo;</button>
+          </>
+        )}
+        {phase === "added" && (
+          <>
+            <button className={s.runBtn} onClick={() => setPhase("rerunning")}>▶ Run again</button>
+            <span className={s.demoHint}>It&rsquo;s a git-diffable test now.</span>
+          </>
+        )}
+        {phase === "rerunning" && <span className={s.demoHint}>re-running…</span>}
+        {phase === "passed" && (
+          <>
+            <span className={s.demoHint} style={{ color: "var(--pass, #3ddc84)" }}>✓ That&rsquo;s the loop — you just wrote a regression test.</span>
+            <button className={s.replayBtn} onClick={() => { setTyped(""); setPhase("idle"); }}>↻ Replay</button>
+          </>
+        )}
       </div>
     </div>
   );

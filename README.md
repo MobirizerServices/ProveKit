@@ -13,6 +13,8 @@ No connections to configure, no framework adapter to pick, no OpenTelemetry to l
 
 [Quickstart](#quickstart) · [How it works](#how-it-works) · [Self-hosting](docs/DEPLOY.md)
 
+<img src="docs/launch/demo.gif" alt="ProveKit: one decorator captures the whole agent flow — a nested waterfall of the entrypoint, an auto-instrumented OpenAI call with tokens, and tool/step spans" width="820">
+
 </div>
 
 ---

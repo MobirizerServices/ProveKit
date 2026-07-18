@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, TraceSpan, TraceSummary } from "@/lib/api";
 import TopNav from "@/components/TopNav";
@@ -12,9 +13,11 @@ export default function TracesPage() {
   const [traces, setTraces] = useState<TraceSummary[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [spans, setSpans] = useState<TraceSpan[] | null>(null);
+  const [origin, setOrigin] = useState("https://your-provekit-host");
 
   const load = () => api.traces().then(setTraces).catch(() => {});
   useEffect(() => {
+    setOrigin(window.location.origin);
     load();
     const t = setInterval(load, 5000);   // live-ish: new traces stream in
     return () => clearInterval(t);
@@ -40,12 +43,7 @@ export default function TracesPage() {
         </p>
 
         {traces.length === 0 ? (
-          <div style={{ ...panel, textAlign: "center", padding: 40 }}>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>No traces yet.</div>
-            <div className="muted" style={{ fontSize: 13 }}>
-              Add <span className="mono">@pk.trace</span> to your agent (see Project keys) and run it.
-            </div>
-          </div>
+          <Onboarding origin={origin} />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
             <div style={{ ...panel, padding: 0, maxHeight: "74vh", overflowY: "auto" }}>
@@ -77,6 +75,49 @@ export default function TracesPage() {
         )}
       </main>
     </>
+  );
+}
+
+function Onboarding({ origin }: { origin: string }) {
+  const [copied, setCopied] = useState(false);
+  const snippet = `pip install "provekit[trace]"
+
+# .env
+PROVEKIT_API_KEY=pk_...          # ← create one in Project keys
+PROVEKIT_ENDPOINT=${origin}
+
+import provekit.trace as pk
+
+@pk.trace(name="my-agent")
+def run_agent(question: str) -> str:
+    ...   # your agent — OpenAI/Anthropic calls capture themselves`;
+  const copy = () => { navigator.clipboard?.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+
+  return (
+    <div style={{ ...panel, maxWidth: 720 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <span className="pulse-dot" />
+        <span style={{ fontSize: 15, fontWeight: 600 }}>Listening for your first trace…</span>
+      </div>
+      <p className="muted" style={{ margin: "0 0 16px", fontSize: 13 }}>
+        This page updates automatically the moment a trace arrives. Three steps to get there:
+      </p>
+      <ol style={{ margin: "0 0 14px", paddingLeft: 18, fontSize: 13.5, lineHeight: 1.7 }}>
+        <li>Grab a key on the <Link href="/api-keys" style={{ color: "var(--accent)" }}>Project keys</Link> page.</li>
+        <li>Drop the snippet below into your agent (fill in the key).</li>
+        <li>Run your agent — the run shows up here as a nested flow.</li>
+      </ol>
+      <div style={{ position: "relative" }}>
+        <button className="btn btn-sm" onClick={copy} style={{ position: "absolute", top: 8, right: 8, zIndex: 1 }}>
+          {copied ? "Copied" : "Copy"}
+        </button>
+        <pre style={{ ...pre, maxHeight: "none", padding: 14, fontSize: 12.5 }}>{snippet}</pre>
+      </div>
+      <style jsx>{`
+        .pulse-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--green); box-shadow: 0 0 0 0 var(--green); animation: pk-pulse 1.8s infinite; }
+        @keyframes pk-pulse { 0% { box-shadow: 0 0 0 0 rgba(80,200,120,0.5); } 70% { box-shadow: 0 0 0 8px rgba(80,200,120,0); } 100% { box-shadow: 0 0 0 0 rgba(80,200,120,0); } }
+      `}</style>
+    </div>
   );
 }
 

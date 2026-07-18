@@ -1,458 +1,71 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import s from "./page.module.css";
-
-const GITHUB = "https://github.com/MobirizerServices/ProveKit";
-const DOCS = `${GITHUB}/blob/main/docs/README.md`;
-
-const INSTALLS: Record<string, string> = {
-  pipx: "pipx install provekit",
-  pip: "pip install provekit",
-  uvx: "uvx provekit",
-  docker: "docker run ghcr.io/mobirizerservices/provekit",
-};
-
-const STREAM = "Sure — let me pull up your order and check the refund window…";
-
-function CopyButton({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      className={s.copyBtn}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setDone(true);
-          setTimeout(() => setDone(false), 1400);
-        } catch {
-          /* clipboard blocked — no-op */
-        }
-      }}
-      aria-label="Copy command"
-    >
-      {done ? "copied ✓" : "copy"}
-    </button>
-  );
-}
-
-// Interactive demo of the real loop from the README: Run → + contains → Run → ✓ passed.
-type Phase = "idle" | "running" | "ran" | "added" | "rerunning" | "passed";
-
-function Terminal() {
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [typed, setTyped] = useState("");
-
-  useEffect(() => {
-    // Reduced motion: jump straight to the finished, passing state.
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setTyped(STREAM);
-      setPhase("passed");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (phase !== "running") return;
-    if (typed.length >= STREAM.length) {
-      const t = setTimeout(() => setPhase("ran"), 420);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(() => setTyped(STREAM.slice(0, typed.length + 2)), 22);
-    return () => clearTimeout(t);
-  }, [phase, typed]);
-
-  useEffect(() => {
-    if (phase !== "rerunning") return;
-    const t = setTimeout(() => setPhase("passed"), 850);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  const streamed = phase !== "idle";
-  const showAssert = phase === "added" || phase === "rerunning" || phase === "passed";
-
-  return (
-    <div className={s.term}>
-      <div className={s.termHead}>
-        <span className={s.tdot} style={{ background: "#ef6a5b" }} />
-        <span className={s.tdot} style={{ background: "#e5b24a" }} />
-        <span className={s.tdot} style={{ background: "#3ddc84" }} />
-        <span className={s.tname}>provekit — try the loop</span>
-      </div>
-      <div className={s.termBody}>
-        <div className={`${s.ln} ${s.p}`}>$ provekit run .provekit/tests/support-agent</div>
-        {streamed && <div className={`${s.ln} ${s.dim}`}>→ connect  mcp://localhost:8931  ✓</div>}
-        {streamed && (
-          <div className={`${s.ln} ${s.stream}`}>
-            → stream   &ldquo;{typed}
-            {phase === "running" ? <span className={s.caret}>.</span> : null}&rdquo;
-          </div>
-        )}
-        {showAssert && (
-          <div className={`${s.ln} ${s.assert}`}>
-            + assert   contains(&quot;refund&quot;)
-            {phase === "passed" ? "   ✓" : phase === "rerunning" ? "   …" : ""}
-          </div>
-        )}
-        {phase === "passed" && (
-          <div className={`${s.ln} ${s.pass}`}>✓ passed · 1/1 assertions · 1.18s · $0.0004</div>
-        )}
-      </div>
-      <div className={s.termControls}>
-        {phase === "idle" && (
-          <>
-            <button className={s.runBtn} onClick={() => { setTyped(""); setPhase("running"); }}>▶ Run</button>
-            <span className={s.demoHint}>Run a real agent test — no keys, no signup.</span>
-          </>
-        )}
-        {phase === "running" && <span className={s.demoHint}>streaming…</span>}
-        {phase === "ran" && (
-          <>
-            <span className={s.demoHint}>Good answer. Now lock it in →</span>
-            <button className={s.assertChip} onClick={() => setPhase("added")}>+ contains &ldquo;refund&rdquo;</button>
-          </>
-        )}
-        {phase === "added" && (
-          <>
-            <button className={s.runBtn} onClick={() => setPhase("rerunning")}>▶ Run again</button>
-            <span className={s.demoHint}>It&rsquo;s a git-diffable test now.</span>
-          </>
-        )}
-        {phase === "rerunning" && <span className={s.demoHint}>re-running…</span>}
-        {phase === "passed" && (
-          <>
-            <span className={s.demoHint} style={{ color: "var(--pass, #3ddc84)" }}>✓ That&rsquo;s the loop — you just wrote a regression test.</span>
-            <button className={s.replayBtn} onClick={() => { setTyped(""); setPhase("idle"); }}>↻ Replay</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Quickstart() {
-  const [tab, setTab] = useState("pipx");
-  return (
-    <div className={s.qs}>
-      <div>
-        <div className={s.tabs}>
-          {Object.keys(INSTALLS).map((k) => (
-            <button key={k} className={`${s.tab} ${tab === k ? s.active : ""}`} onClick={() => setTab(k)}>
-              {k}
-            </button>
-          ))}
-        </div>
-        <div className={s.codeBox}>
-          <span>
-            <span style={{ color: "var(--faint)" }}>$ </span>
-            {INSTALLS[tab]}
-          </span>
-          <CopyButton text={INSTALLS[tab]} />
-        </div>
-        <div className={s.codeBox} style={{ marginTop: 10 }}>
-          <span>
-            <span style={{ color: "var(--faint)" }}>$ </span>provekit run .provekit/tests/
-          </span>
-          <CopyButton text="provekit run .provekit/tests/" />
-        </div>
-      </div>
-      <ol className={s.qsList}>
-        <li><span><b>Install</b> — one command, no SDK, nothing to import into your code.</span></li>
-        <li><span><b>Connect</b> — point it at an LLM API, MCP server, HTTP or A2A agent.</span></li>
-        <li><span><b>Run</b> — watch it stream live; every call, tool, latency and cost is captured.</span></li>
-        <li><span><b>Assert</b> — click <code>+ contains</code> on a result and it saves a plain-text, git-diffable test.</span></li>
-        <li><span><b>Ship</b> — <code>provekit run .provekit/tests/</code> in CI; no green check, no merge.</span></li>
-      </ol>
-    </div>
-  );
-}
-
-const FEATURES = [
-  ["◇", "Any protocol", "LLM APIs, MCP servers, HTTP agents, A2A — one client, no per-provider SDK."],
-  ["≋", "Streaming-first", "See live tokens and every tool call as they happen, not just the final answer."],
-  ["✓", "Assertions", "Check content, tool-use, latency, cost or JSON shape — the checks agents actually need."],
-  ["⟲", "Snapshot & regress", "Freeze a good run; diff every future run against it so a tweak can't silently break prod."],
-  ["⚙", "CI-native", "Exit codes and machine-readable output. One workflow file gates every agent PR."],
-  ["$", "Cost & latency", "Every run records tokens, latency and spend — the numbers your team asks for."],
-  ["⇄", "Multi-provider", "Same run, swap the model, compare outputs side by side."],
-  ["⌘", "Connections", "Save endpoints, attach auth once, reuse across every run."],
-  ["🔒", "Local-first", "Runs on your machine. Your keys and prompts never leave it."],
-];
-
-const CASES = [
-  "Test an MCP server before you ship it.",
-  "Regression-test a prompt change so a tweak can't break prod.",
-  "Gate agent PRs in CI — no merge unless the suite is green.",
-  "Debug a flaky agent by replaying the exact run that failed.",
-  "Compare two providers on the same task, side by side.",
-  "Eval before deploy — a scorecard your team actually trusts.",
-];
+import { api } from "@/lib/api";
 
 export default function Landing() {
-  const [scrolled, setScrolled] = useState(false);
-  const [stars, setStars] = useState<number | null>(null);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 460);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    // Real star count — falls back silently to "★ GitHub" if rate-limited/offline.
-    fetch("https://api.github.com/repos/MobirizerServices/ProveKit")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d && typeof d.stargazers_count === "number") setStars(d.stargazers_count);
-      })
-      .catch(() => {});
-  }, []);
-
-  const starLabel =
-    stars == null ? "★ GitHub" : `★ ${stars >= 1000 ? (stars / 1000).toFixed(1) + "k" : stars}`;
+  const [authed, setAuthed] = useState(false);
+  useEffect(() => { api.me().then(() => setAuthed(true)).catch(() => {}); }, []);
+  const cta = authed ? "/traces" : "/login";
 
   return (
-    <div className={s.page}>
-      <a className={s.skip} href="#main">Skip to content</a>
-      {/* nav */}
-      <nav className={s.nav}>
-        <div className={s.navInner}>
-          <a className={s.brand} href="/"><span className={s.dia}>◇</span> ProveKit</a>
-          <div className={s.navLinks}>
-            <a href="#how">How it works</a>
-            <a href="#features">Features</a>
-            <a href="#compare">Why ProveKit</a>
-            <a href={DOCS}>Docs</a>
-          </div>
-          <div className={s.navRight}>
-            {scrolled && (
-              <div className={s.installMini}>
-                <span className={s.dollar}>$</span>
-                <span className={s.cmd}>pipx install provekit</span>
-                <CopyButton text="pipx install provekit" />
-              </div>
-            )}
-            <a className={s.btnGhost} href={GITHUB}>{starLabel}</a>
-            <a className={s.btnGold} href="/console">Open app</a>
-          </div>
+    <main style={wrap}>
+      <div style={{ maxWidth: 780, textAlign: "center" }}>
+        <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.5 }}>
+          <span style={{ color: "var(--accent)" }}>◇</span> ProveKit
         </div>
-      </nav>
+        <h1 style={{ fontSize: 40, lineHeight: 1.12, margin: "18px 0 0", letterSpacing: -1 }}>
+          Drop-in tracing for any AI agent.
+        </h1>
+        <p style={{ fontSize: 17, color: "var(--muted)", maxWidth: 560, margin: "16px auto 0", lineHeight: 1.5 }}>
+          Add one decorator, get a project key, and review every run your agent makes —
+          the model calls, the tools, the whole flow. No connections to configure, no
+          framework lock-in. Open source and self-hostable.
+        </p>
 
-      {/* hero */}
-      <header className={s.hero} id="main">
-        <div className={s.wrap}>
-          <span className={s.eyebrow}>◇ Open-source universal agent client</span>
-          <h1 className={s.h1}>Prove any AI agent works.</h1>
-          <p className={s.sub}>
-            Test, debug and evaluate any agent — <b>LLM · MCP · HTTP · A2A</b>, any provider, <b>no SDK</b>.
-            Run it with live streaming, turn a run into a regression test in one click, and run the suite in CI.
-          </p>
-          <div className={s.heroCtas}>
-            <div className={s.install}>
-              <span className={s.dollar}>$</span>
-              <span className={s.cmd}>pipx install provekit</span>
-              <CopyButton text="pipx install provekit" />
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", margin: "28px 0 40px" }}>
+          <Link href={cta} className="btn" style={{ padding: "11px 22px", fontSize: 15 }}>Get started</Link>
+          <a href="https://github.com/MobirizerServices/ProveKit" className="btn btn-ghost" style={{ padding: "11px 22px", fontSize: 15 }}>GitHub</a>
+        </div>
+
+        <pre style={code}>{`pip install "provekit[trace]"
+
+# .env  (key from your project in the portal)
+PROVEKIT_API_KEY=pk_...
+PROVEKIT_ENDPOINT=https://your-provekit-host
+
+import provekit.trace as pk
+
+@pk.trace(name="my-agent")
+def run_agent(question: str) -> str:
+    ...   # every run shows up in your portal`}</pre>
+
+        <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 36, flexWrap: "wrap" }}>
+          {STEPS.map((st) => (
+            <div key={st.n} style={{ width: 210, textAlign: "left" }}>
+              <div style={{ color: "var(--accent)", fontWeight: 700, fontSize: 13 }}>{st.n}</div>
+              <div style={{ fontWeight: 600, fontSize: 14, margin: "4px 0 3px" }}>{st.t}</div>
+              <div className="muted" style={{ fontSize: 13, lineHeight: 1.45 }}>{st.d}</div>
             </div>
-            <a className={s.btnGhost} href={GITHUB}>★ Star on GitHub</a>
-            <a className={s.btnGold} href={DOCS}>Read the docs →</a>
-          </div>
-          <div className={s.heroBadges}>
-            <span className={s.b}><span className={s.dot} /> Open source · MIT</span>
-            <span className={s.b}><span className={s.dot} /> Python 3.13</span>
-            <span className={s.b}><span className={s.dot} /> Runs locally — your keys never leave your machine</span>
-          </div>
-          <Terminal />
+          ))}
         </div>
-      </header>
-
-      {/* protocol strip */}
-      <section className={s.section} style={{ paddingTop: 40, paddingBottom: 40 }}>
-        <div className={s.wrap}>
-          <span className={s.kicker}>Point it at anything</span>
-          <div className={s.strip}>
-            <span className={s.proto}><b>LLM</b> — OpenAI, Anthropic, any chat API</span>
-            <span className={s.proto}><b>MCP</b> — Model Context Protocol servers</span>
-            <span className={s.proto}><b>HTTP</b> — your own agent endpoint</span>
-            <span className={s.proto}><b>A2A</b> — agent-to-agent</span>
-          </div>
-        </div>
-      </section>
-
-      {/* how it works */}
-      <section className={s.section} id="how">
-        <div className={s.wrap}>
-          <span className={s.kicker}>How it works</span>
-          <h2 className={s.h2}>Connect → Run → Assert → Regress in CI</h2>
-          <p className={s.lead}>The whole loop is fifteen seconds. Grasp it once and you never write agent-test glue again.</p>
-          <div className={s.steps}>
-            {[
-              ["01", "Connect", "Point ProveKit at any endpoint — an LLM API, an MCP server, an HTTP or A2A agent. No SDK to import."],
-              ["02", "Run", "Fire a request and watch it stream. Every token, tool call, latency and cost is captured as a run."],
-              ["03", "Assert", "Add checks to a good run — content, tools, latency, cost — and save it as a regression test."],
-              ["04", "Regress", "Drop the suite into CI. Exit codes and JUnit output mean a broken agent can't merge."],
-            ].map(([n, h, p]) => (
-              <div className={s.step} key={n}>
-                <div className={s.num}>{n}</div>
-                <h3>{h}</h3>
-                <p>{p}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* features */}
-      <section className={s.section} id="features">
-        <div className={s.wrap}>
-          <span className={s.kicker}>Features</span>
-          <h2 className={s.h2}>Everything a testing tool needs — and nothing an SDK forces on you.</h2>
-          <div className={s.features}>
-            {FEATURES.map(([i, h, p]) => (
-              <div className={s.feat} key={h}>
-                <div className={s.fi}>{i}</div>
-                <h3>{h}</h3>
-                <p>{p}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* comparison */}
-      <section className={s.section} id="compare">
-        <div className={s.wrap}>
-          <span className={s.kicker}>Why ProveKit</span>
-          <h2 className={s.h2}>You&rsquo;re already testing agents somehow. Here&rsquo;s the honest comparison.</h2>
-          <div className={s.cmp}>
-            <table>
-              <thead>
-                <tr>
-                  <th></th>
-                  <th className={s.pkcol}>◇ ProveKit</th>
-                  <th>SDK scripts</th>
-                  <th>Postman</th>
-                  <th>Hosted eval SaaS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ["Any protocol (LLM/MCP/HTTP/A2A)", "yes", "no", "no", "some"],
-                  ["Live streaming + tool calls", "yes", "some", "no", "some"],
-                  ["Run → regression test", "yes", "no", "no", "yes"],
-                  ["CI-native (exit codes, JUnit)", "yes", "some", "no", "some"],
-                  ["Runs locally, keys never leave", "yes", "yes", "yes", "no"],
-                  ["Open source · no seat pricing", "yes", "yes", "some", "no"],
-                ].map((row) => (
-                  <tr key={row[0]}>
-                    <td>{row[0]}</td>
-                    {row.slice(1).map((v, i) => (
-                      <td key={i} className={v === "yes" ? s.yes : v === "no" ? s.no : ""}>
-                        {v === "yes" ? "✓" : v === "no" ? "—" : "~"}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className={s.footNote}>
-            Not the right fit if you want a fully-managed SaaS dashboard with a team seat model — ProveKit is
-            deliberately local-first and open source.
-          </p>
-        </div>
-      </section>
-
-      {/* quickstart */}
-      <section className={s.section}>
-        <div className={s.wrap}>
-          <span className={s.kicker}>Quickstart</span>
-          <h2 className={s.h2}>From install to your first ✓ passed in under a minute.</h2>
-          <Quickstart />
-        </div>
-      </section>
-
-      {/* use cases */}
-      <section className={s.section}>
-        <div className={s.wrap}>
-          <span className={s.kicker}>Use cases</span>
-          <h2 className={s.h2}>Find your job.</h2>
-          <div className={s.cases}>
-            {CASES.map((c) => (
-              <div className={s.case} key={c}><span className={s.ci}>✓</span>{c}</div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* trust */}
-      <section className={s.section}>
-        <div className={s.wrap}>
-          <span className={s.kicker}>Trust</span>
-          <h2 className={s.h2}>Built for a tool that holds your API keys.</h2>
-          <div className={s.trust}>
-            {[
-              ["🔒", "Local-first", "Everything runs on your machine. Your keys and prompts never leave it."],
-              ["◇", "MIT licensed", "Permissive, forkable, no strings. Read every line."],
-              ["⊘", "No telemetry", "No phone-home. Nothing about your agents is collected."],
-              ["⇩", "Self-hostable", "Run it fully offline against a local model if you want."],
-            ].map(([k, h, p]) => (
-              <div className={s.tItem} key={h}>
-                <span className={s.tk}>{k}</span>
-                <div><h3>{h}</h3><p>{p}</p></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* final cta */}
-      <section className={s.finalCta}>
-        <div className={s.wrap}>
-          <h2 className={s.h2} style={{ marginInline: "auto" }}>Prove your agent works.</h2>
-          <p className={s.lead} style={{ marginInline: "auto" }}>One command. No signup. No SDK.</p>
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <div className={s.install}>
-              <span className={s.dollar}>$</span>
-              <span className={s.cmd}>pipx install provekit</span>
-              <CopyButton text="pipx install provekit" />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 18 }}>
-            <a className={s.btnGhost} href={GITHUB}>★ Star on GitHub</a>
-            <a className={s.btnGold} href={DOCS}>Read the docs →</a>
-          </div>
-        </div>
-      </section>
-
-      {/* footer */}
-      <footer className={s.footer}>
-        <div className={s.wrap}>
-          <div className={s.footCols}>
-            <div>
-              <a className={s.brand} href="/" style={{ marginBottom: 4 }}><span className={s.dia}>◇</span> ProveKit</a>
-              <span style={{ color: "var(--faint)" }}>The open-source universal agent client.</span>
-            </div>
-            <div>
-              <span className={s.ft}>Product</span>
-              <a href="/console">Open app</a>
-              <a href="#features">Features</a>
-              <a href="#compare">Why ProveKit</a>
-            </div>
-            <div>
-              <span className={s.ft}>Develop</span>
-              <a href={DOCS}>Docs</a>
-              <a href={GITHUB}>GitHub</a>
-              <a href={`${GITHUB}/blob/main/CONTRIBUTING.md`}>Contributing</a>
-            </div>
-            <div>
-              <span className={s.ft}>Trust</span>
-              <a href={`${GITHUB}/blob/main/SECURITY.md`}>Security</a>
-              <a href={`${GITHUB}/blob/main/LICENSE`}>MIT license</a>
-            </div>
-          </div>
-          <div className={s.footNote}>◇ ProveKit · MIT · Python 3.13 · Next.js 14 · runs locally, your keys never leave your machine.</div>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </main>
   );
 }
+
+const STEPS = [
+  { n: "1", t: "Create a project", d: "Sign in and grab a project key — one per app or environment." },
+  { n: "2", t: "Add the decorator", d: "pip install, drop the key in .env, wrap your agent's entrypoint." },
+  { n: "3", t: "Review the flow", d: "Every run streams to the portal — inspect each step's input and output." },
+];
+
+const wrap: React.CSSProperties = {
+  minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px",
+};
+const code: React.CSSProperties = {
+  textAlign: "left", margin: "0 auto", maxWidth: 560, padding: 18, borderRadius: 12,
+  background: "var(--panel)", border: "1px solid var(--border-strong)", fontSize: 12.5,
+  lineHeight: 1.6, fontFamily: "var(--font-mono)", overflowX: "auto", whiteSpace: "pre",
+};

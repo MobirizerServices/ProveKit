@@ -1,0 +1,36 @@
+# Copy this to .github/workflows/provekit.yml in YOUR project.
+# (A workflow nested under examples/ won't run — GitHub only executes workflows found in
+#  the repository-root .github/workflows/ directory.)
+name: agent tests
+on: [push, pull_request]
+
+jobs:
+  provekit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements.txt provekit
+
+      - name: Start the agent
+        run: uvicorn serve:app --port 8000 &
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Wait for the agent to be up
+        run: for i in $(seq 1 30); do curl -sf localhost:8000/openapi.json && break || sleep 1; done
+
+      - name: Run ProveKit tests
+        run: provekit run .provekit/tests/ --format junit -o results.xml
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # for the llm_judge Judge model
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provekit-results
+          path: results.xml

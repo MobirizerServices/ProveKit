@@ -1,0 +1,12 @@
+# Copy to your project's .provekit/connections.yaml. Secrets use ${ENV_VAR} — read from
+# the environment at run time, and NEVER stored in the test files.
+connections:
+  LangGraph agent:
+    base_url: http://localhost:8000
+    # headers: { Authorization: "Bearer ${AGENT_TOKEN}" }   # if your endpoint needs auth
+
+  # Optional: a model used to grade answers semantically (llm_judge assertions).
+  Judge:
+    provider: openai
+    api_key: ${OPENAI_API_KEY}
+    models: [gpt-4o-mini]

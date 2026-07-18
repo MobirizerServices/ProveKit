@@ -1,0 +1,24 @@
+version: 1
+kind: test
+name: LangGraph agent behavior regression
+connection: LangGraph agent
+request:
+  type: agent
+  method: POST
+  path: /invoke
+  body: { input: "{{message}}" }
+assertions:
+  # semantic check — graded by the Judge model, not a brittle string match
+  - type: llm_judge
+    criteria: The reply correctly and helpfully addresses the user's message.
+    connection: Judge
+  - type: latency_lt
+    value: 8000
+# one request run over N inputs -> a pass/fail row per input
+dataset:
+  - name: arithmetic
+    variables: { message: "What is 12 * 12?" }
+  - name: capital
+    variables: { message: "What is the capital of France?" }
+  - name: greeting
+    variables: { message: "Hi, what can you help me with?" }

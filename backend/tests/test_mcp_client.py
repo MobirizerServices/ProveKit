@@ -27,6 +27,23 @@ def test_stdio_blocked_in_hosted_mode(monkeypatch):
         mc.MCPSession(command=sys.executable, args=[SERVER]).list_tools()
 
 
+def test_stdio_hung_server_times_out_instead_of_blocking():
+    """A stdio MCP server that never replies must fail fast on the read deadline — not
+    block the caller (an offloaded threadpool thread) forever, which used to wedge the
+    whole service under enough hung/slow servers."""
+    import time
+
+    # a subprocess that reads nothing and writes nothing = a perfect hang
+    t = mc._StdioTransport(sys.executable, ["-c", "import time; time.sleep(30)"], None, timeout=1)
+    try:
+        start = time.monotonic()
+        with pytest.raises(mc.MCPError, match="timed out"):
+            t.request({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        assert time.monotonic() - start < 10, "must fail on the 1s deadline, not hang for 30s"
+    finally:
+        t.close()
+
+
 # ---- HTTP transport driven by a fake, to exercise spec / pagination / oauth / 401 ----
 class _FakeHTTP:
     def __init__(self, responder):

@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import contextlib
 import json
+import queue
 import subprocess
 import threading
+import time
 
 import httpx
 
@@ -92,26 +94,55 @@ class _HTTPTransport:
 
 
 class _StdioTransport:
-    """Newline-delimited JSON-RPC over a spawned process's stdin/stdout."""
+    """Newline-delimited JSON-RPC over a spawned process's stdin/stdout.
+
+    A background reader pumps stdout lines into a queue so `request()` can wait with a
+    deadline instead of a bare blocking read: a hung MCP server used to block the caller
+    (an offloaded threadpool thread) forever, and enough of them wedge the whole service.
+    On timeout we kill the process, which ends the reader thread — nothing leaks.
+    """
     def __init__(self, command, args, env, timeout):
         guard_stdio()  # RCE gate: never spawn a local process in hosted mode
+        self.timeout = timeout
         self.proc = subprocess.Popen(
             [command, *(args or [])], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env)
+        self._lines: queue.Queue = queue.Queue()
+        self._reader = threading.Thread(target=self._pump, daemon=True)
+        self._reader.start()
+
+    def _pump(self):
+        try:
+            for line in self.proc.stdout:  # blocks in this daemon thread, not the caller
+                self._lines.put(line)
+        except Exception:
+            pass
+        self._lines.put(None)  # EOF/closed sentinel
 
     def request(self, payload) -> dict:
-        assert self.proc.stdin and self.proc.stdout
+        assert self.proc.stdin
         self.proc.stdin.write(json.dumps(payload) + "\n")
         self.proc.stdin.flush()
         want = payload.get("id")
-        for line in self.proc.stdout:
+        deadline = time.monotonic() + self.timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.close()
+                raise MCPError(f"stdio MCP server timed out after {self.timeout}s")
+            try:
+                line = self._lines.get(timeout=remaining)
+            except queue.Empty:
+                self.close()
+                raise MCPError(f"stdio MCP server timed out after {self.timeout}s")
+            if line is None:
+                raise MCPError("stdio server closed before replying")
             line = line.strip()
             if not line:
                 continue
             msg = json.loads(line)
             if msg.get("id") == want:
                 return msg
-        raise MCPError("stdio server closed before replying")
 
     def notify(self, payload) -> None:
         assert self.proc.stdin

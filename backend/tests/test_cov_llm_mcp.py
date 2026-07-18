@@ -512,9 +512,17 @@ class _FakeProc:
         self.killed = True
 
 
-def _stdio_transport(proc):
+def _stdio_transport(proc, timeout=5):
+    # Mirror _StdioTransport.__init__ minus the real subprocess: set the read deadline and
+    # start the background reader that pumps the fake proc.stdout into the queue request() reads.
+    import queue as _queue
+    import threading as _threading
     t = mc._StdioTransport.__new__(mc._StdioTransport)
     t.proc = proc
+    t.timeout = timeout
+    t._lines = _queue.Queue()
+    t._reader = _threading.Thread(target=t._pump, daemon=True)
+    t._reader.start()
     return t
 
 

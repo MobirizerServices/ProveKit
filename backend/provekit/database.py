@@ -62,16 +62,6 @@ def init_db() -> None:
         _run_migrations()
 
 
-# Revision that first introduced each column, newest first — used to adopt a pre-migration
-# database (built by the old create_all path) at the revision matching its actual columns.
-_ADOPT_BY_COLUMN = [
-    ("users", "token_version", "a1b2c3d4e5f6"),
-    ("users", "email_verified", "323eb73d463c"),
-    ("workspaces", "ingest_key_hash", "819ed5ff183e"),
-]
-_BASELINE_REVISION = "49e8ab812556"
-
-
 # Postgres advisory-lock key ("AGMN") used to serialize migrations across uvicorn workers.
 _MIGRATION_LOCK_ID = 0x4147_4D4E
 
@@ -113,20 +103,4 @@ def _run_migrations() -> None:
 
 def _migrate_to_head(cfg) -> None:
     from alembic import command
-    from alembic.runtime.migration import MigrationContext
-    from sqlalchemy import inspect
-
-    insp = inspect(engine)
-    with engine.connect() as conn:
-        current = MigrationContext.configure(conn).get_current_revision()
-    if current is None and insp.has_table("users"):
-        # A database created by create_all before migrations existed has the tables but no
-        # alembic version. Stamp it at the revision matching its columns so `upgrade` applies
-        # only what's genuinely missing instead of trying to re-create existing tables.
-        stamp_at = _BASELINE_REVISION
-        for table, column, revision in _ADOPT_BY_COLUMN:
-            if any(c["name"] == column for c in insp.get_columns(table)):
-                stamp_at = revision
-                break
-        command.stamp(cfg, stamp_at)
     command.upgrade(cfg, "head")

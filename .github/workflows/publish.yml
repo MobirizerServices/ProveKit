@@ -1,0 +1,35 @@
+# Publish `provekit` to PyPI on a version tag, via Trusted Publishing (OIDC) — no token.
+# One-time setup on PyPI (pypi.org -> your account -> Publishing -> "Add a pending publisher"):
+#   PyPI Project Name: provekit
+#   Owner:             MobirizerServices
+#   Repository name:   ProveKit
+#   Workflow name:     publish.yml
+#   Environment name:  (leave blank)
+# Then release with:  git tag v0.1.0 && git push origin v0.1.0
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write        # required for Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist + wheel
+        working-directory: backend        # pyproject.toml lives here
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: backend/dist/

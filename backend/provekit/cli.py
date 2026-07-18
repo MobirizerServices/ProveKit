@@ -130,14 +130,15 @@ def cmd_run(args) -> int:
         if doc.get("kind") != "test":
             continue  # flows aren't CI test units
         request, unresolved = _resolve_request(doc, reg)
+        suite_name = doc.get("name") or f.stem  # `name` is optional in the format — don't KeyError
         rows = doc.get("dataset") or [{"name": None, "variables": {}}]
         cases = []
         for i, row in enumerate(rows):
             variables = {**cli_vars, **(row.get("variables") or {})}
             res = _run_case(reg, request, variables)
-            res["name"] = row.get("name") or (f"row {i + 1}" if len(rows) > 1 else doc["name"])
+            res["name"] = row.get("name") or (f"row {i + 1}" if len(rows) > 1 else suite_name)
             cases.append(res)
-        suites.append({"file": str(f), "name": doc["name"], "cases": cases,
+        suites.append({"file": str(f), "name": suite_name, "cases": cases,
                        "error": (f"connection '{unresolved}' not found" if unresolved else None)})
 
     _render(suites, args.format, args.output)

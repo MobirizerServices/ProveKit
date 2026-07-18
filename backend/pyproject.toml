@@ -19,21 +19,20 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+# Core = exactly what the `provekit` CLI (the pip entry point) imports. Version RANGES, not
+# ==, so `pip install provekit` resolves alongside whatever else is in a user's env; the
+# exact reproducible pins live in requirements.txt (the deployment lock) and drive Docker.
+# The web app / hosted server deps live in the `server` extra below — install with
+# `pip install provekit[server]`.
 dependencies = [
-    "fastapi==0.115.6",
-    "uvicorn[standard]==0.34.0",
-    "sqlalchemy==2.0.36",
-    "pydantic==2.10.4",
-    "pydantic-settings==2.7.1",
-    "httpx==0.28.1",
-    "jsonschema==4.23.0",
-    "cryptography==49.0.0",
-    "pyyaml==6.0.3",
-    "alembic==1.18.5",
-    "psycopg[binary]==3.3.4",
-    "email-validator==2.2.0",
-    "redis==5.2.1",
-    "sentry-sdk[fastapi]==2.20.0",
+    "sqlalchemy>=2.0,<3",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.7,<3",
+    "httpx>=0.28,<1",
+    "jsonschema>=4.23,<5",
+    "cryptography>=42,<50",
+    "pyyaml>=6,<7",
+    "anyio>=4,<5",
 ]
 
 [project.urls]
@@ -45,8 +44,19 @@ Issues = "https://github.com/MobirizerServices/ProveKit/issues"
 provekit = "provekit.cli:main"
 
 [project.optional-dependencies]
-# Keep in sync with requirements-dev.txt — CI gates on both pytest and ruff.
-dev = ["pytest==9.1.1", "ruff==0.9.2"]
+# The web app + hosted server (FastAPI, Postgres, Redis, migrations, error reporting).
+# Not needed to run `provekit` tests in CI: `pip install provekit[server]`.
+server = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "alembic>=1.18,<2",
+    "psycopg[binary]>=3.3,<4",
+    "email-validator>=2.2,<3",
+    "redis>=5.2,<6",
+    "sentry-sdk[fastapi]>=2.20,<3",
+]
+# Keep in sync with requirements-dev.txt — CI gates on pytest+coverage and ruff.
+dev = ["pytest==9.1.1", "pytest-cov==6.0.0", "ruff==0.9.2"]
 
 [build-system]
 requires = ["setuptools>=68"]

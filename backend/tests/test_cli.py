@@ -70,6 +70,28 @@ def test_run_failing_exits_nonzero(workspace, monkeypatch):
     assert cli.main(["run", "tests/"]) == 1
 
 
+def test_run_nameless_test_falls_back_to_filename(workspace, monkeypatch, capsys):
+    """`name:` is optional in the format, so a nameless single-row test must run and label
+    the suite from the filename — not raise KeyError('name')."""
+    nameless = textwrap.dedent("""\
+        version: 1
+        kind: test
+        connection: Mock
+        request:
+          type: prompt
+          model: demo-mock
+          user: "what is an AI agent"
+        assertions:
+          - type: contains
+            value: agent
+    """)
+    (workspace / "tests/nameless.yaml").write_text(nameless)
+    monkeypatch.chdir(workspace)
+    rc = cli.main(["run", "tests/", "--format", "json"])
+    assert rc == 0
+    assert "nameless" in capsys.readouterr().out  # suite name derived from the file stem
+
+
 def test_env_var_expansion_in_connections(workspace, monkeypatch):
     monkeypatch.setenv("MY_TEST_KEY", "sk-from-env")
     reg = cli._load_connections(str(workspace / ".provekit/connections.yaml"))

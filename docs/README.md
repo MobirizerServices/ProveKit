@@ -4,6 +4,7 @@
 - [Roadmap](ROADMAP.md) — research-backed 50 features + 100 improvements toward world-class
 - [Landing roadmap](LANDING_ROADMAP.md) — 100 points to a production-ready marketing site
 - [UI roadmap (200)](UI_ROADMAP_200.md) — path to a world-class, production-ready portal
+- [Agent flow (50)](AGENTFLOW_50.md) — full-bleed canvas, inspector, node CTAs, collapse (world-class flow)
 - [Tracing guide](TRACING.md) — the decorator, `pk.span()`, configuration, what's captured
 - [Evaluation guide](EVALUATION.md) — datasets, scorers, `pk.evaluate()`, experiments, CI gates
 - [MCP debug channel](MCP.md) — debug traces from Claude Desktop / Cursor by project key

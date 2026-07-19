@@ -96,6 +96,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .tn-link:hover { color: var(--text); background: var(--panel-2); }
 .tn-link.on { color: var(--text); background: var(--panel-2); }
 
+/* ---------- Mobile responsiveness for the app shell ---------- */
+@media (max-width: 720px) {
+  /* nav: don't wrap/overflow — shrink and let the links scroll horizontally */
+  .topbar { gap: 6px; padding-left: 10px; padding-right: 10px; }
+  .topnav { margin-left: 6px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .topnav::-webkit-scrollbar { display: none; }
+  .tn-link { white-space: nowrap; padding: 6px 8px; font-size: 12.5px; }
+  .proj-btn { max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the two-pane traces layout stacks: list on top, detail below */
+  .traces-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+  /* the flow studio stacks: canvas on top, inspector below */
+  .flow-studio { flex-direction: column !important; height: auto !important; }
+  .flow-studio .flow-canvas { height: 52vh; }
+  .flow-inspector { width: 100% !important; border-left: none !important; border-top: 1px solid var(--border); }
+  .flow-collapse-btn { display: none !important; }
+}
+
 /* project switcher */
 .proj-switch { position: relative; margin-left: 12px; }
 .proj-btn { font-size: 13px; font-weight: 500; padding: 6px 11px; border-radius: var(--r-sm); color: var(--text); background: var(--panel-2); border: 1px solid var(--border-strong); cursor: pointer; white-space: nowrap; }

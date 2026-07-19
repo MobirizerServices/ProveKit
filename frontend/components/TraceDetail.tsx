@@ -109,15 +109,15 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
 
       {view === "flow" ? (
         // Full-height studio: canvas fills the space, a resizable/collapsible inspector on the right.
-        <div style={{ display: "flex", height: "62vh", minHeight: 420, border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
-          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+        <div className="flow-studio" style={{ display: "flex", height: "62vh", minHeight: 420, border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
+          <div className="flow-canvas" style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <TraceGraph spans={spans} selected={picked} onSelect={setPicked} fill />
           </div>
           {/* collapse toggle on the divider */}
-          <button onClick={() => setInspectorOpen((o) => !o)} title={inspectorOpen ? "Hide inspector" : "Show inspector"}
+          <button className="flow-collapse-btn" onClick={() => setInspectorOpen((o) => !o)} title={inspectorOpen ? "Hide inspector" : "Show inspector"}
             style={{ ...collapseBtn, right: inspectorOpen ? 388 : 8 }}>{inspectorOpen ? "›" : "‹"}</button>
           {inspectorOpen && (
-            <div style={{ width: 380, flexShrink: 0, borderLeft: "1px solid var(--border)", overflowY: "auto", background: "var(--panel)" }}>
+            <div className="flow-inspector" style={{ width: 380, flexShrink: 0, borderLeft: "1px solid var(--border)", overflowY: "auto", background: "var(--panel)" }}>
               {sel ? <Inspector span={sel} traceId={traceId} readOnly={readOnly} /> : <div className="muted" style={{ padding: 16, fontSize: 13 }}>Click a node to inspect it.</div>}
             </div>
           )}

@@ -118,7 +118,7 @@ export default function TracesPage() {
         {traces.length === 0 && !failuresOnly && !windowHours ? (
           <Onboarding origin={origin} />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: listOpen ? "300px 1fr" : "0 1fr", gap: listOpen ? 16 : 0, transition: "grid-template-columns .2s, gap .2s", position: "relative" }}>
+          <div className="traces-grid" style={{ display: "grid", gridTemplateColumns: listOpen ? "300px 1fr" : "0 1fr", gap: listOpen ? 16 : 0, transition: "grid-template-columns .2s, gap .2s", position: "relative" }}>
             {/* collapse the trace list to give the flow studio the whole width */}
             {sel && (
               <button onClick={() => setListOpen((o) => !o)} title={listOpen ? "Hide list" : "Show list"}

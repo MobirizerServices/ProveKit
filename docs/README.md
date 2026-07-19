@@ -1,6 +1,7 @@
 # ProveKit docs
 
 - [Features](../FEATURES.md) — the full inventory of what's built
+- [Roadmap](ROADMAP.md) — research-backed 50 features + 100 improvements toward world-class
 - [Tracing guide](TRACING.md) — the decorator, `pk.span()`, configuration, what's captured
 - [Publishing](PUBLISHING.md) — release `provekit` to PyPI
 - [Deployment](DEPLOY.md) — local vs hosted (TLS, Postgres, Redis)

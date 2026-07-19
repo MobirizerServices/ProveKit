@@ -10,6 +10,11 @@ import { estimateCost, fmtCost } from "@/lib/cost";
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
 };
+// Concrete hex for the minimap — its canvas doesn't resolve CSS variables (they'd render
+// black), so the mini node dots need literal colors.
+const MINI_COLOR: Record<string, string> = {
+  agent: "#d8b45f", llm: "#6ea8ff", tool: "#c98cf0", step: "#97979f",
+};
 
 const NODE_W = 210;  // node box width for the layout engine
 const NODE_H = 60;   // approximate node box height
@@ -207,9 +212,9 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
         {/* The minimap only earns its space on larger graphs — below ~8 nodes it's a dead
             black box, so hide it. */}
         {nodes.length >= 8 && (
-          <MiniMap pannable zoomable nodeColor={(n) => TYPE_COLOR[(n.data as any)?.span?.type] || "var(--muted)"}
-            nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "var(--red)" : "transparent")}
-            style={{ background: "var(--bg-2)" }} maskColor="rgba(0,0,0,0.55)" />
+          <MiniMap pannable zoomable nodeColor={(n) => MINI_COLOR[(n.data as any)?.span?.type] || "#97979f"}
+            nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "#f0736f" : "transparent")}
+            nodeBorderRadius={3} style={{ background: "#16161a" }} maskColor="rgba(0,0,0,0.45)" />
         )}
       </ReactFlow>
     </div>

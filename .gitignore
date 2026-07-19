@@ -33,3 +33,7 @@ node_modules
 
 # Production secrets — never commit
 deploy/provekit.online.env
+
+# Next build dirs
+frontend/.next-dev/
+frontend/.next-build/

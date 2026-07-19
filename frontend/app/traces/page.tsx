@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, TraceSpan, TraceSummary } from "@/lib/api";
 import TopNav from "@/components/TopNav";
+import TraceGraph from "@/components/TraceGraph";
 
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
@@ -68,7 +69,7 @@ export default function TracesPage() {
               ) : !spans ? (
                 <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
               ) : (
-                <Tree spans={spans} />
+                <TraceDetail spans={spans} />
               )}
             </div>
           </div>
@@ -119,6 +120,62 @@ def run_agent(question: str) -> str:
       `}</style>
     </div>
   );
+}
+
+function TraceDetail({ spans }: { spans: TraceSpan[] }) {
+  const [view, setView] = useState<"flow" | "waterfall">("flow");
+  const ids = new Set(spans.map((s) => s.span_id));
+  const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
+  const [picked, setPicked] = useState<string | null>(root?.span_id ?? null);
+  const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
+  const sel = spans.find((s) => s.span_id === picked) || root;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+        <div style={{ minWidth: 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{root?.label || "trace"}</span>
+          <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
+            {spans.length} span{spans.length === 1 ? "" : "s"} · {root?.duration_ms ?? 0}ms{totalTok ? ` · ${totalTok} tokens` : ""}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2, flexShrink: 0 }}>
+          {(["flow", "waterfall"] as const).map((v) => (
+            <button key={v} onClick={() => setView(v)} style={toggleBtn(view === v)}>
+              {v === "flow" ? "Flow" : "Waterfall"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === "flow" ? (
+        <>
+          <TraceGraph spans={spans} selected={picked} onSelect={setPicked} />
+          {sel && (
+            <div style={{ marginTop: 12 }}>
+              <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>
+                <b style={{ color: "var(--text)" }}>{sel.label}</b>
+                {sel.request?.model ? ` · ${sel.request.model}` : ""} · {sel.duration_ms}ms
+              </div>
+              <Field label="Input">{textOf(sel.request?.input)}</Field>
+              <Field label="Output">{textOf(sel.result?.text)}</Field>
+              {sel.error && <Field label="Error">{sel.error}</Field>}
+            </div>
+          )}
+        </>
+      ) : (
+        <Tree spans={spans} />
+      )}
+    </div>
+  );
+}
+
+function toggleBtn(active: boolean): React.CSSProperties {
+  return {
+    fontSize: 12, padding: "4px 13px", borderRadius: 6, cursor: "pointer", border: "none",
+    background: active ? "var(--panel)" : "transparent",
+    color: active ? "var(--text)" : "var(--muted)", fontWeight: active ? 600 : 400,
+  };
 }
 
 function Tree({ spans }: { spans: TraceSpan[] }) {
@@ -185,19 +242,7 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
         </div>
       );
     });
-  const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
-  const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
-        <span style={{ fontSize: 14, fontWeight: 600 }}>{root?.label || "trace"}</span>
-        <span className="muted" style={{ fontSize: 12 }}>
-          {spans.length} span{spans.length === 1 ? "" : "s"} · {root?.duration_ms ?? 0}ms{totalTok ? ` · ${totalTok} tokens` : ""}
-        </span>
-      </div>
-      {render("__root__", 0)}
-    </div>
-  );
+  return <div>{render("__root__", 0)}</div>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

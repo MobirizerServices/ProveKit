@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, Run, Workspace, iso_utc
-from ..services import apikey, deploy, limits, otel
+from ..services import apikey, deploy, limits, otel, share
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/v1", tags=["traces"])
@@ -141,16 +141,23 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
              "created_at": iso_utc(r.created_at)} for r in roots]
 
 
-def _get_trace(db: Session, ws: Workspace, trace_id: str):
-    spans = (db.query(Run)
-             .filter(Run.workspace_id == ws.id, Run.trace_id == trace_id)
-             .order_by(Run.id.asc()).all())
-    if not spans:
-        raise HTTPException(404, "Trace not found")
+def _span_rows(spans: list) -> list[dict]:
     return [{"id": s.id, "span_id": s.span_id, "parent_span_id": s.parent_span_id,
              "type": s.type, "label": s.label, "status": s.status, "duration_ms": s.duration_ms,
              "request": s.request, "result": s.result, "error": s.error,
              "session_id": s.session_id, "created_at": iso_utc(s.created_at)} for s in spans]
+
+
+def _trace_spans(db: Session, ws_id: int, trace_id: str) -> list:
+    return (db.query(Run).filter(Run.workspace_id == ws_id, Run.trace_id == trace_id)
+            .order_by(Run.id.asc()).all())
+
+
+def _get_trace(db: Session, ws: Workspace, trace_id: str):
+    spans = _trace_spans(db, ws.id, trace_id)
+    if not spans:
+        raise HTTPException(404, "Trace not found")
+    return _span_rows(spans)
 
 
 # ---- feedback / scoring (attached to a whole trace) ----
@@ -211,6 +218,30 @@ def list_feedback_by_key(trace_id: str, request: Request, db: Session = Depends(
                          authorization: str | None = Header(default=None)):
     ws = _resolve_ingest_ws(db, request, authorization)
     return _list_feedback(db, ws, trace_id)
+
+
+# ---- shareable read-only links (a signed token; no login to view) ----
+@runs_router.post("/traces/{trace_id}/share")
+def share_trace(trace_id: str, db: Session = Depends(get_db),
+                ws: Workspace = Depends(current_workspace)):
+    """Mint a signed, read-only share token for a trace. Anyone with the link can view it
+    at /shared/{token} (backed by GET /v1/share/{token}) without an account."""
+    if not db.query(Run.id).filter(Run.workspace_id == ws.id, Run.trace_id == trace_id).first():
+        raise HTTPException(404, "Trace not found")
+    return {"token": share.make_share_token(ws.id, trace_id), "trace_id": trace_id}
+
+
+@router.get("/share/{token}")
+def read_shared_trace(token: str, db: Session = Depends(get_db)):
+    """Public, read-only view of a shared trace. Verifies the signature — no auth."""
+    resolved = share.verify_share_token(token)
+    if not resolved:
+        raise HTTPException(404, "Invalid or expired share link")
+    ws_id, trace_id = resolved
+    spans = _trace_spans(db, ws_id, trace_id)
+    if not spans:
+        raise HTTPException(404, "Trace not found")
+    return _span_rows(spans)
 
 
 @runs_router.get("/traces")

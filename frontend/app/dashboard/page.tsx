@@ -9,7 +9,8 @@ import { CardGridSkeleton, Skeleton, SkeletonStyles } from "@/components/Skeleto
 import TopNav from "@/components/TopNav";
 
 const WINDOWS = [
-  { label: "24h", hours: 24 }, { label: "7 days", hours: 168 }, { label: "30 days", hours: 720 },
+  { label: "1h", hours: 1 }, { label: "24h", hours: 24 }, { label: "7d", hours: 168 },
+  { label: "30d", hours: 720 }, { label: "90d", hours: 2160 },
 ];
 
 export default function DashboardPage() {

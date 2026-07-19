@@ -32,5 +32,15 @@ export function estimateCost(model?: string, inTok?: number | null, outTok?: num
 
 export function fmtCost(c: number | null): string | null {
   if (c == null) return null;
-  return c < 0.01 ? `~$${c.toFixed(4)}` : `~$${c.toFixed(2)}`;
+  if (c === 0) return null;                 // nothing to show
+  if (c < 0.01) return "<$0.01";            // sub-cent reads clean, never "~$0.0000"
+  if (c < 1) return `$${c.toFixed(2)}`;
+  return `$${c.toFixed(c < 100 ? 2 : 0)}`;
+}
+
+// Full-precision cost for tooltips/hover (where sub-cent detail is useful).
+export function fmtCostPrecise(c: number | null): string | null {
+  if (c == null || c === 0) return null;
+  if (c < 0.01) return `$${c.toFixed(6)}`;
+  return `$${c.toFixed(4)}`;
 }

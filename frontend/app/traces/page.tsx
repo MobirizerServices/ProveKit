@@ -6,6 +6,16 @@ import { api, TraceSpan, TraceSummary } from "@/lib/api";
 import TopNav from "@/components/TopNav";
 import TraceDetail from "@/components/TraceDetail";
 
+// "2m ago" style relative time, with a couple of coarser buckets. Absolute goes on the title.
+function relTime(iso?: string): string {
+  if (!iso) return "";
+  const d = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (d < 45) return "just now";
+  if (d < 3600) return `${Math.round(d / 60)}m ago`;
+  if (d < 86400) return `${Math.round(d / 3600)}h ago`;
+  return `${Math.round(d / 86400)}d ago`;
+}
+
 const WINDOWS: { label: string; hours: number }[] = [
   { label: "All time", hours: 0 }, { label: "Last hour", hours: 1 },
   { label: "Last 24h", hours: 24 }, { label: "Last 7 days", hours: 168 },
@@ -71,15 +81,18 @@ export default function TracesPage() {
               {shown.length === 0 ? (
                 <div className="muted" style={{ padding: 14, fontSize: 12.5 }}>No traces match.</div>
               ) : shown.map((t) => (
-                <button key={t.trace_id || t.id} onClick={() => setSel(t.trace_id)} style={row(sel === t.trace_id)}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <button key={t.trace_id || t.id} onClick={() => setSel(t.trace_id)} style={row(sel === t.trace_id)}
+                  title={fmt(t.created_at)}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
                     <span style={{ fontWeight: 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {t.label || `run ${t.id}`}
                     </span>
-                    <span style={{ ...dot, background: t.status === "failed" ? "var(--red)" : "var(--green)" }} />
+                    {t.status === "failed"
+                      ? <span style={failBadge}>failed</span>
+                      : <span style={{ ...dot, background: "var(--green)" }} />}
                   </div>
                   <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-                    {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {fmt(t.created_at)}
+                    {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {relTime(t.created_at)}
                     {t.session_id ? <span style={{ color: "var(--purple)" }}> · ◆ {t.session_id}</span> : ""}
                   </div>
                 </button>
@@ -91,7 +104,7 @@ export default function TracesPage() {
               {!sel ? (
                 <div className="muted" style={{ fontSize: 13 }}>Select a trace to see its flow.</div>
               ) : !spans ? (
-                <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
+                <DetailSkeleton />
               ) : (
                 <TraceDetail spans={spans} traceId={sel ?? undefined} />
               )}
@@ -100,6 +113,26 @@ export default function TracesPage() {
         )}
       </main>
     </>
+  );
+}
+
+function DetailSkeleton() {
+  const bar = (w: string, h = 14, mt = 10): React.CSSProperties => ({
+    width: w, height: h, marginTop: mt, borderRadius: 6, background: "var(--panel-2)",
+    animation: "pk-shimmer 1.2s ease-in-out infinite",
+  });
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={bar("40%", 16, 0)} />
+        <div style={bar("120px", 26, 0)} />
+      </div>
+      <div style={{ ...bar("100%", 300, 0), borderRadius: 10 }} />
+      <div style={bar("55%")} />
+      <div style={bar("80%")} />
+      <div style={bar("70%")} />
+      <style jsx>{`@keyframes pk-shimmer { 0%,100% { opacity: .55 } 50% { opacity: .85 } }`}</style>
+    </div>
   );
 }
 
@@ -157,6 +190,10 @@ const pre: React.CSSProperties = {
   wordBreak: "break-word", maxHeight: 240, overflowY: "auto",
 };
 const dot: React.CSSProperties = { width: 8, height: 8, borderRadius: 999, flexShrink: 0, marginTop: 4 };
+const failBadge: React.CSSProperties = {
+  flexShrink: 0, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
+  color: "var(--red)", border: "1px solid var(--red)", borderRadius: 5, padding: "1px 6px",
+};
 function row(active: boolean): React.CSSProperties {
   return {
     display: "block", width: "100%", textAlign: "left", padding: "11px 14px",

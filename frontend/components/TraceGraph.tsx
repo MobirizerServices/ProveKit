@@ -37,8 +37,13 @@ function SpanNode({ data }: { data: { span: TraceSpan; active: boolean } }) {
           fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
           padding: "1px 5px", borderRadius: 4, color, border: `1px solid ${color}`, flexShrink: 0,
         }}>{s.type}</span>
-        <span style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
           {s.label}
+        </span>
+        {/* status glyph so success/failure reads at a glance */}
+        <span aria-label={s.status} style={{ flexShrink: 0, fontSize: 12, fontWeight: 700,
+          color: s.status === "failed" ? "var(--red)" : "var(--green)" }}>
+          {s.status === "failed" ? "✕" : "✓"}
         </span>
       </div>
       <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
@@ -121,9 +126,13 @@ export default function TraceGraph({ spans, selected, onSelect }: {
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
         <Controls showZoom showFitView showInteractive={false} position="bottom-left" />
-        <MiniMap pannable zoomable nodeColor={(n) => TYPE_COLOR[(n.data as any)?.span?.type] || "var(--muted)"}
-          nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "var(--red)" : "transparent")}
-          style={{ background: "var(--bg-2)" }} maskColor="rgba(0,0,0,0.55)" />
+        {/* The minimap only earns its space on larger graphs — below ~8 nodes it's a dead
+            black box, so hide it. */}
+        {nodes.length >= 8 && (
+          <MiniMap pannable zoomable nodeColor={(n) => TYPE_COLOR[(n.data as any)?.span?.type] || "var(--muted)"}
+            nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "var(--red)" : "transparent")}
+            style={{ background: "var(--bg-2)" }} maskColor="rgba(0,0,0,0.55)" />
+        )}
       </ReactFlow>
     </div>
   );

@@ -116,9 +116,6 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
                 {sel.request?.provider && <span>provider={sel.request.provider}</span>}
                 {sel.request?.model && <span>model={sel.request.model}</span>}
                 {sel.request?.operation && <span>op={sel.request.operation}</span>}
-                {params.temperature != null && <span>temp={String(params.temperature)}</span>}
-                {params.max_tokens != null && <span>max_tokens={String(params.max_tokens)}</span>}
-                {meta.finish_reason != null && <span>finish={String(meta.finish_reason)}</span>}
                 <span style={{ color: sel.status === "failed" ? "var(--red)" : undefined }}>{sel.status}</span>
                 <span>{sel.duration_ms}ms</span>
                 {tokens(sel) && <span>{tokens(sel)}</span>}
@@ -127,6 +124,7 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
                   return c ? <span title="estimated cost">{c}</span> : null;
                 })()}
               </div>
+              <ParamRow params={params} finish={meta.finish_reason} />
               <IO label="Input" value={sel.request?.input} />
               <IO label="Output" value={sel.result?.text} />
               {(sel.error || sel.status === "failed") && <ErrorBlock error={sel.error} />}
@@ -159,11 +157,11 @@ function ShareButton({ traceId }: { traceId: string }) {
   const [label, setLabel] = useState("Share");
   const share = async () => {
     try {
-      const { token } = await api.shareTrace(traceId);
+      const { token, expires_in_days } = await api.shareTrace(traceId);
       const url = `${window.location.origin}/shared/${token}`;
       await navigator.clipboard?.writeText(url);
-      setLabel("Link copied");
-      setTimeout(() => setLabel("Share"), 1600);
+      setLabel(`Copied · ${expires_in_days}d link`);
+      setTimeout(() => setLabel("Share"), 2200);
     } catch { setLabel("Failed"); setTimeout(() => setLabel("Share"), 1600); }
   };
   return <button className="btn btn-sm" onClick={share}>{label}</button>;
@@ -269,6 +267,29 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
       );
     });
   return <div>{render("__root__", 0)}</div>;
+}
+
+// Invocation parameters on an LLM span, shown as labelled chips (only if any were captured).
+function ParamRow({ params, finish }: { params: any; finish?: any }) {
+  const chips: [string, string][] = [];
+  if (params?.temperature != null) chips.push(["temp", String(params.temperature)]);
+  if (params?.top_p != null) chips.push(["top_p", String(params.top_p)]);
+  if (params?.max_tokens != null) chips.push(["max_tokens", String(params.max_tokens)]);
+  if (finish != null) chips.push(["finish", String(finish)]);
+  if (!chips.length) return null;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div className="muted" style={fieldLabel}>Parameters</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {chips.map(([k, v]) => (
+          <span key={k} style={{ fontSize: 11.5, fontFamily: "var(--font-mono)", padding: "3px 9px",
+            borderRadius: 6, background: "var(--bg-2)", border: "1px solid var(--border)" }}>
+            <span className="muted">{k}</span> {v}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ErrorBlock({ error }: { error?: string }) {

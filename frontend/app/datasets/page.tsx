@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, Dataset, DatasetDetail, Experiment } from "@/lib/api";
+import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 
 export default function DatasetsPage() {
@@ -56,8 +57,10 @@ export default function DatasetsPage() {
           </div>
 
           <div style={{ ...panel, minHeight: 220 }}>
-            {!detail ? (
+            {sel == null ? (
               <div className="muted" style={{ fontSize: 13 }}>Select a dataset.</div>
+            ) : !detail ? (
+              <><Skeleton w="35%" h={18} /><Skeleton w="100%" h={120} mt={16} r={10} /><Skeleton w="80%" mt={12} /><SkeletonStyles /></>
             ) : (
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>

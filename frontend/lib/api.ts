@@ -122,7 +122,7 @@ export const api = {
   addFeedback: (traceId: string, body: { name: string; score?: number | null; value?: string; comment?: string }) =>
     j<Feedback>(`/api/traces/${encodeURIComponent(traceId)}/feedback`, { method: "POST", body: JSON.stringify(body) }),
   // mint a shareable link token for a trace
-  shareTrace: (traceId: string) => j<{ token: string; trace_id: string }>(`/api/traces/${encodeURIComponent(traceId)}/share`, { method: "POST" }),
+  shareTrace: (traceId: string) => j<{ token: string; trace_id: string; expires_in_days: number }>(`/api/traces/${encodeURIComponent(traceId)}/share`, { method: "POST" }),
   // dashboard metrics
   metrics: (window_hours = 24) => j<Metrics>(`/api/metrics?window_hours=${window_hours}`),
   // datasets

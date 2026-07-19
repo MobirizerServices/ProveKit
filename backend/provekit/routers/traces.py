@@ -221,7 +221,8 @@ def share_trace(trace_id: str, db: Session = Depends(get_db),
     at /shared/{token} (backed by GET /v1/share/{token}) without an account."""
     if not db.query(Run.id).filter(Run.workspace_id == ws.id, Run.trace_id == trace_id).first():
         raise HTTPException(404, "Trace not found")
-    return {"token": share.make_share_token(ws.id, trace_id), "trace_id": trace_id}
+    return {"token": share.make_share_token(ws.id, trace_id), "trace_id": trace_id,
+            "expires_in_days": share.DEFAULT_TTL_DAYS}
 
 
 @router.get("/share/{token}")

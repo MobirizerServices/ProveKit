@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Metrics } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import AreaChart from "@/components/AreaChart";
+import { CardGridSkeleton, Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 
 const WINDOWS = [
@@ -38,7 +39,11 @@ export default function DashboardPage() {
         </div>
 
         {!m ? (
-          <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
+          <>
+            <CardGridSkeleton n={6} />
+            <div style={{ ...panel, marginTop: 20 }}><Skeleton w="30%" h={10} /><Skeleton h={170} mt={14} r={10} /></div>
+            <SkeletonStyles />
+          </>
         ) : (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>

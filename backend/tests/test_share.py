@@ -1,8 +1,9 @@
 """Shareable trace links: mint a signed token (authed), read it publicly (no login),
-reject a tampered or bogus token."""
+reject a tampered or bogus token, and enforce expiry."""
 from fastapi.testclient import TestClient
 
 from provekit.main import app
+from provekit.services import share
 
 
 def _span(trace):
@@ -39,3 +40,19 @@ def test_tampered_or_bogus_token_is_404():
     assert c.get(f"/v1/share/{token}x").status_code == 404      # tampered signature
     assert c.get("/v1/share/not.a.token").status_code == 404    # garbage
     assert c.get("/v1/share/nodothere").status_code == 404      # no separator → parse error
+
+
+def test_token_expiry(monkeypatch):
+    import time as _t
+
+    good = share.make_share_token(1, "t-ok", ttl_days=30)
+    assert share.verify_share_token(good) == (1, "t-ok")
+
+    # jump 31 days into the future → the 30-day token is now expired
+    now = _t.time()
+    monkeypatch.setattr(share.time, "time", lambda: now + 31 * 86400)
+    assert share.verify_share_token(good) is None
+
+    # a perpetual token (ttl_days=0) survives the time jump
+    perpetual = share.make_share_token(2, "t-forever", ttl_days=0)
+    assert share.verify_share_token(perpetual) == (2, "t-forever")

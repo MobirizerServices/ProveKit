@@ -1,9 +1,10 @@
 "use client";
 
-import { Background, Controls, Handle, Position, ReactFlow } from "@xyflow/react";
+import { Background, Controls, Handle, MiniMap, Position, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMemo } from "react";
 import { TraceSpan } from "@/lib/api";
+import { estimateCost, fmtCost } from "@/lib/cost";
 
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
@@ -22,6 +23,8 @@ function SpanNode({ data }: { data: { span: TraceSpan; active: boolean } }) {
   const s = data.span;
   const color = s.status === "failed" ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)");
   const tok = tokens(s);
+  const cost = fmtCost(estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens));
+  const nEvents = Array.isArray(s.result?.meta?.events) ? s.result!.meta!.events.length : 0;
   return (
     <div style={{
       minWidth: 176, maxWidth: 220, padding: "9px 11px", borderRadius: 10,
@@ -39,8 +42,11 @@ function SpanNode({ data }: { data: { span: TraceSpan; active: boolean } }) {
         </span>
       </div>
       <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
-        {s.duration_ms}ms{tok ? ` · ${tok}` : ""}{s.status === "failed" ? " · failed" : ""}
+        {s.duration_ms}ms{tok ? ` · ${tok}` : ""}{cost ? ` · ${cost}` : ""}{s.status === "failed" ? " · failed" : ""}
       </div>
+      {nEvents > 0 && (
+        <div style={{ fontSize: 9.5, marginTop: 3, color: "var(--muted)" }}>▸ {nEvents} log{nEvents === 1 ? "" : "s"}</div>
+      )}
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
   );
@@ -97,6 +103,8 @@ export default function TraceGraph({ spans, selected, onSelect }: {
       >
         <Background gap={18} color="var(--border)" />
         <Controls showInteractive={false} />
+        <MiniMap pannable zoomable nodeColor={(n) => TYPE_COLOR[(n.data as any)?.span?.type] || "var(--muted)"}
+          style={{ background: "var(--bg-2)" }} maskColor="rgba(0,0,0,0.5)" />
       </ReactFlow>
     </div>
   );

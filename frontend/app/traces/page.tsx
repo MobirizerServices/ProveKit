@@ -3,11 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, TraceSpan, TraceSummary } from "@/lib/api";
+import { estimateCost, fmtCost } from "@/lib/cost";
 import TopNav from "@/components/TopNav";
 import TraceGraph from "@/components/TraceGraph";
 
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
+};
+const LOG_COLOR: Record<string, string> = {
+  ERROR: "var(--red)", CRITICAL: "var(--red)", WARNING: "var(--amber)", INFO: "var(--blue)", DEBUG: "var(--muted)",
 };
 
 export default function TracesPage() {
@@ -15,6 +19,7 @@ export default function TracesPage() {
   const [sel, setSel] = useState<string | null>(null);
   const [spans, setSpans] = useState<TraceSpan[] | null>(null);
   const [origin, setOrigin] = useState("https://your-provekit-host");
+  const [q, setQ] = useState("");
 
   const load = () => api.traces().then(setTraces).catch(() => {});
   useEffect(() => {
@@ -47,8 +52,11 @@ export default function TracesPage() {
           <Onboarding origin={origin} />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
-            <div style={{ ...panel, padding: 0, maxHeight: "74vh", overflowY: "auto" }}>
-              {traces.map((t) => (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: "74vh" }}>
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter traces…"
+                style={{ background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 }} />
+              <div style={{ ...panel, padding: 0, overflowY: "auto" }}>
+              {traces.filter((t) => !q || (t.label || "").toLowerCase().includes(q.toLowerCase())).map((t) => (
                 <button key={t.trace_id || t.id} onClick={() => setSel(t.trace_id)} style={row(sel === t.trace_id)}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontWeight: 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -61,6 +69,7 @@ export default function TracesPage() {
                   </div>
                 </button>
               ))}
+              </div>
             </div>
 
             <div style={{ ...panel, minHeight: 220 }}>
@@ -128,6 +137,7 @@ function TraceDetail({ spans }: { spans: TraceSpan[] }) {
   const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
   const [picked, setPicked] = useState<string | null>(root?.span_id ?? null);
   const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
+  const totalCost = fmtCost(spans.reduce((n, s) => n + (estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens) || 0), 0) || null);
   const sel = spans.find((s) => s.span_id === picked) || root;
 
   return (
@@ -136,7 +146,7 @@ function TraceDetail({ spans }: { spans: TraceSpan[] }) {
         <div style={{ minWidth: 0 }}>
           <span style={{ fontSize: 14, fontWeight: 600 }}>{root?.label || "trace"}</span>
           <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
-            {spans.length} span{spans.length === 1 ? "" : "s"} · {root?.duration_ms ?? 0}ms{totalTok ? ` · ${totalTok} tokens` : ""}
+            {spans.length} span{spans.length === 1 ? "" : "s"} · {root?.duration_ms ?? 0}ms{totalTok ? ` · ${totalTok} tokens` : ""}{totalCost ? ` · ${totalCost}` : ""}
           </span>
         </div>
         <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2, flexShrink: 0 }}>
@@ -162,10 +172,27 @@ function TraceDetail({ spans }: { spans: TraceSpan[] }) {
                 <span style={{ color: sel.status === "failed" ? "var(--red)" : undefined }}>{sel.status}</span>
                 <span>{sel.duration_ms}ms</span>
                 {tokens(sel) && <span>{tokens(sel)}</span>}
+                {(() => {
+                  const c = fmtCost(estimateCost(sel.request?.model, sel.result?.meta?.usage?.input_tokens, sel.result?.meta?.usage?.output_tokens));
+                  return c ? <span title="estimated cost">{c}</span> : null;
+                })()}
               </div>
               <Field label="Input">{textOf(sel.request?.input)}</Field>
               <Field label="Output">{textOf(sel.result?.text)}</Field>
               {sel.error && <Field label="Error">{sel.error}</Field>}
+              {Array.isArray(sel.result?.meta?.events) && sel.result.meta.events.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div className="muted" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>Logs</div>
+                  <div style={{ ...pre, padding: 8 }}>
+                    {sel.result.meta.events.map((e: any, i: number) => (
+                      <div key={i} style={{ display: "flex", gap: 8 }}>
+                        <span style={{ color: LOG_COLOR[e.level] || "var(--muted)", fontWeight: 600, minWidth: 44 }}>{e.level}</span>
+                        <span>{e.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>

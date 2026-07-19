@@ -103,6 +103,13 @@ def map_span(span: dict) -> dict:
             "start_ns": str(start)}
     if tool:
         meta["tool"] = tool
+    events = []
+    for ev in span.get("events") or []:
+        ea = flatten_attrs(ev.get("attributes"))
+        events.append({"name": (ev.get("name") or "")[:500],
+                       "level": ea.get("log.level", "INFO"), "logger": ea.get("log.logger", "")})
+    if events:
+        meta["events"] = events
     return {
         "type": rtype,
         "label": label[:200],

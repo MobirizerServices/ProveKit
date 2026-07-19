@@ -46,6 +46,7 @@ it the current context, so everything beneath it nests automatically:
 | **LLM & framework calls** | automatically — see the auto-instrumented list below |
 | Any OTel-instrumented library | automatically — it nests under the current span |
 | Your own sub-steps (tools, retrieval, branches) | wrap them in `with pk.span("name"):` |
+| Your `logging.*` calls | captured as **events** on the active span (INFO+; transport noise filtered). Disable with `pk.configure(capture_logs=False)`. |
 | The decorated call | its input (args) and output (return), timing, and status |
 
 Every span becomes a node in the trace, classified **agent · llm · tool · step**, with the

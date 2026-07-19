@@ -97,6 +97,13 @@ def _span_to_otlp(span) -> dict:
     msg = getattr(span.status, "description", None)
     if code == 2 and msg:
         out["status"]["message"] = msg
+    events = span.events or []
+    if events:
+        out["events"] = [{
+            "timeUnixNano": str(getattr(e, "timestamp", 0) or 0),
+            "name": e.name,
+            "attributes": [{"key": str(k), "value": _attr(v)} for k, v in (e.attributes or {}).items()],
+        } for e in events]
     return out
 
 
@@ -140,12 +147,46 @@ def _auto_instrument(provider) -> None:
             pass
 
 
+class _SpanLogHandler(logging.Handler):
+    """Attach `logging` records to the active span as events, so your app's own logs show up
+    inline in the trace. Only records emitted while a ProveKit span is recording are captured
+    (logs outside a traced flow are ignored)."""
+    def emit(self, record):
+        try:
+            from opentelemetry import trace as _otel
+            span = _otel.get_current_span()
+            if span is None or not span.is_recording():
+                return
+            span.add_event(record.getMessage()[:1000],
+                           {"log.level": record.levelname, "log.logger": record.name})
+        except Exception:
+            pass
+
+
+_log_handler = None
+
+
+# Transport/plumbing loggers whose records are noise in an agent trace (and our own).
+_NOISY_LOGGERS = ("provekit", "httpx", "httpcore", "urllib3", "openai._base_client",
+                  "anthropic._base_client", "opentelemetry")
+
+
+def _install_log_handler(level: int) -> None:
+    global _log_handler
+    if _log_handler is not None:
+        return
+    _log_handler = _SpanLogHandler(level=level)
+    _log_handler.addFilter(lambda r: not r.name.startswith(_NOISY_LOGGERS))
+    logging.getLogger().addHandler(_log_handler)
+
+
 def configure(api_key: str | None = None, endpoint: str | None = None,
-              *, batch: bool = True) -> bool:
+              *, batch: bool = True, capture_logs: bool = True, log_level: int = logging.INFO) -> bool:
     """Wire up the tracer. Returns True if tracing is active, False if it's a no-op.
 
     Called automatically on first use; call it explicitly only to pass values in code
-    instead of the environment. Idempotent."""
+    instead of the environment. Idempotent. `capture_logs` attaches a handler that records
+    your `logging` calls (at `log_level`+) as events on the active span."""
     global _tracer, _configured
     with _lock:
         if _configured:
@@ -166,6 +207,8 @@ def configure(api_key: str | None = None, endpoint: str | None = None,
             provider.add_span_processor(proc)
             _tracer = provider.get_tracer("provekit")
             _auto_instrument(provider)   # LLM calls beneath the entrypoint capture themselves
+            if capture_logs:
+                _install_log_handler(log_level)   # your logging.* calls become trace events
             return True
         except Exception as exc:  # OTel missing or misconfigured → stay a no-op, never crash
             log.debug("provekit tracing could not start: %s", exc)

@@ -162,6 +162,28 @@ def test_nested_spans_form_a_parent_child_tree(monkeypatch):
     assert by_name["retrieve"]["parentSpanId"] == by_name["agent"]["spanId"]  # nested under it
 
 
+def test_app_logs_become_span_events(monkeypatch):
+    import logging
+    _reset()
+    bodies = []
+    monkeypatch.setattr(httpx, "post",
+                        lambda url, json=None, headers=None, timeout=None, follow_redirects=None:
+                        bodies.append(json))
+    logging.getLogger("myapp").setLevel(logging.INFO)
+    pk.configure(api_key="pk_x", endpoint="http://p.test", batch=False, capture_logs=True)
+
+    @pk.trace(name="agent")
+    def run():
+        logging.getLogger("myapp").info("retrieved 5 docs")
+        return "ok"
+
+    run()
+    runs = [r for b in bodies for r in otel.ingest(b)]
+    agent = next(r for r in runs if r["type"] == "agent")
+    events = agent["result"]["meta"].get("events", [])
+    assert any("retrieved 5 docs" in e["name"] and e["level"] == "INFO" for e in events)
+
+
 def test_configure_stays_no_op_if_otel_missing(monkeypatch):
     _reset()
     import builtins

@@ -22,7 +22,7 @@ function tokens(s: TraceSpan): string | null {
 
 interface NodeData {
   span: TraceSpan; active: boolean; childCount?: number; collapsed?: boolean;
-  onToggle?: (id: string) => void;
+  onToggle?: (id: string) => void; dim?: boolean; slow?: boolean;
 }
 
 function SpanNode({ data }: { data: NodeData }) {
@@ -37,6 +37,7 @@ function SpanNode({ data }: { data: NodeData }) {
       minWidth: 176, maxWidth: 220, padding: "9px 11px", borderRadius: 10,
       background: "var(--panel)", border: `1px solid ${color}`,
       boxShadow: data.active ? `0 0 0 2px ${color}` : "var(--sh-1)", cursor: "pointer",
+      opacity: data.dim ? 0.28 : 1, transition: "opacity .15s",
     }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
@@ -56,6 +57,7 @@ function SpanNode({ data }: { data: NodeData }) {
             {data.collapsed ? "+" : "−"}
           </button>
         )}
+        {data.slow && <span title="among the slowest spans" style={{ flexShrink: 0, fontSize: 11, color: "var(--amber)" }}>⏱</span>}
         <span aria-label={s.status} style={{ flexShrink: 0, fontSize: 12, fontWeight: 700,
           color: s.status === "failed" ? "var(--red)" : "var(--green)" }}>
           {s.status === "failed" ? "✕" : "✓"}
@@ -82,9 +84,17 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [hideSteps, setHideSteps] = useState(false);
+  const [search, setSearch] = useState("");
   const toggle = useCallback((id: string) => {
     setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }, []);
+
+  // The trace's p90 duration → mark spans at/above it as "slow".
+  const slowThreshold = useMemo(() => {
+    const ds = spans.map((s) => s.duration_ms || 0).sort((a, b) => a - b);
+    if (ds.length < 3) return Infinity;
+    return ds[Math.floor(ds.length * 0.9)] || Infinity;
+  }, [spans]);
 
   const { nodes, edges } = useMemo(() => {
     const ids = new Set(spans.map((s) => s.span_id));
@@ -135,11 +145,17 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
     for (let cur = selected; cur && parentOf[cur]; cur = parentOf[cur]!) onPath.add(`${parentOf[cur]}->${cur}`);
 
     return {
-      nodes: visible.map((s) => ({
-        id: s.span_id, type: "span", position: pos[s.span_id] || { x: 0, y: 0 },
-        data: { span: s, active: selected === s.span_id, childCount: descCount[s.span_id] || 0,
-          collapsed: collapsed.has(s.span_id), onToggle: toggle },
-      })),
+      nodes: visible.map((s) => {
+        const q = search.trim().toLowerCase();
+        const matched = !q || (s.label || "").toLowerCase().includes(q) || (s.request?.model || "").toLowerCase().includes(q) || s.type.includes(q);
+        return {
+          id: s.span_id, type: "span", position: pos[s.span_id] || { x: 0, y: 0 },
+          data: { span: s, active: selected === s.span_id, childCount: descCount[s.span_id] || 0,
+            collapsed: collapsed.has(s.span_id), onToggle: toggle,
+            slow: (s.duration_ms || 0) >= slowThreshold && (s.duration_ms || 0) > 0,
+            dim: !!q && !matched },
+        };
+      }),
       edges: visible.filter((s) => s.parent_span_id && ids.has(s.parent_span_id) && !hidden.has(s.parent_span_id)).map((s) => {
         const eid = `${s.parent_span_id}->${s.span_id}`;
         const failed = s.status === "failed";
@@ -155,7 +171,7 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
         };
       }),
     };
-  }, [spans, selected, collapsed, hideSteps, toggle]);
+  }, [spans, selected, collapsed, hideSteps, toggle, search, slowThreshold]);
 
   const hasSteps = useMemo(() => spans.some((s) => s.type === "step"), [spans]);
 
@@ -170,7 +186,10 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
       ? { height: "100%", width: "100%", position: "relative" }
       : { height: 480, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", position: "relative" }}>
       {/* floating declutter toolbar */}
-      <div style={{ position: "absolute", top: 8, left: 8, zIndex: 5, display: "flex", gap: 6 }}>
+      <div style={{ position: "absolute", top: 8, left: 8, zIndex: 5, display: "flex", gap: 6, alignItems: "center" }}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search nodes…"
+          style={{ width: 140, fontSize: 11.5, padding: "4px 9px", borderRadius: 6, background: "var(--panel)",
+            color: "var(--text)", border: `1px solid ${search ? "var(--accent)" : "var(--border-strong)"}` }} />
         {collapsed.size > 0
           ? <button style={tbBtn()} onClick={() => setCollapsed(new Set())}>Expand all</button>
           : parents.length > 1 && <button style={tbBtn()} onClick={() => setCollapsed(new Set(parents))}>Collapse all</button>}

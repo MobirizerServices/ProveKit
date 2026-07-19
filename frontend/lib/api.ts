@@ -38,6 +38,11 @@ export interface Member { user_id: number; email: string; name: string; role: st
 export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
 export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; project_count: number; created_at: string; }
 export interface AdminProject { id: number; name: string; owner: string; member_count: number; span_count: number; retention: number; redact_pii: boolean; created_at: string; }
+export interface Alert {
+  id: number; name: string; metric: string; comparator: string; threshold: number;
+  window_hours: number; email: string; enabled: boolean; last_triggered_at: string | null; created_at: string;
+}
+export interface AlertIn { name?: string; metric: string; comparator?: string; threshold?: number; window_hours?: number; email?: string; enabled?: boolean; }
 
 export interface Metrics {
   window_hours: number; trace_count: number; error_count: number; error_rate: number;
@@ -125,6 +130,12 @@ export const api = {
   shareTrace: (traceId: string) => j<{ token: string; trace_id: string; expires_in_days: number }>(`/api/traces/${encodeURIComponent(traceId)}/share`, { method: "POST" }),
   // dashboard metrics
   metrics: (window_hours = 24) => j<Metrics>(`/api/metrics?window_hours=${window_hours}`),
+  // alerts
+  alerts: () => j<Alert[]>("/api/alerts"),
+  createAlert: (a: AlertIn) => j<Alert>("/api/alerts", { method: "POST", body: JSON.stringify(a) }),
+  toggleAlert: (id: number, enabled: boolean) => j<Alert>(`/api/alerts/${id}`, { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  deleteAlert: (id: number) => j(`/api/alerts/${id}`, { method: "DELETE" }),
+  checkAlerts: () => j<{ fired: any[] }>("/api/alerts/check", { method: "POST" }),
   // datasets
   datasets: () => j<Dataset[]>("/api/datasets"),
   dataset: (id: number) => j<DatasetDetail>(`/api/datasets/${id}`),

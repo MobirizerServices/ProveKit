@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Metrics } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import AreaChart from "@/components/AreaChart";
+import AlertsPanel from "@/components/AlertsPanel";
 import { CardGridSkeleton, Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 
@@ -94,6 +95,8 @@ export default function DashboardPage() {
                 </table>
               )}
             </div>
+
+            <AlertsPanel />
           </>
         )}
       </main>

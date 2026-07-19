@@ -107,8 +107,28 @@ The one-line setup. Configures the tracer and turns on auto-instrumentation. Sam
 Decorate an entrypoint (or any function). `name` is the span label (defaults to the
 function name). Optional — use it only to group one run under a single named root.
 
+### `@pk.trace(..., session_id="conv-123")`
+Pass `session_id` to group multi-turn runs (a conversation/thread) so the portal shows
+them together.
+
 ### `with pk.span(name, **attributes)`
 Capture a sub-step as a child span. Keyword attributes are attached to the span.
+
+### `pk.score(name, *, score=None, value=None, comment=None, trace_id=None)`
+Attach a feedback score to a trace from code — a heuristic, a guardrail, an LLM-judge:
+
+```python
+@pk.trace(name="support-agent")
+def run_agent(q):
+    answer = ...
+    pk.score("relevance", score=0.9)              # numeric
+    pk.score("thumbs", value="up", comment="ok")  # categorical + note
+    return answer
+```
+
+Uses the current trace when `trace_id` is omitted. Fail-open (returns `False` if tracing
+is off or there's no active trace). Humans can also score a run from the portal, and
+external evaluators can `POST` to `/v1/traces/{trace_id}/feedback` with the project key.
 
 ### `pk.configure(api_key=None, endpoint=None, *, batch=True)`
 Wire up tracing explicitly instead of via the environment. Called automatically on first

@@ -20,8 +20,22 @@ a read-side debug channel so assistants can reason over your traces.
   Claude Desktop / Cursor / any MCP client, authenticated by your project key. Tools:
   `provekit_list_traces`, `provekit_list_failures`, `provekit_get_trace`. See [docs/MCP.md](docs/MCP.md).
 - **Key-authed read API** — `GET /v1/traces` and `GET /v1/traces/{id}` (Bearer project key),
-  with a `status=failed` filter. Same data as the cookie-authed portal view, a different door;
-  script it or wire it into CI without MCP.
+  with `status=failed` and `window_hours=N` filters. Same data as the cookie-authed portal
+  view, a different door; script it or wire it into CI without MCP.
+
+### Evaluation & collaboration
+- **Feedback / scoring** — `pk.score(name, score=/value=/comment=)` attaches a score to the
+  current trace; humans score a run in the portal (👍/👎 + comment); external evaluators
+  `POST /v1/traces/{id}/feedback` by key. Sources are tracked (human · sdk · eval).
+- **Sessions** — `@pk.trace(session_id=…)` (or a `session.id` span attribute) groups multi-turn
+  runs; the portal shows a session badge on the list and the trace.
+- **Shareable trace links** — mint a signed, read-only link (`/shared/{token}`) anyone can
+  view without an account; backed by a public `GET /v1/share/{token}`.
+
+### Portal
+- **Chat-transcript view** — LLM input/output render as role-labelled messages, not raw JSON.
+- **Deep span metadata** — temperature, max_tokens, and finish_reason shown on LLM spans.
+- **Trace-list filters** — "Failures only" toggle and a time-window selector.
 
 ## 0.2.0 — Drop-in agent tracing
 

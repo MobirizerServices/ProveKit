@@ -110,17 +110,28 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
 @runs_router.get("/traces")
 def list_traces(limit: int = 50, db: Session = Depends(get_db),
                 ws: Workspace = Depends(current_workspace)):
-    """One row per trace: its root span (the decorated entrypoint), with a span count."""
+    """One row per trace: its root span (the decorated entrypoint), with a span count and
+    total token usage (so the list is scannable at a glance)."""
     limit = max(1, min(limit, 200))
     roots = (db.query(Run)
              .filter(Run.workspace_id == ws.id, Run.parent_span_id == "")
              .order_by(Run.id.desc()).limit(limit).all())
-    counts = dict(db.query(Run.trace_id, func.count(Run.id))
-                  .filter(Run.workspace_id == ws.id)
-                  .group_by(Run.trace_id).all())
+    trace_ids = [r.trace_id for r in roots if r.trace_id]
+    counts: dict = {}
+    tokens: dict = {}
+    if trace_ids:
+        for tid, cnt in (db.query(Run.trace_id, func.count(Run.id))
+                         .filter(Run.workspace_id == ws.id, Run.trace_id.in_(trace_ids))
+                         .group_by(Run.trace_id).all()):
+            counts[tid] = cnt
+        for tid, result in (db.query(Run.trace_id, Run.result)
+                            .filter(Run.workspace_id == ws.id, Run.trace_id.in_(trace_ids)).all()):
+            u = (result or {}).get("meta", {}).get("usage", {}) if isinstance(result, dict) else {}
+            tokens[tid] = tokens.get(tid, 0) + (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
     return [{"id": r.id, "trace_id": r.trace_id, "label": r.label, "type": r.type,
              "status": r.status, "duration_ms": r.duration_ms,
              "span_count": counts.get(r.trace_id, 1) if r.trace_id else 1,
+             "tokens": tokens.get(r.trace_id, 0),
              "created_at": iso_utc(r.created_at)} for r in roots]
 
 

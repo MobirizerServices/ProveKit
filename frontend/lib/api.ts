@@ -18,7 +18,7 @@ export interface RunDetail {
 // One trace = a decorated run and everything nested beneath it.
 export interface TraceSummary {
   id: number; trace_id: string; label: string; type: string; status: string;
-  duration_ms: number; span_count: number; created_at: string;
+  duration_ms: number; span_count: number; tokens?: number; created_at: string;
 }
 export interface TraceSpan extends RunDetail {
   span_id: string; parent_span_id: string;

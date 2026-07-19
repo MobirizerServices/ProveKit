@@ -65,7 +65,7 @@ export default function TracesPage() {
                     <span style={{ ...dot, background: t.status === "failed" ? "var(--red)" : "var(--green)" }} />
                   </div>
                   <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-                    {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms · {fmt(t.created_at)}
+                    {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {fmt(t.created_at)}
                   </div>
                 </button>
               ))}

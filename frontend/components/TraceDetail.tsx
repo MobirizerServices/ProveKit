@@ -305,12 +305,26 @@ function ErrorBlock({ error }: { error?: string }) {
   );
 }
 
+const CLAMP = 600;   // chars before we collapse a long payload behind "show more"
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const empty = !children || (typeof children === "string" && !children.trim());
+  const [open, setOpen] = useState(false);
+  const str = typeof children === "string" ? children : null;
+  const empty = !children || (str != null && !str.trim());
+  const long = str != null && str.length > CLAMP;
+  const shown = long && !open ? str!.slice(0, CLAMP) + "…" : children;
   return (
     <div style={{ marginBottom: 8 }}>
-      <div className="muted" style={fieldLabel}>{label}</div>
-      <pre style={pre}>{empty ? <span className="muted">—</span> : children}</pre>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="muted" style={fieldLabel}>{label}</div>
+        {long && (
+          <button onClick={() => setOpen((o) => !o)} style={{ background: "none", border: "none",
+            color: "var(--accent)", fontSize: 11, cursor: "pointer", padding: 0 }}>
+            {open ? "Show less" : `Show more (${str!.length.toLocaleString()} chars)`}
+          </button>
+        )}
+      </div>
+      <pre style={pre}>{empty ? <span className="muted">—</span> : shown}</pre>
     </div>
   );
 }

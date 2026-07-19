@@ -3,8 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, TraceSpan, TraceSummary } from "@/lib/api";
+import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 import TraceDetail from "@/components/TraceDetail";
+
+function ListSkeleton() {
+  return <><Skeleton w="65%" h={12} /><Skeleton w="85%" h={10} mt={5} /><SkeletonStyles /></>;
+}
 
 // "2m ago" style relative time, with a couple of coarser buckets. Absolute goes on the title.
 function relTime(iso?: string): string {
@@ -30,10 +35,12 @@ export default function TracesPage() {
   const [failuresOnly, setFailuresOnly] = useState(false);
   const [windowHours, setWindowHours] = useState(0);
   const [model, setModel] = useState("");
+  const [sort, setSort] = useState<"recent" | "slowest" | "tokens">("recent");
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
     api.traces({ status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined })
-      .then(setTraces).catch(() => {});
+      .then((t) => { setTraces(t); setLoaded(true); }).catch(() => setLoaded(true));
   }, [failuresOnly, windowHours]);
 
   useEffect(() => {
@@ -52,9 +59,14 @@ export default function TracesPage() {
 
   const fmt = (s?: string) => (s ? new Date(s).toLocaleString() : "");
   const modelOptions = Array.from(new Set(traces.map((t) => t.model).filter(Boolean))) as string[];
-  const shown = traces.filter((t) =>
-    (!q || (t.label || "").toLowerCase().includes(q.toLowerCase())) &&
-    (!model || t.model === model));
+  const shown = traces
+    .filter((t) =>
+      (!q || (t.label || "").toLowerCase().includes(q.toLowerCase())) &&
+      (!model || t.model === model))
+    .sort((a, b) =>
+      sort === "slowest" ? (b.duration_ms || 0) - (a.duration_ms || 0)
+      : sort === "tokens" ? (b.tokens || 0) - (a.tokens || 0)
+      : b.id - a.id);   // recent (default) — the API already returns newest-first by id
 
   return (
     <>
@@ -81,15 +93,31 @@ export default function TracesPage() {
                   {WINDOWS.map((w) => <option key={w.hours} value={w.hours}>{w.label}</option>)}
                 </select>
               </div>
-              {modelOptions.length > 1 && (
-                <select value={model} onChange={(e) => setModel(e.target.value)}
-                  style={{ ...chip(!!model), appearance: "none" }} title="Filter by model">
-                  <option value="">All models</option>
-                  {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+              <div style={{ display: "flex", gap: 6 }}>
+                {modelOptions.length > 1 && (
+                  <select value={model} onChange={(e) => setModel(e.target.value)}
+                    style={{ ...chip(!!model), flex: 1, appearance: "none" }} title="Filter by model">
+                    <option value="">All models</option>
+                    {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                )}
+                <select value={sort} onChange={(e) => setSort(e.target.value as any)}
+                  style={{ ...chip(sort !== "recent"), flex: 1, appearance: "none" }} title="Sort">
+                  <option value="recent">↓ Recent</option>
+                  <option value="slowest">↓ Slowest</option>
+                  <option value="tokens">↓ Most tokens</option>
                 </select>
-              )}
+              </div>
               <div style={{ ...panel, padding: 0, overflowY: "auto" }}>
-              {shown.length === 0 ? (
+              {!loaded ? (
+                <div style={{ padding: 12 }}>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} style={{ padding: "8px 2px" }}>
+                      <ListSkeleton />
+                    </div>
+                  ))}
+                </div>
+              ) : shown.length === 0 ? (
                 <div className="muted" style={{ padding: 14, fontSize: 12.5 }}>No traces match.</div>
               ) : shown.map((t) => (
                 <button key={t.trace_id || t.id} onClick={() => setSel(t.trace_id)} style={row(sel === t.trace_id)}

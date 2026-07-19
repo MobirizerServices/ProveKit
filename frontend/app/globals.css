@@ -138,6 +138,12 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .md-pre-wrap:hover .md-copy { opacity: 1; }
 .md-copy:hover { color: var(--text); }
 
+/* Shared primary button used across landing, blog, community, 404 — compound selector so it
+   beats the base `.btn` background regardless of source order. */
+a.btn, a.lp-btn-primary { text-decoration: none; }
+.btn.lp-btn-primary, .lp-btn-primary { background: var(--accent); color: #08120b; font-weight: 600; border-color: transparent; }
+.btn.lp-btn-primary:hover, .lp-btn-primary:hover { filter: brightness(1.06); background: var(--accent); }
+
 /* accessibility: skip-to-content link, visible on focus */
 .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--panel); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 14px; font-size: 13px; }
 .skip-link:focus { left: 12px; }

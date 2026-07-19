@@ -290,7 +290,7 @@ function FlowVisual() {
         ))}
         {Object.entries(N).map(([id, n]) => (
           <g key={id}>
-            <title>{n.t} · {n.l}</title>
+            <title>{`${n.t} · ${n.l}`}</title>
             <rect x={n.x} y={n.y} width={W} height={H} rx={10} className={`lp-fnode ${id === "f" ? "fail" : ""}`}
               style={{ stroke: id === "f" ? "var(--red)" : TYPE_C[n.t] }} />
             <text x={n.x + 12} y={n.y + 26} className="lp-ftext">

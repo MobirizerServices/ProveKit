@@ -2,16 +2,16 @@
 
 # ◇ ProveKit
 
-### One decorator. The whole agent flow.
+### See exactly what your AI agent did.
 
-**Drop-in tracing for any AI agent.** Add one decorator at your entrypoint and review every
-run your agent makes — the model calls, the tools, the nested steps — as it actually ran.
-No connections to configure, no framework adapter to pick, no OpenTelemetry to learn.
+**Drop-in tracing, evaluation, and observability for any AI agent.** Add one import and review
+every run — the model calls, tools, retries, and failures — as a nested flow. Then evaluate it,
+watch it on a dashboard, and gate your CI on it. Open source and self-hostable.
 
 [![CI](https://github.com/MobirizerServices/ProveKit/actions/workflows/ci.yml/badge.svg)](https://github.com/MobirizerServices/ProveKit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Self-hosting](docs/DEPLOY.md)
+**🌐 Live:** [provekit.online](https://provekit.online) · [Quickstart](#quickstart) · [How it works](#how-it-works) · [Self-hosting](docs/DEPLOY_PROVEKIT_ONLINE.md)
 
 <img src="docs/launch/demo.gif" alt="ProveKit: one decorator captures the whole agent flow — a nested waterfall of the entrypoint, an auto-instrumented OpenAI call with tokens, and tool/step spans" width="820">
 
@@ -21,15 +21,19 @@ No connections to configure, no framework adapter to pick, no OpenTelemetry to l
 
 Most tracing tools make you stand up a collector, wire an exporter, or learn their model
 before you see a single span. ProveKit's whole thesis is **time-to-first-trace**: create a
-project, drop a key in `.env`, `pip install`, add one `@pk.trace` — and the full nested flow
-is in your portal. That's the entire product. It's OpenTelemetry underneath (so your data is
-portable and nothing is locked in), but you never have to know that.
+project, drop a key in `.env`, `pip install`, add **one import** — and the full nested flow
+is in your portal. It's OpenTelemetry underneath (so your data is portable and nothing is
+locked in), but you never have to know that.
+
+**More than tracing:** evaluation (build datasets from real traces, score with `pk.evaluate()`,
+gate CI on regressions), dashboards + alerts, multi-project with members, and a debug-over-MCP
+channel. All open source, all self-hostable.
 
 ## Quickstart
 
 **1. Create a project** and copy its key from the portal (Project keys).
 
-**2. Add the decorator:**
+**2. Add the SDK — one line:**
 
 ```bash
 pip install "provekit[trace]"
@@ -38,8 +42,11 @@ pip install "provekit[trace]"
 ```python
 # .env
 #   PROVEKIT_API_KEY=pk_...
-#   PROVEKIT_ENDPOINT=https://your-provekit-host
+#   PROVEKIT_ENDPOINT=https://provekit.online   # or your self-hosted URL
 
+import provekit.auto        # one import — captures everything below it
+
+# optional: group a run under a named root
 import provekit.trace as pk
 
 @pk.trace(name="support-agent")

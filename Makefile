@@ -7,8 +7,8 @@ PYTHON := $(shell command -v python3.13 || command -v python3.12 || command -v p
 
 help:
 	@echo "make setup     - create backend venv + install deps, install frontend deps"
-	@echo "make backend   - run the API on :8100"
-	@echo "make frontend  - run the web app on :3001"
+	@echo "make backend   - run the API on :8000"
+	@echo "make frontend  - run the web app on :3000"
 	@echo "make test      - backend pytest + frontend typecheck"
 	@echo "make lint      - ruff check on the backend"
 	@echo "make build     - frontend production build"
@@ -23,7 +23,7 @@ setup:
 	@echo "\n✓ Setup complete. Run 'make backend' and 'make frontend' in two terminals."
 
 backend:
-	cd backend && ./venv/bin/python -m uvicorn provekit.main:app --port 8100 --reload
+	cd backend && ./venv/bin/python -m uvicorn provekit.main:app --port 8000 --reload
 
 frontend:
 	cd frontend && npm run dev

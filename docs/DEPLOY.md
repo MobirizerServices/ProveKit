@@ -3,22 +3,27 @@
 Two ways to run it: **local** (single user, zero config) and **hosted** (multi-user,
 behind TLS).
 
+> **Deploying to production?** The live site (provekit.online) runs the dedicated-VPS path —
+> follow **[DEPLOY_PROVEKIT_ONLINE.md](DEPLOY_PROVEKIT_ONLINE.md)** for the exact runbook, plus
+> `deploy/vps-deploy.sh` (one-shot), `deploy/backup.sh` (daily backups), and `deploy/harden.sh`
+> (security). The sections below are the general reference.
+
 ## Local (single user)
 
 ```bash
 # backend — SQLite, no login
 cd backend && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
-./venv/bin/uvicorn provekit.main:app --port 8100
+./venv/bin/uvicorn provekit.main:app --port 8000
 
 # frontend
-cd frontend && npm install && npm run dev   # http://localhost:3001
+cd frontend && npm install && npm run dev   # http://localhost:3000
 ```
 
 No `SECRET_KEY` needed — a key file is generated next to the SQLite db to sign sessions.
 `HOSTED` is off, so there's no login wall; you land in a default project.
 
-Point an agent at it: set `PROVEKIT_ENDPOINT=http://localhost:8100` and a project key, add
-`@pk.trace`, and runs show up under **Traces**.
+Point an agent at it: set `PROVEKIT_ENDPOINT=http://localhost:8000` and a project key, add
+`import provekit.auto`, and runs show up under **Traces**.
 
 ## Hosted on a VPS (multi-user, TLS) — step by step
 
@@ -78,9 +83,10 @@ users then set `PROVEKIT_ENDPOINT=https://$DOMAIN` and a project key, and add `@
   response header). Traced inputs/outputs are never logged by the server.
 - Scaling: add backend replicas behind Caddy for horizontal scale. Redis (in the stack)
   keeps rate-limit windows global across the workers.
-- **Backups:** the data lives in the `provekit-pg` volume — back it up. A simple nightly dump:
-  `docker compose -f compose.prod.yml exec -T db pg_dump -U provekit provekit | gzip > backup-$(date +%F).sql.gz`
-  (put it in a cron job; ship it off-box).
+- **Backups:** use `deploy/backup.sh` (daily `pg_dump` + gzip, 7-day retention) and install the
+  cron with `deploy/install-backups.sh`. Ship the dumps off-box for real durability.
+- **Hardening:** `deploy/harden.sh` applies security updates, enables unattended-upgrades,
+  installs fail2ban, and confirms the firewall.
 - Migrations run automatically on startup; to run manually:
   `docker compose -f compose.prod.yml exec backend alembic upgrade head`.
 - Tunables (env): `INGEST_RATE_PER_MIN` (default 600), `RUNS_RETENTION` (default 10000 spans

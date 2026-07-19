@@ -1,3 +1,5 @@
+> **Note — alternative topology, not the current setup.** provekit.online runs on a *dedicated* VPS via [DEPLOY_PROVEKIT_ONLINE.md](DEPLOY_PROVEKIT_ONLINE.md). Keep this only if you later co-host with another app on one box.
+
 # Co-hosting ProveKit on the CereBroZen Contabo VPS
 
 Run `provekit.online` on the **same VPS** that already serves `cerebrozen.in`. cere's Caddy

@@ -2,6 +2,20 @@
 
 All notable changes to ProveKit. This project is pre-1.0; expect breaking changes.
 
+## Unreleased — Live in production + portal polish
+
+- **Live at [provekit.online](https://provekit.online)** — deployed on a dedicated VPS with its
+  own Caddy (auto-HTTPS), Postgres, Redis; `HOSTED` login gate on; verified end-to-end (signup →
+  project → key → live trace → dashboard → admin).
+- **Ops:** daily automated DB backups (`deploy/backup.sh`), security hardening (`deploy/harden.sh`
+  — updates, unattended-upgrades, fail2ban, firewall), one-shot `deploy/vps-deploy.sh`. Standard
+  ports are now **3000 (frontend) / 8000 (backend)** to match common gateways.
+- **Portal polish (top-20 UI roadmap, all shipped):** real dashboard charts + 1h–90d ranges,
+  alerts management UI, sessions grouping, sortable/model-filtered trace list with status +
+  relative time, chat-transcript span view, LLM parameter chips, collapsible payloads, prominent
+  failed-span errors, node status glyphs, share-link expiry, loading skeletons, and the
+  `~$0.0000`/minimap bug fixes.
+
 ## 0.5.0 — Multiple projects, admin console, and a real landing page
 
 ### Projects (multi-tenant)

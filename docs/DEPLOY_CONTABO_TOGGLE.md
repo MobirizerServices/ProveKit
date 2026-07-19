@@ -1,3 +1,5 @@
+> **Note — alternative topology, not the current setup.** provekit.online runs on a *dedicated* VPS via [DEPLOY_PROVEKIT_ONLINE.md](DEPLOY_PROVEKIT_ONLINE.md). Keep this only if you later co-host with another app on one box.
+
 # One-at-a-time on the Contabo VPS (cere ⇄ ProveKit toggle)
 
 Run **one** app at a time on the VPS and switch on demand. Each app runs its own Caddy and

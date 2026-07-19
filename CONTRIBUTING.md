@@ -6,11 +6,11 @@ Requirements: Python 3.11+ (3.13 recommended), Node 20 (`.nvmrc`).
 
 ```bash
 make setup        # backend venv + deps, frontend deps
-make backend      # terminal 1 → API on http://localhost:8100
-make frontend     # terminal 2 → web app on http://localhost:3001
+make backend      # terminal 1 → API on http://localhost:8000
+make frontend     # terminal 2 → web app on http://localhost:3000
 ```
 
-Open http://localhost:3001. In local mode there's no login — you land in a default project.
+Open http://localhost:3000. In local mode there's no login — you land in a default project.
 To see traces, add `@pk.trace` to an agent (see the **Project keys** page for the snippet)
 and run it, or `POST` an OTLP payload to `/v1/traces`.
 

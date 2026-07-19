@@ -129,6 +129,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .md-code { font-family: var(--font-mono); font-size: 0.88em; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; }
 .md-pre { margin: 0 0 18px; padding: 16px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border-strong); overflow-x: auto; }
 .md-pre code { font-family: var(--font-mono); font-size: 12.8px; line-height: 1.6; white-space: pre; }
+.md-pre-wrap { position: relative; }
+.md-copy { position: absolute; top: 8px; right: 8px; font-size: 11.5px; padding: 4px 9px; border-radius: 6px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border-strong); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.md-pre-wrap:hover .md-copy { opacity: 1; }
+.md-copy:hover { color: var(--text); }
+
+/* accessibility: skip-to-content link, visible on focus */
+.skip-link { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--panel); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 14px; font-size: 13px; }
+.skip-link:focus { left: 12px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
 /* ---------- Simple page (Prompts) ---------- */
 .page { height: calc(100vh - 48px); overflow-y: auto; }

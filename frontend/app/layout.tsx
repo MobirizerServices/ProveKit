@@ -64,7 +64,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-      <body>{children}<Analytics /></body>
+      <body>
+        <a href="#main" className="skip-link">Skip to content</a>
+        <div id="main">{children}</div>
+        <Analytics />
+      </body>
     </html>
   );
 }

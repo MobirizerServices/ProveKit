@@ -1,5 +1,6 @@
 import Link from "next/link";
 import React from "react";
+import CodeBlock from "@/components/CodeBlock";
 
 // A tiny, dependency-free Markdown renderer for our own blog content (a known, trusted
 // subset): ## / ### headings, fenced ``` code blocks, - lists, > quotes, paragraphs, and
@@ -38,7 +39,7 @@ export default function Markdown({ source }: { source: string }) {
       i++;
       while (i < lines.length && !lines[i].startsWith("```")) { buf.push(lines[i]); i++; }
       i++; // closing fence
-      out.push(<pre key={k++} className="md-pre" data-lang={lang}><code>{buf.join("\n")}</code></pre>);
+      out.push(<CodeBlock key={k++} code={buf.join("\n")} lang={lang} />);
       continue;
     }
     if (line.startsWith("### ")) { out.push(<h3 key={k++} className="md-h3">{inline(line.slice(4), `h3${k}`)}</h3>); i++; continue; }

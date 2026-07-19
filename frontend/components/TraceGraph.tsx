@@ -209,12 +209,13 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
         <Controls showZoom showFitView showInteractive={false} position="bottom-left" />
-        {/* The minimap only earns its space on larger graphs — below ~8 nodes it's a dead
-            black box, so hide it. */}
-        {nodes.length >= 8 && (
+        {/* Minimap only for big graphs (small ones fit on screen). A near-transparent mask so
+            the coloured node dots stay visible instead of a dark void. */}
+        {nodes.length >= 18 && (
           <MiniMap pannable zoomable nodeColor={(n) => MINI_COLOR[(n.data as any)?.span?.type] || "#97979f"}
-            nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "#f0736f" : "transparent")}
-            nodeBorderRadius={3} style={{ background: "#16161a" }} maskColor="rgba(0,0,0,0.45)" />
+            nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "#f0736f" : "#2a2a33")}
+            nodeStrokeWidth={2} nodeBorderRadius={2} style={{ background: "#1b1b21" }}
+            maskColor="rgba(20,20,24,0.15)" />
         )}
       </ReactFlow>
     </div>

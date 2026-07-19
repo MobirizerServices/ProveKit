@@ -7,6 +7,8 @@ import { api, Me } from "@/lib/api";
 
 const LINKS = [
   { href: "/traces", label: "Traces" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/datasets", label: "Datasets" },
   { href: "/api-keys", label: "Project keys" },
 ];
 

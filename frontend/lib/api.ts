@@ -32,6 +32,22 @@ export interface Feedback {
 
 export interface TraceQuery { status?: string; window_hours?: number; limit?: number; }
 
+export interface Metrics {
+  window_hours: number; trace_count: number; error_count: number; error_rate: number;
+  latency_p50_ms: number; latency_p95_ms: number; total_tokens: number;
+  series: { t: string; count: number; errors: number }[];
+  by_model: { model: string; calls: number; tokens: number }[];
+  generated_at: string;
+}
+
+export interface Dataset { id: number; name: string; description: string; item_count: number; created_at: string; }
+export interface DatasetItem { id: number; dataset_id: number; input: string; expected: string; meta: any; created_at: string; }
+export interface DatasetDetail extends Dataset { items: DatasetItem[]; }
+export interface Experiment {
+  id: number; name: string; dataset_id: number | null; created_at: string;
+  result_count: number; mean_score: number | null; scorer_means: Record<string, number>;
+}
+
 // Redirect to /login on an unexpected 401 (expired session). Auth calls opt out via
 // `noAuthRedirect` so the login page can surface "invalid credentials" itself.
 async function j<T>(path: string, opts?: RequestInit & { noAuthRedirect?: boolean }): Promise<T> {
@@ -84,6 +100,17 @@ export const api = {
     j<Feedback>(`/api/traces/${encodeURIComponent(traceId)}/feedback`, { method: "POST", body: JSON.stringify(body) }),
   // mint a shareable link token for a trace
   shareTrace: (traceId: string) => j<{ token: string; trace_id: string }>(`/api/traces/${encodeURIComponent(traceId)}/share`, { method: "POST" }),
+  // dashboard metrics
+  metrics: (window_hours = 24) => j<Metrics>(`/api/metrics?window_hours=${window_hours}`),
+  // datasets
+  datasets: () => j<Dataset[]>("/api/datasets"),
+  dataset: (id: number) => j<DatasetDetail>(`/api/datasets/${id}`),
+  createDataset: (name: string, description = "") => j<Dataset>("/api/datasets", { method: "POST", body: JSON.stringify({ name, description }) }),
+  deleteDataset: (id: number) => j(`/api/datasets/${id}`, { method: "DELETE" }),
+  addDatasetItem: (id: number, input: string, expected = "") => j<DatasetItem>(`/api/datasets/${id}/items`, { method: "POST", body: JSON.stringify({ input, expected }) }),
+  addDatasetItemFromTrace: (id: number, trace_id: string) => j<DatasetItem>(`/api/datasets/${id}/items/from-trace`, { method: "POST", body: JSON.stringify({ trace_id }) }),
+  // experiments
+  experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {
     try { const r = await fetch(`${BASE}/healthz`, { credentials: "include" }); return r.ok; } catch { return false; }

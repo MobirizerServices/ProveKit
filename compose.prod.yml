@@ -49,17 +49,20 @@ services:
     environment:
       HOSTED: "true"
       DATABASE_URL: "postgresql+psycopg://provekit:${POSTGRES_PASSWORD:?}@db:5432/provekit"
-      REDIS_URL: "redis://redis:6379/0"
+      REDIS_URL: "redis://redis:6379/0"          # global rate-limit windows across the workers
       SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY}"
       CORS_ORIGINS: "https://${DOMAIN}"
-      PUBLIC_BASE_URL: "https://${DOMAIN}"
       WEB_BASE_URL: "https://${DOMAIN}"
-      # Don't seed example connections for tenants in a shared deployment; each workspace
-      # still gets the keyless Demo Assistant (mock). (Hosted mode also refuses to hand the
-      # operator's OPENAI_API_KEY to a tenant workspace — see services/workspace.py.)
-      SEED_EXAMPLES: "false"
       SENTRY_DSN: "${SENTRY_DSN:-}"
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      # Email (password reset / verification). Without SMTP_HOST the links are logged, not sent.
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      # Tunable quotas (defaults are sensible): trace-ingest rate + span retention.
+      INGEST_RATE_PER_MIN: "${INGEST_RATE_PER_MIN:-600}"
+      RUNS_RETENTION: "${RUNS_RETENTION:-10000}"
     depends_on:
       db:
         condition: service_healthy

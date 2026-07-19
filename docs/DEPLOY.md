@@ -20,22 +20,44 @@ No `SECRET_KEY` needed — a key file is generated next to the SQLite db to sign
 Point an agent at it: set `PROVEKIT_ENDPOINT=http://localhost:8100` and a project key, add
 `@pk.trace`, and runs show up under **Traces**.
 
-## Hosted (multi-user, TLS)
+## Hosted on a VPS (multi-user, TLS) — step by step
 
-Prerequisites: a VM with Docker, a domain pointed at it (A record), ports 80/443 open.
+The `compose.prod.yml` stack (Caddy TLS → frontend + backend, Postgres, Redis) is verified to
+boot and serve the full flow against Postgres. A ~$5/mo VPS is plenty to start.
+
+**1. Provision + point DNS.** Create a small Linux VM (DigitalOcean, Hetzner, …), open ports
+80 and 443, and add a DNS **A record** for your domain → the VM's IP.
+
+**2. Install Docker** on the VM:
 
 ```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+**3. Get the code** and set secrets (generate fresh — never reuse):
+
+```bash
+git clone https://github.com/MobirizerServices/ProveKit && cd ProveKit
 export DOMAIN=provekit.example.com
 export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
 export POSTGRES_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
-export SENTRY_DSN=...               # optional error reporting
+# optional: SENTRY_DSN, and SMTP_HOST/SMTP_USER/SMTP_PASSWORD/SMTP_FROM to send reset emails
+```
 
+**4. Bring it up:**
+
+```bash
 docker compose -f compose.prod.yml up -d --build
 ```
 
-Caddy auto-provisions a Let's Encrypt certificate for `$DOMAIN`. Open `https://$DOMAIN` — in
-hosted mode you'll be asked to sign up. Your users then set
-`PROVEKIT_ENDPOINT=https://$DOMAIN` and a project key.
+Caddy auto-provisions a Let's Encrypt certificate for `$DOMAIN` (this needs the DNS record
+from step 1 to already resolve). Open `https://$DOMAIN` — you'll be asked to sign up. Your
+users then set `PROVEKIT_ENDPOINT=https://$DOMAIN` and a project key, and add `@pk.trace`.
+
+**5. Verify:** `curl https://$DOMAIN/healthz` → `{"ok":true,...}`.
+
+> Put the `export` lines in a `.env` file next to `compose.prod.yml` instead of the shell so
+> they survive reboots (compose reads it automatically). Never commit it.
 
 ### What hosted mode changes
 
@@ -54,6 +76,12 @@ hosted mode you'll be asked to sign up. Your users then set
 - Health: `GET /healthz` — wired into the compose healthcheck.
 - Logs: JSON lines in hosted mode, each carrying `request_id` (also the `X-Request-ID`
   response header). Traced inputs/outputs are never logged by the server.
-- Scaling: add backend replicas behind Caddy for horizontal scale.
+- Scaling: add backend replicas behind Caddy for horizontal scale. Redis (in the stack)
+  keeps rate-limit windows global across the workers.
+- **Backups:** the data lives in the `provekit-pg` volume — back it up. A simple nightly dump:
+  `docker compose -f compose.prod.yml exec -T db pg_dump -U provekit provekit | gzip > backup-$(date +%F).sql.gz`
+  (put it in a cron job; ship it off-box).
 - Migrations run automatically on startup; to run manually:
   `docker compose -f compose.prod.yml exec backend alembic upgrade head`.
+- Tunables (env): `INGEST_RATE_PER_MIN` (default 600), `RUNS_RETENTION` (default 10000 spans
+  per project).

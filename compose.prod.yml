@@ -81,6 +81,9 @@ services:
         # Baked into the standalone build. Caddy routes /api + /v1 straight to the backend,
         # so this is only a fallback for same-origin calls that reach the Next server.
         API_PROXY_TARGET: "http://backend:8100"
+    environment:
+      # Turns on the middleware login gate: portal routes redirect to /login without a session.
+      HOSTED: "true"
     restart: unless-stopped
     depends_on:
       - backend

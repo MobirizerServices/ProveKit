@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import Analytics from "@/components/Analytics";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -15,47 +16,55 @@ const mono = JetBrains_Mono({
   weight: ["400", "500", "600", "700"],
 });
 
+const DESC =
+  "Drop-in tracing for any AI agent. Add one decorator and see every run your agent makes — " +
+  "model calls, tools, retries, the whole nested flow — then evaluate it, watch it, and gate " +
+  "your CI on it. Open source and self-hostable.";
+
 export const metadata: Metadata = {
   // Prod resolves OG/Twitter image URLs against this — set NEXT_PUBLIC_SITE_URL in deploy.
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: {
-    default: "ProveKit — Prove any AI agent works",
+    default: "ProveKit — See exactly what your AI agent did",
     template: "%s · ProveKit",
   },
-  description:
-    "The open-source universal agent client. Test, debug and evaluate any AI agent — LLM, MCP, HTTP or A2A, any provider, no SDK. Turn a run into a regression test and run the suite in CI.",
+  description: DESC,
   keywords: [
-    "AI agent testing",
-    "MCP testing",
-    "agent CI",
+    "AI agent observability",
+    "LLM tracing",
+    "agent tracing",
+    "LangChain tracing",
+    "OpenTelemetry LLM",
     "LLM evals",
-    "regression testing agents",
-    "prompt testing",
+    "agent evaluation",
+    "CI regression gate",
     "OpenAI",
     "Anthropic",
-    "A2A",
     "open source",
+    "self-hosted",
   ],
   applicationName: "ProveKit",
+  authors: [{ name: "ProveKit" }],
   openGraph: {
-    title: "ProveKit — Prove any AI agent works",
-    description:
-      "Test any AI agent (LLM/MCP/HTTP/A2A), turn a run into a regression test, run the suite in CI. Open source, runs locally.",
+    title: "ProveKit — See exactly what your AI agent did",
+    description: DESC,
     siteName: "ProveKit",
     type: "website",
+    url: "/",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ProveKit — Prove any AI agent works",
+    title: "ProveKit — See exactly what your AI agent did",
     description:
-      "The open-source universal agent client. Test/debug/eval any agent, turn runs into CI regression tests.",
+      "Drop-in tracing for any AI agent — one decorator, the whole nested flow, plus evals, dashboards, and a CI gate. Open source, self-hostable.",
   },
+  alternates: { canonical: "/" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>{children}<Analytics /></body>
     </html>
   );
 }

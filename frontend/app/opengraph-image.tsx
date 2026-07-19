@@ -37,11 +37,11 @@ export default function OpengraphImage() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 80, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.02 }}>
-            Prove any AI agent works.
+          <div style={{ fontSize: 76, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.03 }}>
+            See exactly what your AI agent did.
           </div>
           <div style={{ display: "flex", fontSize: 30, color: "#c9c9d2", marginTop: 24 }}>
-            Test any agent — LLM · MCP · HTTP · A2A. No SDK.
+            Drop-in tracing · evaluation · dashboards. One decorator.
           </div>
         </div>
 
@@ -65,9 +65,9 @@ export default function OpengraphImage() {
               padding: "16px 24px",
             }}
           >
-            <span style={{ color: "#d8b45f" }}>run</span>
+            <span style={{ color: "#d8b45f" }}>@pk.trace</span>
             <span style={{ margin: "0 12px" }}>→</span>
-            <span style={{ color: "#e6c877" }}>+assert</span>
+            <span style={{ color: "#e6c877" }}>nested flow</span>
             <span style={{ margin: "0 12px" }}>→</span>
             <div
               style={{

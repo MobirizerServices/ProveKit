@@ -1,11 +1,1 @@
-{
-  "version": 4,
-  "routes": {},
-  "dynamicRoutes": {},
-  "notFoundRoutes": [],
-  "preview": {
-    "previewModeId": "0e8c6d46fb4e859f557bcb4d10c79cef",
-    "previewModeSigningKey": "b19975bcd4bda1b0fb9e98f0fc26b7ae0652a963f9767ee76e4162ce39503bc3",
-    "previewModeEncryptionKey": "2549c71ccf6b76fce188b6852ad7dddf3ce97c521fa58aa8e4a2a127df23160c"
-  }
-}
+{"version":4,"routes":{"/blog/introducing-provekit":{},"/blog/trace-an-agent-in-one-line":{},"/blog/eval-gates-in-ci":{}},"dynamicRoutes":{"/blog/[slug]":{"dataRoute":null,"dataRouteRegex":null,"fallback":null,"fallbackRevalidate":false,"fallbackSourceRoute":"/blog/[slug]","routeRegex":"^\\/blog\\/([^/]+?)(?:\\/)?$","allowHeader":[]}},"notFoundRoutes":[],"preview":{"previewModeId":"0e8c6d46fb4e859f557bcb4d10c79cef","previewModeSigningKey":"b19975bcd4bda1b0fb9e98f0fc26b7ae0652a963f9767ee76e4162ce39503bc3","previewModeEncryptionKey":"2549c71ccf6b76fce188b6852ad7dddf3ce97c521fa58aa8e4a2a127df23160c"}}

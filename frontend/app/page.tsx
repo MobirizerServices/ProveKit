@@ -9,14 +9,23 @@ export default function Landing() {
   useEffect(() => { api.me().then(() => setAuthed(true)).catch(() => {}); }, []);
   const primary = authed ? { href: "/traces", label: "Open portal" } : { href: "/signup", label: "Get started free" };
 
+  const ld = {
+    "@context": "https://schema.org", "@type": "SoftwareApplication",
+    name: "ProveKit", applicationCategory: "DeveloperApplication", operatingSystem: "Any",
+    description: "Drop-in tracing, evaluation, and observability for AI agents. Open source and self-hostable.",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    url: "https://github.com/MobirizerServices/ProveKit",
+  };
+
   return (
     <div className="lp">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <header className="lp-nav">
         <div className="lp-brand"><span className="lp-logo">◇</span> Prove<b>Kit</b></div>
         <nav className="lp-navlinks">
           <a href="#features">Features</a>
           <a href="#flow">Agent flow</a>
-          <a href="#how">How it works</a>
+          <Link href="/blog">Blog</Link>
           <a href="https://github.com/MobirizerServices/ProveKit" target="_blank" rel="noreferrer">GitHub</a>
           {!authed && <Link href="/login">Sign in</Link>}
           <Link href={authed ? "/traces" : "/signup"} className="lp-signin">{authed ? "Portal" : "Sign up"}</Link>
@@ -41,6 +50,15 @@ export default function Landing() {
           </div>
         </div>
         <TracePreview />
+      </section>
+
+      <section className="lp-logos">
+        <div className="lp-logos-label">Captures the tools you already use</div>
+        <div className="lp-logos-row">
+          {["OpenAI", "Anthropic", "LangChain", "LlamaIndex", "CrewAI", "OpenTelemetry"].map((n) => (
+            <span key={n} className="lp-logo-chip">{n}</span>
+          ))}
+        </div>
       </section>
 
       <section className="lp-code-band">
@@ -105,6 +123,18 @@ def run(question):
         </div>
       </section>
 
+      <section className="lp-faq">
+        <h2 className="lp-h2">Questions</h2>
+        <div className="lp-faq-grid">
+          {FAQ.map((f) => (
+            <div key={f.q} className="lp-faq-item">
+              <div className="lp-faq-q">{f.q}</div>
+              <div className="lp-faq-a">{f.a}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="lp-final">
         <h2>Ship your first trace today.</h2>
         <p>Open source, self-hostable, and free to run. Bring your own keys, own your data.</p>
@@ -115,9 +145,24 @@ def run(question):
       </section>
 
       <footer className="lp-footer">
-        <span><span className="lp-logo">◇</span> ProveKit</span>
-        <span className="muted">Drop-in agent tracing · evaluation · observability</span>
+        <div className="lp-foot-brand">
+          <div><span className="lp-logo">◇</span> Prove<b style={{ color: "var(--muted)", fontWeight: 600 }}>Kit</b></div>
+          <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>Drop-in agent tracing · evaluation · observability</div>
+        </div>
+        <div className="lp-foot-cols">
+          {FOOTER.map((col) => (
+            <div key={col.h} className="lp-foot-col">
+              <div className="lp-foot-h">{col.h}</div>
+              {col.links.map((l) => (
+                l.href.startsWith("/")
+                  ? <Link key={l.t} href={l.href}>{l.t}</Link>
+                  : <a key={l.t} href={l.href} target="_blank" rel="noreferrer">{l.t}</a>
+              ))}
+            </div>
+          ))}
+        </div>
       </footer>
+      <div className="lp-foot-legal">© {2026} ProveKit · Open source · MIT-style license</div>
 
       <LandingStyles />
     </div>
@@ -226,6 +271,22 @@ const STEPS = [
   { n: "3", t: "Review the flow", d: "Every run streams to the portal — inspect, evaluate, and monitor it." },
 ];
 
+const FAQ = [
+  { q: "Which frameworks does it support?", a: "OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI and more are auto-captured; anything OpenTelemetry-instrumented nests too. Custom steps take one line." },
+  { q: "Do I have to send my data anywhere?", a: "No. ProveKit is self-hostable — run it on your own infra with Docker, bring your own model keys, and your traces never leave your environment." },
+  { q: "Is it really just one line?", a: "Yes for capture: import provekit.auto turns on tracing for the libraries you already use. Add @pk.trace to group a run, and pk.span()/pk.score() where you want more detail." },
+  { q: "How does the CI gate work?", a: "pk.evaluate() runs a target over a dataset, scores each output, and returns a summary — assert on mean_score to fail the build on a regression." },
+  { q: "What does it cost?", a: "The project is open source and free to run. You only pay for your own infra and model usage." },
+  { q: "Is there vendor lock-in?", a: "No. It's OpenTelemetry-native and open source — one SDK, standard formats, and you own the deployment." },
+];
+
+const FOOTER = [
+  { h: "Product", links: [{ t: "Features", href: "/#features" }, { t: "Agent flow", href: "/#flow" }, { t: "Dashboard", href: "/dashboard" }, { t: "Pricing", href: "/#faq" }] },
+  { h: "Resources", links: [{ t: "Blog", href: "/blog" }, { t: "Docs", href: "https://github.com/MobirizerServices/ProveKit/tree/main/docs" }, { t: "Changelog", href: "https://github.com/MobirizerServices/ProveKit/blob/main/CHANGELOG.md" }] },
+  { h: "Community", links: [{ t: "GitHub", href: "https://github.com/MobirizerServices/ProveKit" }, { t: "Discussions", href: "https://github.com/MobirizerServices/ProveKit/discussions" }, { t: "Issues", href: "https://github.com/MobirizerServices/ProveKit/issues" }] },
+  { h: "Legal", links: [{ t: "Privacy", href: "/privacy" }, { t: "Terms", href: "/terms" }, { t: "Security", href: "https://github.com/MobirizerServices/ProveKit/blob/main/SECURITY.md" }] },
+];
+
 function LandingStyles() {
   return (
     <style jsx global>{`
@@ -310,16 +371,34 @@ function LandingStyles() {
       .lp-step-t { font-weight: 600; font-size: 15.5px; margin: 12px 0 5px; }
       .lp-step-d { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
 
-      .lp-final { text-align: center; padding: 60px 0 20px; border-top: 1px solid var(--border); }
+      .lp-logos { padding: 30px 0 6px; text-align: center; }
+      .lp-logos-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--faint); margin-bottom: 16px; }
+      .lp-logos-row { display: flex; flex-wrap: wrap; gap: 10px 12px; justify-content: center; }
+      .lp-logo-chip { font-size: 14px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 7px 16px; }
+
+      .lp-faq { padding: 50px 0; border-top: 1px solid var(--border); }
+      .lp-faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; max-width: 900px; margin: 30px auto 0; }
+      .lp-faq-q { font-weight: 600; font-size: 15px; margin-bottom: 5px; }
+      .lp-faq-a { color: var(--muted); font-size: 14px; line-height: 1.55; }
+
+      .lp-final { text-align: center; padding: 60px 0 40px; border-top: 1px solid var(--border); }
       .lp-final h2 { font-size: 32px; letter-spacing: -0.8px; margin: 0 0 10px; }
       .lp-final p { color: var(--muted); font-size: 15.5px; margin: 0 0 26px; }
-      .lp-footer { display: flex; justify-content: space-between; align-items: center; padding: 30px 0 0; border-top: 1px solid var(--border); font-size: 13px; flex-wrap: wrap; gap: 10px; }
+      .lp-footer { display: flex; justify-content: space-between; gap: 40px; padding: 34px 0 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+      .lp-foot-brand { font-weight: 600; font-size: 15px; }
+      .lp-foot-cols { display: flex; gap: 48px; flex-wrap: wrap; }
+      .lp-foot-col { display: flex; flex-direction: column; gap: 9px; }
+      .lp-foot-h { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--faint); margin-bottom: 3px; }
+      .lp-foot-col a { font-size: 13.5px; color: var(--muted); }
+      .lp-foot-col a:hover { color: var(--text); }
+      .lp-foot-legal { padding: 16px 0 10px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--faint); text-align: center; }
 
       @media (max-width: 820px) {
         .lp-hero, .lp-code-band { grid-template-columns: 1fr; }
-        .lp-grid, .lp-steps { grid-template-columns: 1fr; }
+        .lp-grid, .lp-steps, .lp-faq-grid { grid-template-columns: 1fr; }
         .lp-hero h1 { font-size: 36px; }
         .lp-navlinks a:not(.lp-signin) { display: none; }
+        .lp-footer { gap: 24px; }
       }
     `}</style>
   );

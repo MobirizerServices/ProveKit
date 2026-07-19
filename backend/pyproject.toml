@@ -1,6 +1,6 @@
 [project]
 name = "provekit"
-version = "0.2.0"
+version = "0.3.0"
 description = "Drop-in agent tracing — add one decorator, get a project key, review every run your agent makes."
 requires-python = ">=3.11"
 readme = "README.md"
@@ -30,6 +30,10 @@ classifiers = [
 dependencies = [
     "httpx>=0.28,<1",
 ]
+
+[project.scripts]
+# The MCP debug server. Needs the [mcp] extra installed to run.
+provekit-mcp = "provekit.mcp:main"
 
 [project.urls]
 Homepage = "https://github.com/MobirizerServices/ProveKit"
@@ -65,6 +69,13 @@ trace = [
     "openinference-instrumentation-openai>=0.1",
     "openinference-instrumentation-anthropic>=0.1",
 ]
+# `pip install provekit[http]` — capture every outbound HTTP call (tool APIs, vector DBs,
+# webhooks), not just LLM calls, as child spans. Dormant unless the target client is used.
+http = [
+    "opentelemetry-instrumentation-httpx>=0.40b0",
+    "opentelemetry-instrumentation-requests>=0.40b0",
+    "opentelemetry-instrumentation-urllib>=0.40b0",
+]
 # `pip install provekit[trace-all]` — bundle the whole instrumentor set so one decorator
 # captures LLM calls across every common provider and agent framework, no manual spans.
 # Instrumentors are tiny and dormant unless their target library is installed.
@@ -82,7 +93,14 @@ trace-all = [
     "openinference-instrumentation-mistralai>=0.1",
     "openinference-instrumentation-dspy>=0.1",
     "openinference-instrumentation-haystack>=0.1",
+    # generic HTTP so non-LLM calls are captured too
+    "opentelemetry-instrumentation-httpx>=0.40b0",
+    "opentelemetry-instrumentation-requests>=0.40b0",
+    "opentelemetry-instrumentation-urllib>=0.40b0",
 ]
+# `pip install provekit[mcp]` — the MCP debug server (`provekit-mcp`). A *debug channel*, not
+# client instrumentation: it reads already-captured traces from your portal by project key.
+mcp = ["mcp>=1.2"]
 # Keep in sync with requirements-dev.txt — CI gates on pytest+coverage and ruff.
 dev = ["pytest==9.1.1", "pytest-cov==6.0.0", "ruff==0.9.2"]
 

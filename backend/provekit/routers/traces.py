@@ -107,15 +107,15 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
 
 
 # ---- traces (spans grouped into a nested tree) ----
-@runs_router.get("/traces")
-def list_traces(limit: int = 50, db: Session = Depends(get_db),
-                ws: Workspace = Depends(current_workspace)):
-    """One row per trace: its root span (the decorated entrypoint), with a span count and
-    total token usage (so the list is scannable at a glance)."""
+# The listing/detail logic is shared by two auth paths: the cookie-authed /api/* routes the
+# portal UI calls, and the key-authed /v1/* routes an MCP server or script calls with the
+# project key. Same data, two doors — so "debug via MCP" needs no new client code.
+def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None):
     limit = max(1, min(limit, 200))
-    roots = (db.query(Run)
-             .filter(Run.workspace_id == ws.id, Run.parent_span_id == "")
-             .order_by(Run.id.desc()).limit(limit).all())
+    q = (db.query(Run).filter(Run.workspace_id == ws.id, Run.parent_span_id == ""))
+    if status:
+        q = q.filter(Run.status == status)
+    roots = q.order_by(Run.id.desc()).limit(limit).all()
     trace_ids = [r.trace_id for r in roots if r.trace_id]
     counts: dict = {}
     tokens: dict = {}
@@ -135,11 +135,7 @@ def list_traces(limit: int = 50, db: Session = Depends(get_db),
              "created_at": iso_utc(r.created_at)} for r in roots]
 
 
-@runs_router.get("/traces/{trace_id}")
-def get_trace(trace_id: str, db: Session = Depends(get_db),
-              ws: Workspace = Depends(current_workspace)):
-    """All spans of one trace, in start order — the client rebuilds the tree from
-    span_id / parent_span_id."""
+def _get_trace(db: Session, ws: Workspace, trace_id: str):
     spans = (db.query(Run)
              .filter(Run.workspace_id == ws.id, Run.trace_id == trace_id)
              .order_by(Run.id.asc()).all())
@@ -149,3 +145,37 @@ def get_trace(trace_id: str, db: Session = Depends(get_db),
              "type": s.type, "label": s.label, "status": s.status, "duration_ms": s.duration_ms,
              "request": s.request, "result": s.result, "error": s.error,
              "created_at": iso_utc(s.created_at)} for s in spans]
+
+
+@runs_router.get("/traces")
+def list_traces(limit: int = 50, status: str | None = None, db: Session = Depends(get_db),
+                ws: Workspace = Depends(current_workspace)):
+    """One row per trace: its root span (the decorated entrypoint), with a span count and
+    total token usage (so the list is scannable at a glance). `status=failed` to filter."""
+    return _list_traces(db, ws, limit, status)
+
+
+@runs_router.get("/traces/{trace_id}")
+def get_trace(trace_id: str, db: Session = Depends(get_db),
+              ws: Workspace = Depends(current_workspace)):
+    """All spans of one trace, in start order — the client rebuilds the tree from
+    span_id / parent_span_id."""
+    return _get_trace(db, ws, trace_id)
+
+
+# ---- key-authed read API (for the MCP server / scripts; same key as ingest) ----
+@router.get("/traces")
+def list_traces_by_key(request: Request, limit: int = 50, status: str | None = None,
+                       db: Session = Depends(get_db), authorization: str | None = Header(default=None)):
+    """List traces using the project key (Bearer). Backs the ProveKit MCP server so an
+    agent can pull recent runs — `status=failed` surfaces just the failures to debug."""
+    ws = _resolve_ingest_ws(db, request, authorization)
+    return _list_traces(db, ws, limit, status)
+
+
+@router.get("/traces/{trace_id}")
+def get_trace_by_key(trace_id: str, request: Request, db: Session = Depends(get_db),
+                     authorization: str | None = Header(default=None)):
+    """Full span tree of one trace using the project key (Bearer)."""
+    ws = _resolve_ingest_ws(db, request, authorization)
+    return _get_trace(db, ws, trace_id)

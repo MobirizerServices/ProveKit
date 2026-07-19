@@ -29,6 +29,26 @@ def test_trace_is_a_no_op_when_unconfigured(monkeypatch):
     assert pk.configure() is False
 
 
+def test_init_is_an_alias_for_configure(monkeypatch):
+    _reset()
+    monkeypatch.delenv("PROVEKIT_API_KEY", raising=False)
+    monkeypatch.delenv("PROVEKIT_ENDPOINT", raising=False)
+    assert pk.init() is False                 # no env → no-op, same as configure()
+    _reset()
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: None)
+    assert pk.init(api_key="pk_x", endpoint="http://p.test", batch=False) is True
+
+
+def test_auto_module_imports_and_is_a_no_op_without_env(monkeypatch):
+    _reset()
+    monkeypatch.delenv("PROVEKIT_API_KEY", raising=False)
+    monkeypatch.delenv("PROVEKIT_ENDPOINT", raising=False)
+    import importlib
+
+    import provekit.auto
+    importlib.reload(provekit.auto)           # re-runs init() at import; must not raise
+
+
 def test_decorated_call_ships_a_run_with_input_and_output(monkeypatch):
     _reset()
     captured = {}

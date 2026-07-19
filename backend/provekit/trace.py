@@ -64,6 +64,17 @@ _INSTRUMENTORS = [
     ("openinference.instrumentation.pydantic_ai", "OpenInferencePydanticAIInstrumentor"),
 ]
 
+# Generic (non-LLM) instrumentors: every outbound HTTP call your agent makes — tool APIs,
+# vector DBs, webhooks — becomes a child span too, so "capture everything" isn't just the
+# model calls. Best-effort, same as above: install `provekit[http]` (or `[trace-all]`) to
+# light these up. These come from opentelemetry-instrumentation-*, not openinference.
+_HTTP_INSTRUMENTORS = [
+    ("opentelemetry.instrumentation.httpx", "HTTPXClientInstrumentor"),
+    ("opentelemetry.instrumentation.requests", "RequestsInstrumentor"),
+    ("opentelemetry.instrumentation.aiohttp_client", "AioHttpClientInstrumentor"),
+    ("opentelemetry.instrumentation.urllib", "URLLibInstrumentor"),
+]
+
 
 # ---- OTLP/JSON serialization (matches services.otel.ingest, which reads OTLP-JSON) ----
 def _attr(value) -> dict:
@@ -136,9 +147,9 @@ class _ProveKitExporter:
 
 
 def _auto_instrument(provider) -> None:
-    """Enable whichever LLM instrumentors are installed, routed to our provider so their
-    spans nest under the decorated entrypoint. Best-effort; never raises."""
-    for module, cls in _INSTRUMENTORS:
+    """Enable whichever LLM and HTTP instrumentors are installed, routed to our provider so
+    their spans nest under the decorated entrypoint. Best-effort; never raises."""
+    for module, cls in (*_INSTRUMENTORS, *_HTTP_INSTRUMENTORS):
         try:
             mod = __import__(module, fromlist=[cls])
             getattr(mod, cls)().instrument(tracer_provider=provider)
@@ -256,6 +267,22 @@ def trace(name: str | None = None, *, operation: str = "invoke_agent"):
                 return result
         return wrapper
     return deco
+
+
+def init(api_key: str | None = None, endpoint: str | None = None, **kwargs) -> bool:
+    """One-line, zero-decorator setup — the whole client integration.
+
+        import provekit.trace as pk
+        pk.init()                       # reads PROVEKIT_API_KEY / PROVEKIT_ENDPOINT
+
+    After this every instrumented library beneath your code — LLM providers, agent
+    frameworks, and outbound HTTP (with `provekit[http]`) — is captured on its own, no
+    decorator and no per-call wiring. Add `@pk.trace` only when you want a run grouped
+    under one named root. Even shorter: `import provekit.auto` calls this for you.
+
+    Returns True if tracing is active, False if it's a no-op (keys unset / OTel missing).
+    """
+    return configure(api_key, endpoint, **kwargs)
 
 
 @contextlib.contextmanager

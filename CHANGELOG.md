@@ -2,6 +2,27 @@
 
 All notable changes to ProveKit. This project is pre-1.0; expect breaking changes.
 
+## 0.3.0 — Capture everything from one SDK; debug over MCP
+
+The client stays a single SDK, but it now captures more with less code, and the portal gains
+a read-side debug channel so assistants can reason over your traces.
+
+### SDK — one SDK, less code
+- **`import provekit.auto`** — zero-code activation: one import at your entrypoint turns
+  tracing on. The `@pk.trace` decorator is now optional (it just groups a run under a root).
+- **`pk.init()`** — a one-line alias for `configure()` for explicit setup.
+- **Outbound HTTP capture** — `pip install "provekit[http]"` captures every `httpx` /
+  `requests` / `aiohttp` / `urllib` call as a child span, so non-LLM calls (tool APIs, vector
+  DBs, webhooks) show up too. Folded into `[trace-all]`.
+
+### Debug channels — on the portal, not the client
+- **ProveKit MCP server** (`provekit-mcp`, `pip install "provekit[mcp]"`) — debug traces from
+  Claude Desktop / Cursor / any MCP client, authenticated by your project key. Tools:
+  `provekit_list_traces`, `provekit_list_failures`, `provekit_get_trace`. See [docs/MCP.md](docs/MCP.md).
+- **Key-authed read API** — `GET /v1/traces` and `GET /v1/traces/{id}` (Bearer project key),
+  with a `status=failed` filter. Same data as the cookie-authed portal view, a different door;
+  script it or wire it into CI without MCP.
+
 ## 0.2.0 — Drop-in agent tracing
 
 ProveKit is now a **tracing** product: add one decorator, get a project key, and review every

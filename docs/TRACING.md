@@ -19,13 +19,17 @@ PROVEKIT_API_KEY=pk_...
 PROVEKIT_ENDPOINT=https://provekit.your-company.com   # your ProveKit URL
 ```
 
-3. Install and decorate:
+3. Install and turn it on. Two ways, both one line at the client:
 
 ```bash
 pip install "provekit[trace]"
 ```
 
 ```python
+# Zero-code: one import at your program's entrypoint captures everything below it.
+import provekit.auto
+
+# ...or, if you want one run grouped under a named root, add the decorator:
 import provekit.trace as pk
 
 @pk.trace(name="support-agent")
@@ -36,6 +40,11 @@ def run_agent(question: str) -> str:
 Run your agent, then open **Traces**. Each call is one trace; expand any span for its
 input and output.
 
+> **One SDK, nothing else at the client.** `import provekit.auto` (or `pk.init()`) is the
+> whole integration — the decorator is optional sugar for grouping a run. You never add MCP,
+> connectors, or per-call wiring in your app. Debugging *over* the captured data (MCP, REST)
+> happens on the portal side — see [MCP debug channel](MCP.md).
+
 ## What gets captured
 
 You decorate the **entrypoint once**. The decorator opens an OpenTelemetry span and makes
@@ -44,6 +53,7 @@ it the current context, so everything beneath it nests automatically:
 | Source | Captured |
 |---|---|
 | **LLM & framework calls** | automatically — see the auto-instrumented list below |
+| **Outbound HTTP** (tool APIs, vector DBs, webhooks) | automatically with `provekit[http]` — every `httpx`/`requests`/`urllib` call becomes a child span |
 | Any OTel-instrumented library | automatically — it nests under the current span |
 | Your own sub-steps (tools, retrieval, branches) | wrap them in `with pk.span("name"):` |
 | Your `logging.*` calls | captured as **events** on the active span (INFO+; transport noise filtered). Disable with `pk.configure(capture_logs=False)`. |
@@ -60,10 +70,11 @@ your project uses (each instrumentor is dormant unless its library is installed)
 
 - **Providers:** OpenAI · Anthropic · Bedrock · Mistral · Groq · Google GenAI · Vertex AI · LiteLLM
 - **Frameworks:** LangChain · LlamaIndex · CrewAI · AutoGen · OpenAI Agents · smolagents · DSPy · Haystack · Guardrails · Instructor · Agno · Pydantic AI
+- **HTTP** (with `provekit[http]` or `[trace-all]`): `httpx` · `requests` · `aiohttp` · `urllib`
 
 Anything else — your own tools, retrieval, business logic — you capture with `pk.span()`
-(below). That's the honest split: **LLM/framework calls are automatic; your own steps are one
-line each.**
+(below). That's the honest split: **LLM/framework calls and outbound HTTP are automatic; your
+own in-process steps are one line each.**
 
 ## Sub-steps with `pk.span()`
 
@@ -84,9 +95,17 @@ input/output in the portal.
 
 ## API
 
+### `import provekit.auto`
+Zero-code activation: importing this once at your entrypoint calls `pk.init()` for you.
+Everything instrumented below it is then captured — no decorator required.
+
+### `pk.init(api_key=None, endpoint=None, **kwargs)`
+The one-line setup. Configures the tracer and turns on auto-instrumentation. Same as
+`configure()`; returns `True` if active, `False` if a no-op.
+
 ### `@pk.trace(name=None, *, operation="invoke_agent")`
 Decorate an entrypoint (or any function). `name` is the span label (defaults to the
-function name).
+function name). Optional — use it only to group one run under a single named root.
 
 ### `with pk.span(name, **attributes)`
 Capture a sub-step as a child span. Keyword attributes are attached to the span.

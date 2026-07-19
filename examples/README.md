@@ -23,6 +23,23 @@ Then open the portal:
 - **Dashboard** — trace volume, an error rate (~14%), latency p50/p95, tokens, and a
   per-model breakdown (gpt-4o / gpt-4o-mini / claude-sonnet-5).
 
+## `complex_demo.py` — a deep multi-agent research orchestrator
+
+A much larger flow for stress-testing the viewer: one run is a **37-span, 4-level-deep** trace
+— an orchestrator that fans out to nested research **sub-agents**, each doing **RAG retrieval**
+(a retriever with per-doc spans), analysis, a **flaky tool that fails then retries** (a red span
+inside a successful run), a **critique → revise** reflection loop, and guardrail checks — then a
+final synthesis across 3 models. Also emits a multi-turn session and a **fully failed run** whose
+error bubbles up the tree.
+
+```bash
+python examples/complex_demo.py     # same PROVEKIT_API_KEY / PROVEKIT_ENDPOINT as above
+```
+
+Verified end-to-end: 4 traces, ~80 spans total, 25% error rate, ~4k tokens across
+gpt-4o / gpt-4o-mini / claude-sonnet-5, with feedback scores and deep span metadata
+(temperature, max_tokens, finish_reason). Great for showing off the Flow graph and Waterfall.
+
 ## Try evaluation
 
 Once you have traces, use **"add to dataset"** on a trace (or the Datasets page) to build a

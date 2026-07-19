@@ -22,22 +22,8 @@ runs_router = APIRouter(prefix="/api", tags=["runs"])
 
 def _resolve_ingest_ws(db: Session, request: Request, authorization: str | None) -> Workspace:
     """Bearer ingest key first (exporters), else fall back to the session cookie."""
-    if authorization and authorization.lower().startswith("bearer "):
-        key = authorization[7:].strip()
-        # A named pk_ key (portal-issued, revocable) first, then the legacy per-workspace
-        # ingest key. Both are SHA-256 bearer keys; either resolves the same workspace.
-        ws = apikey.resolve_workspace(db, key)
-        if ws:
-            return ws
-        ws = db.query(Workspace).filter(Workspace.ingest_key_hash == deploy.hash_key(key)).first()
-        if ws:
-            return ws
-        raise HTTPException(403, "Invalid ingest key")
-    # No bearer key: only allowed via a logged-in session (or local mode's default user).
-    from ..services.auth import get_current_user
-    from ..services.workspace import get_or_create_default_workspace
-    user = get_current_user(request, db)
-    return get_or_create_default_workspace(db, user)
+    from ..services.workspace import workspace_from_key
+    return workspace_from_key(db, request, authorization)
 
 
 @router.post("/traces")

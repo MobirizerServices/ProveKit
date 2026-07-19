@@ -103,6 +103,29 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class Dataset(Base):
+    """A named collection of examples ({input, expected}) — the material offline evaluations
+    run against. Curated by hand or captured from production traces."""
+    __tablename__ = "datasets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(160), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class DatasetItem(Base):
+    """One example in a dataset: an input, an optional expected output, and free-form meta."""
+    __tablename__ = "dataset_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"), index=True)
+    input: Mapped[str] = mapped_column(Text, default="")
+    expected: Mapped[str] = mapped_column(Text, default="")
+    meta: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Feedback(Base):
     """A score or annotation attached to a whole trace — a human thumbs-up, an LLM-judge
     score, or an offline-eval result. Many per trace; the portal shows them on the run."""

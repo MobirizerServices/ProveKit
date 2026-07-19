@@ -2,6 +2,7 @@
 
 - [Features](../FEATURES.md) — the full inventory of what's built
 - [Roadmap](ROADMAP.md) — research-backed 50 features + 100 improvements toward world-class
+- [Landing roadmap](LANDING_ROADMAP.md) — 100 points to a production-ready marketing site
 - [Tracing guide](TRACING.md) — the decorator, `pk.span()`, configuration, what's captured
 - [Evaluation guide](EVALUATION.md) — datasets, scorers, `pk.evaluate()`, experiments, CI gates
 - [MCP debug channel](MCP.md) — debug traces from Claude Desktop / Cursor by project key

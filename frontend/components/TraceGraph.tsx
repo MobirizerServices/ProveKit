@@ -1,6 +1,6 @@
 "use client";
 
-import { Background, Controls, Handle, MiniMap, Position, ReactFlow } from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMemo } from "react";
 import { TraceSpan } from "@/lib/api";
@@ -81,30 +81,49 @@ export default function TraceGraph({ spans, selected, onSelect }: {
       return y;
     };
     roots.forEach((r) => layout(r, 0));
+
+    // The execution path from the root down to the selected span — highlighted + brighter.
+    const parentOf: Record<string, string | null> = {};
+    for (const s of spans) parentOf[s.span_id] = s.parent_span_id && ids.has(s.parent_span_id) ? s.parent_span_id : null;
+    const onPath = new Set<string>();
+    for (let cur = selected; cur && parentOf[cur]; cur = parentOf[cur]!) onPath.add(`${parentOf[cur]}->${cur}`);
+
     return {
       nodes: spans.map((s) => ({
         id: s.span_id, type: "span", position: pos[s.span_id] || { x: 0, y: 0 },
         data: { span: s, active: selected === s.span_id },
       })),
-      edges: spans.filter((s) => s.parent_span_id && ids.has(s.parent_span_id)).map((s) => ({
-        id: `${s.parent_span_id}->${s.span_id}`, source: s.parent_span_id, target: s.span_id,
-        style: { stroke: "var(--border-strong)", strokeWidth: 1.5 },
-      })),
+      edges: spans.filter((s) => s.parent_span_id && ids.has(s.parent_span_id)).map((s) => {
+        const eid = `${s.parent_span_id}->${s.span_id}`;
+        const failed = s.status === "failed";
+        // Failed exits are red; the path to the selected node lights up in the accent; the
+        // rest are calm. Every edge flows (animated) so entry→exit direction reads at a glance.
+        const highlighted = onPath.has(eid);
+        const color = failed ? "var(--red)" : highlighted ? "var(--accent)" : "var(--border-strong)";
+        return {
+          id: eid, source: s.parent_span_id, target: s.span_id, type: "smoothstep",
+          animated: failed || highlighted,
+          markerEnd: { type: MarkerType.ArrowClosed, color, width: 15, height: 15 },
+          style: { stroke: color, strokeWidth: highlighted ? 2.4 : failed ? 2 : 1.5 },
+        };
+      }),
     };
   }, [spans, selected]);
 
   return (
-    <div style={{ height: 460, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
+    <div style={{ height: 480, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
       <ReactFlow
-        nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView
+        nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+        fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.15} maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
-        nodesDraggable={false} nodesConnectable={false} elementsSelectable
+        nodesDraggable nodesConnectable={false} elementsSelectable
         onNodeClick={(_e, n) => onSelect(n.id)}
       >
-        <Background gap={18} color="var(--border)" />
-        <Controls showInteractive={false} />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
+        <Controls showZoom showFitView showInteractive={false} position="bottom-left" />
         <MiniMap pannable zoomable nodeColor={(n) => TYPE_COLOR[(n.data as any)?.span?.type] || "var(--muted)"}
-          style={{ background: "var(--bg-2)" }} maskColor="rgba(0,0,0,0.5)" />
+          nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "var(--red)" : "transparent")}
+          style={{ background: "var(--bg-2)" }} maskColor="rgba(0,0,0,0.55)" />
       </ReactFlow>
     </div>
   );

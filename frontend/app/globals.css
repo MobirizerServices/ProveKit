@@ -382,10 +382,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .fl-packet { fill: var(--accent); opacity: .95; filter: drop-shadow(0 0 7px var(--accent)); }
 .fl-edge-lbl { position: absolute; pointer-events: none; font-size: 10px; font-weight: 600; color: var(--muted); background: color-mix(in srgb, var(--bg-2) 82%, transparent); padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
 .react-flow__handle { transition: box-shadow .13s var(--ease); }
-.react-flow__controls { border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--sh-2); }
-.react-flow__controls-button { background: var(--panel); border-bottom: 1px solid var(--border); }
+.react-flow__controls { border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--border-strong); box-shadow: var(--sh-2); }
+.react-flow__controls-button { background: var(--panel); border-bottom: 1px solid var(--border); width: 30px; height: 30px; }
 .react-flow__controls-button:hover { background: var(--panel-2); }
-.react-flow__controls-button svg { fill: var(--muted); }
+.react-flow__controls-button svg { fill: var(--text); max-width: 15px; max-height: 15px; }
+/* Directional flow along entry→exit edges: marching dashes on animated edges + a soft glow. */
+.react-flow__edge.animated .react-flow__edge-path { stroke-dasharray: 7 5; animation: rf-flow .55s linear infinite; }
+@keyframes rf-flow { to { stroke-dashoffset: -12; } }
+.react-flow__arrowhead { filter: drop-shadow(0 0 1px rgba(0,0,0,.4)); }
 .react-flow__minimap { background: var(--panel); border-radius: var(--r-md); border: 1px solid var(--border); overflow: hidden; }
 .react-flow__attribution { display: none; }
 

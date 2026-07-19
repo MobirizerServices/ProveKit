@@ -11,7 +11,7 @@
 	}
 
 	@api path /api/* /v1/* /healthz
-	reverse_proxy @api backend:8100
+	reverse_proxy @api backend:8000
 
-	reverse_proxy frontend:3001
+	reverse_proxy frontend:3000
 }

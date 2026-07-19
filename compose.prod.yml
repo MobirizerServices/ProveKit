@@ -45,7 +45,8 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    command: ["uvicorn", "provekit.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "4"]
+    command: ["uvicorn", "provekit.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4",
+              "--proxy-headers", "--forwarded-allow-ips=*"]
     environment:
       HOSTED: "true"
       DATABASE_URL: "postgresql+psycopg://provekit:${POSTGRES_PASSWORD:?}@db:5432/provekit"
@@ -69,7 +70,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/healthz').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -80,7 +81,7 @@ services:
       args:
         # Baked into the standalone build. Caddy routes /api + /v1 straight to the backend,
         # so this is only a fallback for same-origin calls that reach the Next server.
-        API_PROXY_TARGET: "http://backend:8100"
+        API_PROXY_TARGET: "http://backend:8000"
     environment:
       # Turns on the middleware login gate: portal routes redirect to /login without a session.
       HOSTED: "true"

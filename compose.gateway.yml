@@ -1,0 +1,58 @@
+# provekit.online deployment — sits BEHIND the external nginx gateway (SSL + routing live on
+# a separate box). No Caddy/TLS here: nginx terminates SSL and proxies
+#   provekit.online/       -> 192.168.1.2:3000  (frontend)
+#   provekit.online/api/*  -> 192.168.1.2:8000  (backend)
+# Everything else (/v1 SDK ingest, /healthz) hits the frontend, which forwards it to the
+# backend via the Next rewrite (API_PROXY_TARGET). So we publish 3000 + 8000 on 0.0.0.0.
+#
+#   cp deploy/provekit.online.env.example deploy/provekit.online.env   # fill in secrets
+#   docker compose -f compose.gateway.yml up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: provekit
+      POSTGRES_DB: provekit
+      # Must match the password in DATABASE_URL inside deploy/provekit.online.env
+      POSTGRES_PASSWORD: CHANGE_ME_DB_PASSWORD
+    volumes:
+      - provekit-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - deploy/provekit.online.env
+    # Bind 0.0.0.0:8000 so the LAN nginx (192.168.1.2:8000) can reach it.
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Where the Next server forwards /v1 + /healthz (nginx only sends /api to the backend).
+        API_PROXY_TARGET: "http://backend:8000"
+    env_file:
+      - deploy/provekit.online.env
+    environment:
+      HOSTED: "true"          # activates the middleware login gate
+      PORT: "3000"
+    # Bind 0.0.0.0:3000 so the LAN nginx (192.168.1.2:3000) can reach it.
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  provekit-pg:

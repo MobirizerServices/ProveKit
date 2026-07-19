@@ -17,5 +17,9 @@ COPY alembic.ini .
 RUN useradd --create-home --uid 10001 appuser && mkdir /data && chown 10001:10001 /data
 USER appuser
 
-EXPOSE 8100
-CMD ["uvicorn", "provekit.main:app", "--host", "0.0.0.0", "--port", "8100"]
+# Port 8000 to match the provekit.online gateway contract. --proxy-headers +
+# --forwarded-allow-ips lets the app read X-Forwarded-For/Proto from nginx, so rate limits
+# and the real client IP work behind the reverse proxy.
+EXPOSE 8000
+CMD ["uvicorn", "provekit.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips=*"]

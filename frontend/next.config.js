@@ -2,7 +2,7 @@
 // In dev (and any same-origin deploy) the browser calls /api and /v1 on this origin;
 // these rewrites forward them to the backend so cookies stay first-party and no CORS is
 // needed. Prod behind a reverse proxy can route /api + /v1 the same way.
-const API_TARGET = process.env.API_PROXY_TARGET || "http://localhost:8100";
+const API_TARGET = process.env.API_PROXY_TARGET || "http://localhost:8000";
 
 const nextConfig = {
   reactStrictMode: true,

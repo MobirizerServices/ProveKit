@@ -30,3 +30,6 @@ __pycache__/
 
 # also ignore a node_modules symlink (dev convenience), not just the dir
 node_modules
+
+# Production secrets — never commit
+deploy/provekit.online.env

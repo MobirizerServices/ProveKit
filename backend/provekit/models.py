@@ -2,7 +2,7 @@
 runs (the spans of an agent trace)."""
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -97,4 +97,22 @@ class Run(Base):
     trace_id: Mapped[str] = mapped_column(String(32), default="", index=True)
     span_id: Mapped[str] = mapped_column(String(16), default="")
     parent_span_id: Mapped[str] = mapped_column(String(16), default="")
+    # Groups multi-turn runs (a conversation/thread) so the portal can show them together.
+    # Captured from a span's session.id / gen_ai.conversation.id attribute when present.
+    session_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Feedback(Base):
+    """A score or annotation attached to a whole trace — a human thumbs-up, an LLM-judge
+    score, or an offline-eval result. Many per trace; the portal shows them on the run."""
+    __tablename__ = "feedback"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    trace_id: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")     # e.g. "correctness", "thumbs"
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)   # numeric score, if any
+    value: Mapped[str] = mapped_column(String(200), default="")    # categorical/string value, if any
+    comment: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(16), default="human")  # human | sdk | eval
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

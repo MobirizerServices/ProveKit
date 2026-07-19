@@ -34,6 +34,8 @@ log = logging.getLogger("provekit.trace")
 _lock = threading.Lock()
 _tracer = None          # set once configured; None means tracing is a no-op
 _configured = False
+_api_key = None         # kept so pk.score() can post feedback to the portal
+_endpoint = None
 
 # Best-effort auto-instrumentation: whichever of these are installed get enabled so their
 # calls nest under the decorated entrypoint with no manual spans. All optional — a missing
@@ -198,7 +200,7 @@ def configure(api_key: str | None = None, endpoint: str | None = None,
     Called automatically on first use; call it explicitly only to pass values in code
     instead of the environment. Idempotent. `capture_logs` attaches a handler that records
     your `logging` calls (at `log_level`+) as events on the active span."""
-    global _tracer, _configured
+    global _tracer, _configured, _api_key, _endpoint
     with _lock:
         if _configured:
             return _tracer is not None
@@ -208,6 +210,7 @@ def configure(api_key: str | None = None, endpoint: str | None = None,
         if not api_key or not endpoint:
             log.debug("provekit tracing disabled: set PROVEKIT_API_KEY and PROVEKIT_ENDPOINT")
             return False
+        _api_key, _endpoint = api_key, endpoint.rstrip("/")
         try:
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
@@ -240,12 +243,14 @@ def _as_attr(v):
     return v if isinstance(v, (str, int, float, bool)) else _payload((v,), {})
 
 
-def trace(name: str | None = None, *, operation: str = "invoke_agent"):
+def trace(name: str | None = None, *, operation: str = "invoke_agent", session_id: str | None = None):
     """Decorate an agent entrypoint (or any function) so each call is captured. Everything
     that runs inside — instrumented LLM calls, pk.span() blocks — nests beneath it.
 
     @pk.trace(name="support-agent")
     def run_agent(q): ...
+
+    Pass `session_id` to group multi-turn runs (a conversation/thread) in the portal.
     """
     def deco(fn):
         span_name = name or getattr(fn, "__name__", "agent")
@@ -257,6 +262,8 @@ def trace(name: str | None = None, *, operation: str = "invoke_agent"):
             from opentelemetry.trace import Status, StatusCode
             with _tracer.start_as_current_span(span_name) as span:
                 span.set_attribute("gen_ai.operation.name", operation)
+                if session_id:
+                    span.set_attribute("session.id", str(session_id))
                 span.set_attribute("gen_ai.input.messages", _payload(args, kwargs))
                 try:
                     result = fn(*args, **kwargs)
@@ -305,3 +312,35 @@ def span(name: str, **attributes):
         except Exception as exc:
             sp.set_status(Status(StatusCode.ERROR, str(exc)))
             raise
+
+
+def score(name: str, *, score: float | None = None, value: str | None = None,
+          comment: str | None = None, trace_id: str | None = None) -> bool:
+    """Attach a feedback score to a trace from code — a scorer, a guardrail, a heuristic.
+
+        pk.score("relevance", score=0.9)          # from inside a traced run
+        pk.score("thumbs", value="up", comment="great answer")
+
+    Uses the current trace's id when `trace_id` is omitted. Fail-open: returns True if it
+    was sent, False if tracing is off or there's no active trace to attach to."""
+    if not configure():
+        return False
+    if trace_id is None:
+        try:
+            from opentelemetry import trace as _otel
+            ctx = _otel.get_current_span().get_span_context()
+            trace_id = format(ctx.trace_id, "032x") if ctx and ctx.trace_id else None
+        except Exception:
+            trace_id = None
+    if not trace_id:
+        log.debug("provekit score: no trace_id (call inside a traced run or pass trace_id=)")
+        return False
+    body = {"name": name, "score": score, "value": value, "comment": comment, "source": "sdk"}
+    try:
+        import httpx
+        httpx.post(f"{_endpoint}/v1/traces/{trace_id}/feedback", json=body,
+                   headers={"Authorization": f"Bearer {_api_key}"}, timeout=5, follow_redirects=False)
+        return True
+    except Exception as exc:  # never let a feedback post surface into the user's app
+        log.debug("provekit score post failed: %s", exc)
+        return False

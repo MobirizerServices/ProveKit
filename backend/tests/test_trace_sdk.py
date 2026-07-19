@@ -49,6 +49,42 @@ def test_auto_module_imports_and_is_a_no_op_without_env(monkeypatch):
     importlib.reload(provekit.auto)           # re-runs init() at import; must not raise
 
 
+def test_score_is_a_no_op_when_unconfigured(monkeypatch):
+    _reset()
+    monkeypatch.delenv("PROVEKIT_API_KEY", raising=False)
+    monkeypatch.delenv("PROVEKIT_ENDPOINT", raising=False)
+    assert pk.score("relevance", score=1.0) is False
+
+
+def test_score_posts_feedback_for_the_current_trace(monkeypatch):
+    _reset()
+    posts = []   # both the span export and the feedback post land here; pick the feedback one
+
+    def fake_post(url, json=None, headers=None, timeout=None, follow_redirects=None):
+        posts.append({"url": url, "json": json, "headers": headers})
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    @pk.trace(name="agent")
+    def run(q):
+        assert pk.score("relevance", score=0.8, comment="ok") is True
+        return "a"
+
+    pk.configure(api_key="pk_x", endpoint="http://p.test/", batch=False)
+    run("hi")
+    fb = next(p for p in posts if p["url"].endswith("/feedback"))
+    assert fb["url"].startswith("http://p.test/v1/traces/")
+    assert fb["json"] == {"name": "relevance", "score": 0.8, "value": None,
+                          "comment": "ok", "source": "sdk"}
+    assert fb["headers"]["Authorization"] == "Bearer pk_x"
+
+
+def test_score_without_active_trace_is_false(monkeypatch):
+    _reset()
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: None)
+    pk.configure(api_key="pk_x", endpoint="http://p.test", batch=False)
+    assert pk.score("x", score=1.0) is False   # no active span → nothing to attach to
+
+
 def test_decorated_call_ships_a_run_with_input_and_output(monkeypatch):
     _reset()
     captured = {}

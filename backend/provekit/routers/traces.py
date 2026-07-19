@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
-from ..models import Run, Workspace, iso_utc
+from ..models import Feedback, Run, Workspace, iso_utc
 from ..services import apikey, deploy, limits, otel
 from ..services.workspace import current_workspace
 
@@ -137,7 +137,7 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
     return [{"id": r.id, "trace_id": r.trace_id, "label": r.label, "type": r.type,
              "status": r.status, "duration_ms": r.duration_ms,
              "span_count": counts.get(r.trace_id, 1) if r.trace_id else 1,
-             "tokens": tokens.get(r.trace_id, 0),
+             "tokens": tokens.get(r.trace_id, 0), "session_id": r.session_id,
              "created_at": iso_utc(r.created_at)} for r in roots]
 
 
@@ -150,7 +150,67 @@ def _get_trace(db: Session, ws: Workspace, trace_id: str):
     return [{"id": s.id, "span_id": s.span_id, "parent_span_id": s.parent_span_id,
              "type": s.type, "label": s.label, "status": s.status, "duration_ms": s.duration_ms,
              "request": s.request, "result": s.result, "error": s.error,
-             "created_at": iso_utc(s.created_at)} for s in spans]
+             "session_id": s.session_id, "created_at": iso_utc(s.created_at)} for s in spans]
+
+
+# ---- feedback / scoring (attached to a whole trace) ----
+class _FeedbackIn(BaseModel):
+    name: str
+    score: float | None = None
+    value: str | None = None
+    comment: str | None = None
+    source: str = "human"
+
+
+def _add_feedback(db: Session, ws: Workspace, trace_id: str, data: _FeedbackIn) -> dict:
+    fb = Feedback(workspace_id=ws.id, trace_id=trace_id, name=(data.name or "")[:120],
+                  score=data.score, value=(data.value or "")[:200],
+                  comment=data.comment or "", source=(data.source or "human")[:16])
+    db.add(fb)
+    db.commit()
+    return _feedback_row(fb)
+
+
+def _feedback_row(fb: Feedback) -> dict:
+    return {"id": fb.id, "trace_id": fb.trace_id, "name": fb.name, "score": fb.score,
+            "value": fb.value, "comment": fb.comment, "source": fb.source,
+            "created_at": iso_utc(fb.created_at)}
+
+
+def _list_feedback(db: Session, ws: Workspace, trace_id: str) -> list[dict]:
+    rows = (db.query(Feedback)
+            .filter(Feedback.workspace_id == ws.id, Feedback.trace_id == trace_id)
+            .order_by(Feedback.id.desc()).all())
+    return [_feedback_row(f) for f in rows]
+
+
+@runs_router.post("/traces/{trace_id}/feedback")
+def add_feedback(trace_id: str, data: _FeedbackIn, db: Session = Depends(get_db),
+                 ws: Workspace = Depends(current_workspace)):
+    """Attach a human annotation/score to a trace from the portal."""
+    return _add_feedback(db, ws, trace_id, data)
+
+
+@runs_router.get("/traces/{trace_id}/feedback")
+def list_feedback(trace_id: str, db: Session = Depends(get_db),
+                  ws: Workspace = Depends(current_workspace)):
+    return _list_feedback(db, ws, trace_id)
+
+
+@router.post("/traces/{trace_id}/feedback")
+def add_feedback_by_key(trace_id: str, data: _FeedbackIn, request: Request,
+                        db: Session = Depends(get_db), authorization: str | None = Header(default=None)):
+    """Attach a score to a trace using the project key — what `pk.score()` and offline
+    evaluators post."""
+    ws = _resolve_ingest_ws(db, request, authorization)
+    return _add_feedback(db, ws, trace_id, data)
+
+
+@router.get("/traces/{trace_id}/feedback")
+def list_feedback_by_key(trace_id: str, request: Request, db: Session = Depends(get_db),
+                         authorization: str | None = Header(default=None)):
+    ws = _resolve_ingest_ws(db, request, authorization)
+    return _list_feedback(db, ws, trace_id)
 
 
 @runs_router.get("/traces")

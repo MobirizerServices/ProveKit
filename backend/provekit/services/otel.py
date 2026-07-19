@@ -69,6 +69,7 @@ def map_span(span: dict) -> dict:
     provider = _first(attrs, "gen_ai.provider.name", "gen_ai.system", "llm.provider")
     operation = _first(attrs, "gen_ai.operation.name")
     tool = _first(attrs, "gen_ai.tool.name")
+    session = _first(attrs, "session.id", "gen_ai.conversation.id", "thread.id", "session_id")
 
     prompt = _first(attrs, "gen_ai.input.messages", "gen_ai.prompt", "input.value",
                     "llm.input_messages", "input")
@@ -101,8 +102,24 @@ def map_span(span: dict) -> dict:
     # only needs per-span *offsets* within a trace (a small delta) — computed via BigInt.
     meta = {"provider": provider, "model": model, "usage": usage, "source": "otel",
             "start_ns": str(start)}
+    if session:
+        meta["session_id"] = session
     if tool:
         meta["tool"] = tool
+    # Deep span metadata the portal surfaces on an LLM span: invocation params + finish reason.
+    params = {}
+    for src, dst in (("gen_ai.request.temperature", "temperature"),
+                     ("gen_ai.request.top_p", "top_p"),
+                     ("gen_ai.request.max_tokens", "max_tokens")):
+        v = _first(attrs, src)
+        if v is not None:
+            params[dst] = v
+    if params:
+        meta["params"] = params
+    finish = _first(attrs, "gen_ai.response.finish_reasons", "gen_ai.response.finish_reason",
+                    "llm.response.finish_reason")
+    if finish is not None:
+        meta["finish_reason"] = finish
     events = []
     for ev in span.get("events") or []:
         ea = flatten_attrs(ev.get("attributes"))
@@ -122,6 +139,7 @@ def map_span(span: dict) -> dict:
         "trace_id": span.get("traceId") or "",
         "span_id": span.get("spanId") or "",
         "parent_span_id": span.get("parentSpanId") or "",
+        "session_id": session or "",
     }
 
 

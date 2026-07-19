@@ -1,18 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, TraceSpan, TraceSummary } from "@/lib/api";
-import { estimateCost, fmtCost } from "@/lib/cost";
 import TopNav from "@/components/TopNav";
-import TraceGraph from "@/components/TraceGraph";
+import TraceDetail from "@/components/TraceDetail";
 
-const TYPE_COLOR: Record<string, string> = {
-  agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
-};
-const LOG_COLOR: Record<string, string> = {
-  ERROR: "var(--red)", CRITICAL: "var(--red)", WARNING: "var(--amber)", INFO: "var(--blue)", DEBUG: "var(--muted)",
-};
+const WINDOWS: { label: string; hours: number }[] = [
+  { label: "All time", hours: 0 }, { label: "Last hour", hours: 1 },
+  { label: "Last 24h", hours: 24 }, { label: "Last 7 days", hours: 168 },
+];
 
 export default function TracesPage() {
   const [traces, setTraces] = useState<TraceSummary[]>([]);
@@ -20,14 +17,20 @@ export default function TracesPage() {
   const [spans, setSpans] = useState<TraceSpan[] | null>(null);
   const [origin, setOrigin] = useState("https://your-provekit-host");
   const [q, setQ] = useState("");
+  const [failuresOnly, setFailuresOnly] = useState(false);
+  const [windowHours, setWindowHours] = useState(0);
 
-  const load = () => api.traces().then(setTraces).catch(() => {});
+  const load = useCallback(() => {
+    api.traces({ status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined })
+      .then(setTraces).catch(() => {});
+  }, [failuresOnly, windowHours]);
+
   useEffect(() => {
     setOrigin(window.location.origin);
     load();
     const t = setInterval(load, 5000);   // live-ish: new traces stream in
     return () => clearInterval(t);
-  }, []);
+  }, [load]);
   useEffect(() => {
     if (!sel) { setSpans(null); return; }
     let cancelled = false;
@@ -37,6 +40,7 @@ export default function TracesPage() {
   }, [sel]);
 
   const fmt = (s?: string) => (s ? new Date(s).toLocaleString() : "");
+  const shown = traces.filter((t) => !q || (t.label || "").toLowerCase().includes(q.toLowerCase()));
 
   return (
     <>
@@ -48,15 +52,25 @@ export default function TracesPage() {
           calls, tools, and steps, nested as it actually ran.
         </p>
 
-        {traces.length === 0 ? (
+        {traces.length === 0 && !failuresOnly && !windowHours ? (
           <Onboarding origin={origin} />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: "74vh" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: "76vh" }}>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter traces…"
                 style={{ background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 }} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setFailuresOnly((v) => !v)} style={chip(failuresOnly)}
+                  title="Show only failed traces">Failures only</button>
+                <select value={windowHours} onChange={(e) => setWindowHours(Number(e.target.value))}
+                  style={{ ...chip(windowHours > 0), flex: 1, appearance: "none" }}>
+                  {WINDOWS.map((w) => <option key={w.hours} value={w.hours}>{w.label}</option>)}
+                </select>
+              </div>
               <div style={{ ...panel, padding: 0, overflowY: "auto" }}>
-              {traces.filter((t) => !q || (t.label || "").toLowerCase().includes(q.toLowerCase())).map((t) => (
+              {shown.length === 0 ? (
+                <div className="muted" style={{ padding: 14, fontSize: 12.5 }}>No traces match.</div>
+              ) : shown.map((t) => (
                 <button key={t.trace_id || t.id} onClick={() => setSel(t.trace_id)} style={row(sel === t.trace_id)}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontWeight: 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -66,6 +80,7 @@ export default function TracesPage() {
                   </div>
                   <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
                     {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {fmt(t.created_at)}
+                    {t.session_id ? <span style={{ color: "var(--purple)" }}> · ◆ {t.session_id}</span> : ""}
                   </div>
                 </button>
               ))}
@@ -78,7 +93,7 @@ export default function TracesPage() {
               ) : !spans ? (
                 <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
               ) : (
-                <TraceDetail spans={spans} />
+                <TraceDetail spans={spans} traceId={sel ?? undefined} />
               )}
             </div>
           </div>
@@ -96,8 +111,10 @@ function Onboarding({ origin }: { origin: string }) {
 PROVEKIT_API_KEY=pk_...          # ← create one in Project keys
 PROVEKIT_ENDPOINT=${origin}
 
-import provekit.trace as pk
+import provekit.auto              # one import — captures everything below it
 
+# (optional) group a run under a named root:
+import provekit.trace as pk
 @pk.trace(name="my-agent")
 def run_agent(question: str) -> str:
     ...   # your agent — OpenAI/Anthropic calls capture themselves`;
@@ -131,174 +148,6 @@ def run_agent(question: str) -> str:
   );
 }
 
-function TraceDetail({ spans }: { spans: TraceSpan[] }) {
-  const [view, setView] = useState<"flow" | "waterfall">("flow");
-  const ids = new Set(spans.map((s) => s.span_id));
-  const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
-  const [picked, setPicked] = useState<string | null>(root?.span_id ?? null);
-  const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
-  const totalCost = fmtCost(spans.reduce((n, s) => n + (estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens) || 0), 0) || null);
-  const sel = spans.find((s) => s.span_id === picked) || root;
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
-        <div style={{ minWidth: 0 }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>{root?.label || "trace"}</span>
-          <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
-            {spans.length} span{spans.length === 1 ? "" : "s"} · {root?.duration_ms ?? 0}ms{totalTok ? ` · ${totalTok} tokens` : ""}{totalCost ? ` · ${totalCost}` : ""}
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2, flexShrink: 0 }}>
-          {(["flow", "waterfall"] as const).map((v) => (
-            <button key={v} onClick={() => setView(v)} style={toggleBtn(view === v)}>
-              {v === "flow" ? "Flow" : "Waterfall"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {view === "flow" ? (
-        <>
-          <TraceGraph spans={spans} selected={picked} onSelect={setPicked} />
-          {sel && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{sel.label}</div>
-              <div className="muted mono" style={{ fontSize: 11, margin: "4px 0 10px", display: "flex", flexWrap: "wrap", gap: "3px 14px" }}>
-                <span>{sel.type}</span>
-                {sel.request?.provider && <span>provider={sel.request.provider}</span>}
-                {sel.request?.model && <span>model={sel.request.model}</span>}
-                {sel.request?.operation && <span>op={sel.request.operation}</span>}
-                <span style={{ color: sel.status === "failed" ? "var(--red)" : undefined }}>{sel.status}</span>
-                <span>{sel.duration_ms}ms</span>
-                {tokens(sel) && <span>{tokens(sel)}</span>}
-                {(() => {
-                  const c = fmtCost(estimateCost(sel.request?.model, sel.result?.meta?.usage?.input_tokens, sel.result?.meta?.usage?.output_tokens));
-                  return c ? <span title="estimated cost">{c}</span> : null;
-                })()}
-              </div>
-              <Field label="Input">{textOf(sel.request?.input)}</Field>
-              <Field label="Output">{textOf(sel.result?.text)}</Field>
-              {sel.error && <Field label="Error">{sel.error}</Field>}
-              {Array.isArray(sel.result?.meta?.events) && sel.result.meta.events.length > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  <div className="muted" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>Logs</div>
-                  <div style={{ ...pre, padding: 8 }}>
-                    {sel.result.meta.events.map((e: any, i: number) => (
-                      <div key={i} style={{ display: "flex", gap: 8 }}>
-                        <span style={{ color: LOG_COLOR[e.level] || "var(--muted)", fontWeight: 600, minWidth: 44 }}>{e.level}</span>
-                        <span>{e.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      ) : (
-        <Tree spans={spans} />
-      )}
-    </div>
-  );
-}
-
-function toggleBtn(active: boolean): React.CSSProperties {
-  return {
-    fontSize: 12, padding: "4px 13px", borderRadius: 6, cursor: "pointer", border: "none",
-    background: active ? "var(--panel)" : "transparent",
-    color: active ? "var(--text)" : "var(--muted)", fontWeight: active ? 600 : 400,
-  };
-}
-
-function Tree({ spans }: { spans: TraceSpan[] }) {
-  const [open, setOpen] = useState<string | null>(spans[0]?.span_id ?? null);
-  const kids: Record<string, TraceSpan[]> = {};
-  const ids = new Set(spans.map((s) => s.span_id));
-  for (const s of spans) {
-    const p = s.parent_span_id && ids.has(s.parent_span_id) ? s.parent_span_id : "__root__";
-    (kids[p] ||= []).push(s);
-  }
-
-  // Time-proportional waterfall: epoch-ns overflow JS floats, so anchor at the trace start
-  // and work in BigInt deltas (a trace spans at most seconds, well within Number range).
-  const startNs = (s: TraceSpan): bigint | null => {
-    const v = s.result?.meta?.start_ns;
-    return v ? BigInt(v) : null;
-  };
-  const starts = spans.map(startNs).filter((x): x is bigint => x !== null);
-  const t0 = starts.length ? starts.reduce((a, b) => (b < a ? b : a)) : 0n;
-  let totalNs = 1;
-  for (const s of spans) {
-    const st = startNs(s);
-    if (st === null) continue;
-    const end = Number(st - t0) + (s.duration_ms || 0) * 1e6;
-    if (end > totalNs) totalNs = end;
-  }
-  const bar = (s: TraceSpan) => {
-    const st = startNs(s);
-    if (st === null) return null;
-    const left = (Number(st - t0) / totalNs) * 100;
-    const width = Math.max(((s.duration_ms || 0) * 1e6 / totalNs) * 100, 1.2);
-    return { left: Math.min(left, 99), width: Math.min(width, 100 - Math.min(left, 99)) };
-  };
-
-  const render = (parent: string, depth: number): React.ReactNode =>
-    (kids[parent] || []).map((s) => {
-      const b = bar(s);
-      return (
-        <div key={s.span_id}>
-          <button onClick={() => setOpen(open === s.span_id ? null : s.span_id)} style={spanRow(open === s.span_id)}>
-            <span style={{ paddingLeft: depth * 16, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, flex: "0 0 46%" }}>
-              <span style={badge(s.type)}>{s.type}</span>
-              <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
-            </span>
-            <span style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", borderRadius: 4 }}>
-              {b && <span style={{ position: "absolute", top: 3, height: 10, borderRadius: 3,
-                left: `${b.left}%`, width: `${b.width}%`, minWidth: 3,
-                background: s.status === "failed" ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)"), opacity: 0.85 }} />}
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-              {tokens(s) && <span className="muted mono" style={{ fontSize: 10.5 }} title="input → output tokens">{tokens(s)}</span>}
-              <span className="muted" style={{ fontSize: 11, width: 54, textAlign: "right" }}>{s.duration_ms}ms</span>
-            </span>
-          </button>
-          {open === s.span_id && (
-            <div style={{ padding: `4px 0 10px ${depth * 16 + 14}px` }}>
-              {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
-              <Field label="Input">{textOf(s.request?.input)}</Field>
-              <Field label="Output">{textOf(s.result?.text)}</Field>
-              {s.error && <Field label="Error">{s.error}</Field>}
-            </div>
-          )}
-          {render(s.span_id, depth + 1)}
-        </div>
-      );
-    });
-  return <div>{render("__root__", 0)}</div>;
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const empty = !children || (typeof children === "string" && !children.trim());
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <div className="muted" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>{label}</div>
-      <pre style={pre}>{empty ? <span className="muted">—</span> : children}</pre>
-    </div>
-  );
-}
-
-function textOf(v: any): string {
-  if (v == null) return "";
-  return typeof v === "string" ? v : JSON.stringify(v, null, 2);
-}
-
-function tokens(s: TraceSpan): string | null {
-  const u = s.result?.meta?.usage;
-  if (!u || u.input_tokens == null) return null;
-  return `${u.input_tokens}→${u.output_tokens ?? 0} tok`;
-}
-
 const panel: React.CSSProperties = {
   background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16,
 };
@@ -315,17 +164,11 @@ function row(active: boolean): React.CSSProperties {
     border: "none", borderBottom: "1px solid var(--border)", cursor: "pointer",
   };
 }
-function spanRow(active: boolean): React.CSSProperties {
+function chip(active: boolean): React.CSSProperties {
   return {
-    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
-    textAlign: "left", padding: "7px 8px", borderRadius: 7, cursor: "pointer", color: "var(--text)",
-    background: active ? "var(--panel-2)" : "transparent", border: "1px solid transparent",
-  };
-}
-function badge(type: string): React.CSSProperties {
-  return {
-    fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3,
-    padding: "2px 6px", borderRadius: 5, flexShrink: 0,
-    color: TYPE_COLOR[type] || "var(--muted)", border: `1px solid ${TYPE_COLOR[type] || "var(--border-strong)"}`,
+    fontSize: 12, padding: "6px 11px", borderRadius: 8, cursor: "pointer",
+    background: active ? "var(--accent-soft)" : "var(--panel-2)",
+    color: active ? "var(--accent)" : "var(--muted)",
+    border: `1px solid ${active ? "var(--accent)" : "var(--border-strong)"}`,
   };
 }

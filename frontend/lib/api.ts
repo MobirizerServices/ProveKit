@@ -18,11 +18,19 @@ export interface RunDetail {
 // One trace = a decorated run and everything nested beneath it.
 export interface TraceSummary {
   id: number; trace_id: string; label: string; type: string; status: string;
-  duration_ms: number; span_count: number; tokens?: number; created_at: string;
+  duration_ms: number; span_count: number; tokens?: number; session_id?: string; created_at: string;
 }
 export interface TraceSpan extends RunDetail {
-  span_id: string; parent_span_id: string;
+  span_id: string; parent_span_id: string; session_id?: string;
 }
+
+// A score or annotation attached to a whole trace (human, sdk, or eval).
+export interface Feedback {
+  id: number; trace_id: string; name: string; score: number | null; value: string;
+  comment: string; source: string; created_at: string;
+}
+
+export interface TraceQuery { status?: string; window_hours?: number; limit?: number; }
 
 // Redirect to /login on an unexpected 401 (expired session). Auth calls opt out via
 // `noAuthRedirect` so the login page can surface "invalid credentials" itself.
@@ -59,8 +67,23 @@ export const api = {
   runs: () => j<RunSummary[]>("/api/runs"),
   getRun: (id: number) => j<RunDetail>(`/api/runs/${id}`),
   // traces (a run + its nested spans, as a tree)
-  traces: () => j<TraceSummary[]>("/api/traces"),
+  traces: (query?: TraceQuery) => {
+    const p = new URLSearchParams();
+    if (query?.status) p.set("status", query.status);
+    if (query?.window_hours) p.set("window_hours", String(query.window_hours));
+    if (query?.limit) p.set("limit", String(query.limit));
+    const qs = p.toString();
+    return j<TraceSummary[]>(`/api/traces${qs ? `?${qs}` : ""}`);
+  },
   trace: (traceId: string) => j<TraceSpan[]>(`/api/traces/${encodeURIComponent(traceId)}`),
+  // one shared, public (read-only) trace by signed token
+  sharedTrace: (token: string) => j<TraceSpan[]>(`/v1/share/${encodeURIComponent(token)}`),
+  // feedback / scoring on a trace
+  feedback: (traceId: string) => j<Feedback[]>(`/api/traces/${encodeURIComponent(traceId)}/feedback`),
+  addFeedback: (traceId: string, body: { name: string; score?: number | null; value?: string; comment?: string }) =>
+    j<Feedback>(`/api/traces/${encodeURIComponent(traceId)}/feedback`, { method: "POST", body: JSON.stringify(body) }),
+  // mint a shareable link token for a trace
+  shareTrace: (traceId: string) => j<{ token: string; trace_id: string }>(`/api/traces/${encodeURIComponent(traceId)}/share`, { method: "POST" }),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {
     try { const r = await fetch(`${BASE}/healthz`, { credentials: "include" }); return r.ok; } catch { return false; }

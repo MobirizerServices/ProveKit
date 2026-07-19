@@ -7,6 +7,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticPages = [
     { url: "/", priority: 1.0 },
     { url: "/blog", priority: 0.8 },
+    { url: "/community", priority: 0.5 },
     { url: "/login", priority: 0.3 },
     { url: "/signup", priority: 0.5 },
     { url: "/privacy", priority: 0.2 },

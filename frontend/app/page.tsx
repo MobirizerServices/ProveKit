@@ -59,6 +59,7 @@ export default function Landing() {
           <div className="lp-trust">
             <span>◆ One SDK, zero lock-in</span><span>◆ Traces · Evals · Dashboards</span><span>◆ Docker / Compose</span>
           </div>
+          <p className="lp-whofor">For engineers building agents on OpenAI, Anthropic, LangChain, LlamaIndex, or CrewAI.</p>
         </div>
         <TracePreview />
       </section>
@@ -289,6 +290,7 @@ function FlowVisual() {
         ))}
         {Object.entries(N).map(([id, n]) => (
           <g key={id}>
+            <title>{n.t} · {n.l}</title>
             <rect x={n.x} y={n.y} width={W} height={H} rx={10} className={`lp-fnode ${id === "f" ? "fail" : ""}`}
               style={{ stroke: id === "f" ? "var(--red)" : TYPE_C[n.t] }} />
             <text x={n.x + 12} y={n.y + 26} className="lp-ftext">
@@ -362,7 +364,7 @@ const QUOTES = [
 const FOOTER = [
   { h: "Product", links: [{ t: "Features", href: "/#features" }, { t: "Agent flow", href: "/#flow" }, { t: "Dashboard", href: "/dashboard" }, { t: "Pricing", href: "/#faq" }] },
   { h: "Resources", links: [{ t: "Blog", href: "/blog" }, { t: "Docs", href: "https://github.com/MobirizerServices/ProveKit/tree/main/docs" }, { t: "Changelog", href: "https://github.com/MobirizerServices/ProveKit/blob/main/CHANGELOG.md" }] },
-  { h: "Community", links: [{ t: "GitHub", href: "https://github.com/MobirizerServices/ProveKit" }, { t: "Discussions", href: "https://github.com/MobirizerServices/ProveKit/discussions" }, { t: "Issues", href: "https://github.com/MobirizerServices/ProveKit/issues" }] },
+  { h: "Community", links: [{ t: "Community", href: "/community" }, { t: "GitHub", href: "https://github.com/MobirizerServices/ProveKit" }, { t: "Discussions", href: "https://github.com/MobirizerServices/ProveKit/discussions" }] },
   { h: "Legal", links: [{ t: "Privacy", href: "/privacy" }, { t: "Terms", href: "/terms" }, { t: "Security", href: "https://github.com/MobirizerServices/ProveKit/blob/main/SECURITY.md" }] },
 ];
 
@@ -403,6 +405,8 @@ function LandingStyles() {
       .lp-btn-primary { background: var(--accent); color: #08120b; font-weight: 600; }
       .lp-btn-primary:hover { filter: brightness(1.06); }
       .lp-trust { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 26px; font-size: 12.5px; color: var(--faint); }
+      .lp-whofor { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+      .lp-fnode { cursor: default; }
 
       .lp-preview { border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: var(--sh-2); }
       .lp-preview-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-2); }

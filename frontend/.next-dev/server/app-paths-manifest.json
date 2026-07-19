@@ -3,5 +3,6 @@
   "/page": "app/page.js",
   "/api-keys/page": "app/api-keys/page.js",
   "/admin/page": "app/admin/page.js",
-  "/traces/page": "app/traces/page.js"
+  "/traces/page": "app/traces/page.js",
+  "/blog/[slug]/page": "app/blog/[slug]/page.js"
 }

@@ -36,6 +36,12 @@ def _usage_tokens(result) -> int:
 @router.get("")
 def metrics(window_hours: int = 24, db: Session = Depends(get_db),
             ws: Workspace = Depends(current_workspace)):
+    return compute_metrics(db, ws, window_hours)
+
+
+def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
+    """The dashboard aggregate. Also called by the alerts evaluator, so it's a plain
+    function, not just a route handler."""
     cutoff = _now() - timedelta(hours=window_hours) if window_hours > 0 else None
     by_day = window_hours == 0 or window_hours > 48
 

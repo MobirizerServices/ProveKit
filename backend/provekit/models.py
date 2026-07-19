@@ -152,6 +152,23 @@ class ExperimentResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class Alert(Base):
+    """A threshold rule over the dashboard metrics. When breached (and outside its cooldown)
+    it notifies by email. Evaluated on demand via POST /api/alerts/check (or a cron)."""
+    __tablename__ = "alerts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(160), default="")
+    metric: Mapped[str] = mapped_column(String(32))   # error_rate | latency_p95_ms | trace_count | ...
+    comparator: Mapped[str] = mapped_column(String(4), default="gt")  # gt | lt
+    threshold: Mapped[float] = mapped_column(Float, default=0.0)
+    window_hours: Mapped[int] = mapped_column(Integer, default=24)
+    email: Mapped[str] = mapped_column(String(255), default="")
+    enabled: Mapped[bool] = mapped_column(default=True)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Feedback(Base):
     """A score or annotation attached to a whole trace — a human thumbs-up, an LLM-judge
     score, or an offline-eval result. Many per trace; the portal shows them on the run."""

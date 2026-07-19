@@ -1,89 +1,84 @@
-# Deploying to provekit.online
+# Deploying provekit.online (dedicated Contabo VPS)
 
-This matches the live gateway contract (`provekit.online.conf`): an external **nginx** on a
-separate box terminates TLS and proxies to the app box `192.168.1.2`:
+ProveKit runs on its **own** VPS — self-contained, exactly like CereBroZen runs on its. A
+Caddy container owns ports 80/443 and auto-provisions a Let's Encrypt cert for
+`provekit.online`; every other service (frontend, backend, Postgres, Redis) is internal to the
+compose network. This is `compose.prod.yml` + `Caddyfile`.
 
 ```
-https://provekit.online/        → 192.168.1.2:3000   (frontend)
-https://provekit.online/api/*   → 192.168.1.2:8000   (backend)
-http → https (301);  admin/api/mcp subdomains → 404 (not wired yet)
+DNS: provekit.online ──▶ <your VPS IP>
+     ┌──────────── VPS ────────────┐
+     │ caddy  :80/:443 (auto-TLS)   │
+     │   ├─ /api /v1 /healthz → backend:8000
+     │   └─ everything else   → frontend:3000
+     │ + postgres, redis (internal) │
+     └──────────────────────────────┘
 ```
 
-Only `/api/*` goes to the backend. **`/v1/*` (the SDK trace-ingest endpoint) and `/healthz`
-go to the frontend**, which forwards them to the backend via the Next rewrite
-(`API_PROXY_TARGET`). So the app is deployed with the frontend on **3000** and the backend on
-**8000**, both bound `0.0.0.0`, and `compose.gateway.yml` wires the internal forwarding.
+## 1. DNS
 
-> If Pawan later routes `/v1/*` + `/healthz` straight to `:8000` (or dedicates
-> `api.provekit.online → :8000`), the double-hop disappears and ingest hits the backend
-> directly — no app change needed, it just gets one hop faster.
+Point the domain (and drop `www` unless you have a record) at the new VPS:
 
-## 1. Configure
+```
+provekit.online.   A   <VPS_IP>
+```
+
+Caddy needs this resolving + ports 80/443 open before it can issue the cert.
+
+## 2. Secrets
 
 ```bash
+git clone https://github.com/MobirizerServices/ProveKit && cd ProveKit
 cp deploy/provekit.online.env.example deploy/provekit.online.env   # gitignored
-# then edit deploy/provekit.online.env:
-#   SECRET_KEY   = python -c "import secrets;print(secrets.token_urlsafe(48))"
-#   DATABASE_URL = postgres password must match POSTGRES_PASSWORD in compose.gateway.yml
-#   SMTP_PASSWORD= from the BigRock/Titan panel  (info@provekit.online)
+# Fill in: SECRET_KEY, POSTGRES_PASSWORD, and the WORKING Titan SMTP password.
+# DOMAIN=provekit.online is already set.
 ```
 
-Set the same DB password in `compose.gateway.yml` (`POSTGRES_PASSWORD`) and in
-`DATABASE_URL` inside the env file.
-
-## 2. Bring it up (on 192.168.1.2)
+## 3. Bring it up
 
 ```bash
-docker compose -f compose.gateway.yml up -d --build
+docker compose --env-file deploy/provekit.online.env -f compose.prod.yml up -d --build
 ```
 
-This starts Postgres, Redis, the backend (`:8000`), and the frontend (`:3000`), all published
-on `0.0.0.0` so the LAN nginx can reach them. The backend runs its migrations on boot.
+That starts Postgres, Redis, the backend (`:8000`, internal), the frontend (`:3000`, internal),
+and Caddy (`:80/:443`, public). The backend runs migrations on boot; Caddy issues the TLS cert
+automatically. `HOSTED=true` is set, so the portal requires login and the middleware gate is on.
 
-## 3. Validate
-
-On the box:
+## 4. Validate
 
 ```bash
-curl -s http://localhost:3000/ | head              # frontend responds
-curl -s http://localhost:8000/api/auth/me          # backend responds under /api
-curl -s http://localhost:8000/healthz              # {"ok":true,...}
-lsof -i :3000 -i :8000                              # both bound *:3000 / *:8000 (not 127.0.0.1)
+curl -sS -o /dev/null -w "%{http_code}\n" https://provekit.online/          # 200/307, valid padlock
+curl -sS https://provekit.online/api/auth/me                                # JSON (401/200), not HTML
+curl -sS -o /dev/null -w "%{http_code}\n" https://provekit.online/healthz   # 200
 ```
 
-Externally (phone on mobile data):
+Then in a browser: sign up → create a project → grab a key → run an agent with
+`PROVEKIT_ENDPOINT=https://provekit.online` and confirm the trace shows in the portal.
 
-```bash
-curl -s https://provekit.online/ | head                     # valid padlock, frontend
-curl -s https://provekit.online/api/auth/me                 # backend via /api
-# SDK ingest reaches the backend through the frontend rewrite:
-curl -s -o /dev/null -w "%{http_code}\n" https://provekit.online/healthz    # 200
-```
-
-## 4. Point an agent at it
+## 5. Point an agent at it
 
 ```bash
 pip install "provekit[trace]"
-export PROVEKIT_ENDPOINT=https://provekit.online     # SDK posts to /v1/traces
-export PROVEKIT_API_KEY=pk_...                        # created in the portal
-python -c "import provekit.auto; ..."                # run your agent
+export PROVEKIT_ENDPOINT=https://provekit.online
+export PROVEKIT_API_KEY=pk_...          # from the portal
+python -c "import provekit.auto; ..."   # your agent
 ```
 
-The SDK's `POST https://provekit.online/v1/traces` → nginx `location /` → frontend:3000 →
-Next rewrite → backend:8000. Verify the run appears in the portal Traces view.
+Caddy routes `/v1/traces` straight to the backend, so ingest is a direct path (no proxy hops).
 
-## 5. Email
+## Updates
 
-`info@provekit.online` (Titan via BigRock). Use **port 587 + STARTTLS** — the mailer uses
-STARTTLS, not implicit-SSL 465. Config lives in `deploy/provekit.online.env` (secret, never
-committed). **DKIM/SPF are pending on Pawan's side**, so until those DNS records exist mail
-will land in spam — re-test deliverability after they go live.
+```bash
+git pull && docker compose --env-file deploy/provekit.online.env -f compose.prod.yml up -d --build
+docker image prune -f
+```
 
-## 6. Notes
+## Notes
 
-- `HOSTED=true` is set for both services: the backend requires login, and the frontend
-  middleware redirects portal routes to `/login` without a session.
-- `SUPERUSER_EMAILS=info@provekit.online` bootstraps the `/admin` console for that account.
-- `MAX_BODY_BYTES=25000000` (nginx allows 50 MB) covers large trace batches.
-- Gateway-layer failures (SSL, subdomain 404s, 502 with the service up) → Pawan. App-layer
-  issues are ours.
+- **Own VPS = simplest.** Ignore `compose.gateway.yml` (external-nginx / home-box) and
+  `compose.contabo.yml` + `deploy/switch.sh` (co-hosting on cere's VPS) — those were for other
+  topologies. On a dedicated box, `compose.prod.yml` is all you need.
+- **Superadmin:** `SUPERUSER_EMAILS=info@provekit.online` bootstraps the `/admin` console.
+- **Email:** the Titan SMTP password currently fails auth (535) — fix it in the BigRock/Titan
+  panel and update the env, or password-reset / verification mail won't send. Also add SPF/DKIM
+  DNS records or mail lands in spam.

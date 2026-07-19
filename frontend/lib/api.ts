@@ -32,6 +32,9 @@ export interface Feedback {
 
 export interface TraceQuery { status?: string; window_hours?: number; limit?: number; }
 
+export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; created_at: string; }
+export interface Member { user_id: number; email: string; name: string; role: string; }
+
 export interface Metrics {
   window_hours: number; trace_count: number; error_count: number; error_rate: number;
   latency_p50_ms: number; latency_p95_ms: number; total_tokens: number;
@@ -48,12 +51,28 @@ export interface Experiment {
   result_count: number; mean_score: number | null; scorer_means: Record<string, number>;
 }
 
+// The active project id (persisted client-side). Sent as X-Project-Id so every request is
+// scoped to the selected project; the backend validates membership and falls back to the
+// user's default, so a stale value is harmless.
+const PROJECT_KEY = "pk_project";
+export function getProjectId(): string | null {
+  return typeof window === "undefined" ? null : localStorage.getItem(PROJECT_KEY);
+}
+export function setProjectId(id: number | string | null): void {
+  if (typeof window === "undefined") return;
+  if (id == null) localStorage.removeItem(PROJECT_KEY);
+  else localStorage.setItem(PROJECT_KEY, String(id));
+}
+
 // Redirect to /login on an unexpected 401 (expired session). Auth calls opt out via
 // `noAuthRedirect` so the login page can surface "invalid credentials" itself.
 async function j<T>(path: string, opts?: RequestInit & { noAuthRedirect?: boolean }): Promise<T> {
   const { noAuthRedirect, ...init } = opts || {};
+  const pid = getProjectId();
   const res = await fetch(`${BASE}${path}`, {
-    credentials: "include", headers: { "Content-Type": "application/json" }, ...init,
+    credentials: "include",
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init.headers || {}), ...(pid ? { "X-Project-Id": pid } : {}) },
   });
   if (!res.ok) {
     if (res.status === 401 && !noAuthRedirect && typeof window !== "undefined" && !location.pathname.startsWith("/login")) {
@@ -111,6 +130,14 @@ export const api = {
   addDatasetItemFromTrace: (id: number, trace_id: string) => j<DatasetItem>(`/api/datasets/${id}/items/from-trace`, { method: "POST", body: JSON.stringify({ trace_id }) }),
   // experiments
   experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
+  // projects (workspaces)
+  projects: () => j<Project[]>("/api/projects"),
+  createProject: (name: string) => j<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),
+  renameProject: (id: number, name: string) => j<{ id: number; name: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  deleteProject: (id: number) => j(`/api/projects/${id}`, { method: "DELETE" }),
+  members: (id: number) => j<Member[]>(`/api/projects/${id}/members`),
+  addMember: (id: number, email: string, role = "member") => j<Member>(`/api/projects/${id}/members`, { method: "POST", body: JSON.stringify({ email, role }) }),
+  removeMember: (id: number, userId: number) => j(`/api/projects/${id}/members/${userId}`, { method: "DELETE" }),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {
     try { const r = await fetch(`${BASE}/healthz`, { credentials: "include" }); return r.ok; } catch { return false; }

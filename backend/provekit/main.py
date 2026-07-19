@@ -16,7 +16,7 @@ from .observability import (
     init_sentry,
     setup_logging,
 )
-from .routers import alerts, apikeys, auth, datasets, experiments, metrics, traces
+from .routers import alerts, apikeys, auth, datasets, experiments, metrics, projects, traces
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -87,6 +87,7 @@ app.include_router(experiments.router)
 app.include_router(experiments.key_router)
 app.include_router(metrics.router)
 app.include_router(alerts.router)
+app.include_router(projects.router)
 
 
 @app.get("/")

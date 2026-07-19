@@ -2,7 +2,7 @@
 current_workspace is the dependency every tenant-scoped router uses to isolate data."""
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -23,7 +23,22 @@ def get_or_create_default_workspace(db: Session, user) -> Workspace:
     return w
 
 
-def current_workspace(user=Depends(get_current_user), db: Session = Depends(get_db)) -> Workspace:
+def is_member(db: Session, workspace_id: int, user_id: int) -> WorkspaceMember | None:
+    return (db.query(WorkspaceMember)
+            .filter(WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.user_id == user_id)
+            .first())
+
+
+def current_workspace(request: Request, user=Depends(get_current_user),
+                      db: Session = Depends(get_db)) -> Workspace:
+    """The active project. A client selects one via the `X-Project-Id` header; we honor it
+    only if the user is a member (so the header can't be used to reach another tenant's
+    data). With no/invalid header, fall back to the user's default project."""
+    pid = request.headers.get("X-Project-Id")
+    if pid and pid.isdigit() and is_member(db, int(pid), user.id):
+        ws = db.get(Workspace, int(pid))
+        if ws:
+            return ws
     return get_or_create_default_workspace(db, user)
 
 

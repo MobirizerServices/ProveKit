@@ -38,22 +38,22 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     except Exception:
         return {"partialSuccess": {"rejectedSpans": 0, "errorMessage": "invalid JSON"}}
     rows = otel.ingest(payload)
-    if get_settings().redact_pii:
+    if ws.redact_pii or get_settings().redact_pii:   # per-project toggle, or the global default
         rows = [redact.scrub_run(kw) for kw in rows]
     for kw in rows:
         db.add(Run(workspace_id=ws.id, **kw))
     if rows:
         db.commit()
-        _prune_runs(db, ws.id)        # enforce retention so the table doesn't grow forever
+        _prune_runs(db, ws)           # enforce retention so the table doesn't grow forever
     return {"partialSuccess": {}}
 
 
-def _prune_runs(db: Session, ws_id: int) -> None:
-    """Keep only the newest `runs_retention` spans for a project; delete the rest."""
-    keep = get_settings().runs_retention
+def _prune_runs(db: Session, ws: Workspace) -> None:
+    """Keep only the newest N spans for a project (its own retention, or the global default)."""
+    keep = ws.retention if ws.retention and ws.retention > 0 else get_settings().runs_retention
     if keep <= 0:
         return
-    stale = [r.id for r in db.query(Run.id).filter(Run.workspace_id == ws_id)
+    stale = [r.id for r in db.query(Run.id).filter(Run.workspace_id == ws.id)
              .order_by(Run.id.desc()).offset(keep).all()]
     if stale:
         db.query(Run).filter(Run.id.in_(stale)).delete(synchronize_session=False)

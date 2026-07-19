@@ -2,6 +2,26 @@
 
 All notable changes to ProveKit. This project is pre-1.0; expect breaking changes.
 
+## 0.5.0 — Multiple projects, admin console, and a real landing page
+
+### Projects (multi-tenant)
+- **Create, switch, rename, and delete projects** — each an isolated workspace with its own
+  keys, traces, datasets, experiments, and members. A project picker lives in the nav; the
+  client sends the selection as `X-Project-Id` (membership-validated server-side).
+- **Members & roles** — invite teammates by email, set owner/member, remove (with last-owner
+  protection). A **/settings** page manages name, members, and per-project data settings.
+- **Per-project data settings** — span **retention** and **PII masking** overrides per project
+  (fall back to the global defaults).
+
+### Admin
+- **Platform superadmin console** (`/admin`) — a global operator view of every user and
+  project: counts, a users table (grant/revoke superuser), and an all-projects table. Gated by
+  a superuser flag or a bootstrap `SUPERUSER_EMAILS` config entry.
+
+### Landing
+- A **world-class landing page** — hero with a live trace-preview card, feature grid, quickstart
+  steps, and CTAs. Theme-aware, responsive, self-contained.
+
 ## 0.4.0 — Evaluation, dashboards, alerts, PII redaction
 
 ProveKit grows from tracing into the full loop: capture → curate → **evaluate**, plus

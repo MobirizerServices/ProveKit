@@ -1,0 +1,8 @@
+{
+  "/api-keys/page": "app/api-keys/page.js",
+  "/page": "app/page.js",
+  "/datasets/page": "app/datasets/page.js",
+  "/settings/page": "app/settings/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/admin/page": "app/admin/page.js"
+}

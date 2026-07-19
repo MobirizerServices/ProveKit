@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     # input/output/error before it's stored. Off by default; a safety net for hosted use.
     redact_pii: bool = False
 
+    # Bootstrap platform operators: any account whose email is in this comma-list is treated
+    # as a superuser (admin console), even before the DB flag is set. e.g. "you@co.com".
+    superuser_emails: str = ""
+
+    @property
+    def superuser_email_list(self) -> list[str]:
+        return [e.strip().lower() for e in self.superuser_emails.split(",") if e.strip()]
+
     # Quotas (protect shared infra). 0 disables a given limit.
     ingest_rate_per_min: int = 600     # trace-ingest requests per project per minute
     login_attempts_per_min: int = 10   # login attempts per email+IP per minute

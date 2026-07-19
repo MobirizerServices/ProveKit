@@ -1,0 +1,1 @@
+self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/Users/pawankumar/Desktop/workspace/ProveKit/frontend/app/layout\":[\"static/media/32b04a225cda6443-s.p.woff2\",\"static/media/558ca1a6aa3cb55e-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"

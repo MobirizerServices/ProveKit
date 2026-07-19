@@ -70,6 +70,9 @@ export default function TopNav() {
           {LINKS.map((l) => (
             <Link key={l.href} href={l.href} className={`tn-link ${is(l.href) ? "on" : ""}`}>{l.label}</Link>
           ))}
+          {me?.is_superuser && (
+            <Link href="/admin" className={`tn-link ${is("/admin") ? "on" : ""}`}>Admin</Link>
+          )}
         </nav>
         <div style={{ flex: 1 }} />
         {me && !isLocal && (

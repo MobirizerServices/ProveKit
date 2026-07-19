@@ -37,6 +37,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), default="")
     auth_provider: Mapped[str] = mapped_column(String(32), default="password")  # password | github | local
     email_verified: Mapped[bool] = mapped_column(default=False)
+    is_superuser: Mapped[bool] = mapped_column(default=False)   # platform operator (admin console)
     # Bumped on password reset to revoke every previously-issued token (sessions + the
     # just-used reset link): tokens embed the version and are rejected once it moves on.
     token_version: Mapped[int] = mapped_column(default=0)
@@ -51,6 +52,9 @@ class Workspace(Base):
     owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     # Bearer token for unattended OTLP trace ingest (exporters can't send cookies).
     ingest_key_hash: Mapped[str] = mapped_column(String(128), default="", index=True)
+    # Per-project overrides (0 / False → fall back to the global config default).
+    retention: Mapped[int] = mapped_column(Integer, default=0)      # keep last N spans; 0 = global
+    redact_pii: Mapped[bool] = mapped_column(default=False)         # mask PII on ingest
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

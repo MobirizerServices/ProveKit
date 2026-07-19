@@ -3,7 +3,7 @@
 // cookies are first-party. Set NEXT_PUBLIC_API_BASE only for a split-domain setup.
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
-export interface Me { id: number; email: string; name: string; auth_provider: string; }
+export interface Me { id: number; email: string; name: string; auth_provider: string; is_superuser?: boolean; }
 export interface ApiKey { id: number; name: string; prefix: string; revoked: boolean; last_used_at: string | null; created_at?: string; }
 export interface RunSummary { id: number; type: string; label: string; status: string; duration_ms: number; created_at: string; }
 
@@ -32,8 +32,11 @@ export interface Feedback {
 
 export interface TraceQuery { status?: string; window_hours?: number; limit?: number; }
 
-export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; created_at: string; }
+export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; created_at: string; }
 export interface Member { user_id: number; email: string; name: string; role: string; }
+export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
+export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; project_count: number; created_at: string; }
+export interface AdminProject { id: number; name: string; owner: string; member_count: number; span_count: number; retention: number; redact_pii: boolean; created_at: string; }
 
 export interface Metrics {
   window_hours: number; trace_count: number; error_count: number; error_rate: number;
@@ -134,10 +137,16 @@ export const api = {
   projects: () => j<Project[]>("/api/projects"),
   createProject: (name: string) => j<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),
   renameProject: (id: number, name: string) => j<{ id: number; name: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  updateProject: (id: number, patch: { name?: string; retention?: number; redact_pii?: boolean }) => j<{ id: number; name: string; retention: number; redact_pii: boolean }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteProject: (id: number) => j(`/api/projects/${id}`, { method: "DELETE" }),
   members: (id: number) => j<Member[]>(`/api/projects/${id}/members`),
   addMember: (id: number, email: string, role = "member") => j<Member>(`/api/projects/${id}/members`, { method: "POST", body: JSON.stringify({ email, role }) }),
   removeMember: (id: number, userId: number) => j(`/api/projects/${id}/members/${userId}`, { method: "DELETE" }),
+  // platform superadmin
+  adminStats: () => j<AdminStats>("/api/admin/stats"),
+  adminUsers: () => j<AdminUser[]>("/api/admin/users"),
+  adminProjects: () => j<AdminProject[]>("/api/admin/projects"),
+  setSuperuser: (uid: number, is_superuser: boolean) => j<{ id: number; is_superuser: boolean }>(`/api/admin/users/${uid}`, { method: "PATCH", body: JSON.stringify({ is_superuser }) }),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {
     try { const r = await fetch(`${BASE}/healthz`, { credentials: "include" }); return r.ok; } catch { return false; }

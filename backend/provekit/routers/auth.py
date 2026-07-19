@@ -29,8 +29,10 @@ def _set_cookie(resp: Response, u: User) -> None:
 
 
 def _public(u: User) -> dict:
+    from ..config import get_settings
+    is_super = u.is_superuser or u.email.lower() in get_settings().superuser_email_list
     return {"id": u.id, "email": u.email, "name": u.name, "auth_provider": u.auth_provider,
-            "email_verified": u.email_verified}
+            "email_verified": u.email_verified, "is_superuser": is_super}
 
 
 def _send_verify(u: User) -> None:

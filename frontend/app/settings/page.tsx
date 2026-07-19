@@ -11,6 +11,8 @@ export default function SettingsPage() {
   const [newProj, setNewProj] = useState("");
   const [rename, setRename] = useState("");
   const [invite, setInvite] = useState("");
+  const [retention, setRetention] = useState(0);
+  const [redact, setRedact] = useState(false);
   const [err, setErr] = useState("");
 
   const load = useCallback(() => {
@@ -25,6 +27,8 @@ export default function SettingsPage() {
     api.members(sel).then(setMembers).catch(() => setMembers([]));
     const p = projects.find((x) => x.id === sel);
     setRename(p?.name || "");
+    setRetention(p?.retention ?? 0);
+    setRedact(p?.redact_pii ?? false);
   }, [sel, projects]);
 
   const current = projects.find((p) => p.id === sel);
@@ -38,6 +42,7 @@ export default function SettingsPage() {
     setProjectId(p.id); // switch to the new project immediately
   });
   const doRename = () => wrap(async () => { if (sel) { await api.renameProject(sel, rename.trim()); load(); } });
+  const saveSettings = () => wrap(async () => { if (sel) { await api.updateProject(sel, { retention, redact_pii: redact }); load(); } });
   const doDelete = () => wrap(async () => {
     if (sel && confirm("Delete this project and all its traces, datasets, and keys? This cannot be undone.")) {
       await api.deleteProject(sel);
@@ -87,6 +92,20 @@ export default function SettingsPage() {
                 <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
                   <input value={rename} onChange={(e) => setRename(e.target.value)} disabled={!isOwner} style={{ ...input, flex: 1 }} />
                   <button className="btn btn-sm" onClick={doRename} disabled={!isOwner}>Rename</button>
+                </div>
+
+                <div style={label}>Data settings</div>
+                <div style={{ display: "flex", gap: 16, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11.5, marginBottom: 4 }}>Retention (spans; 0 = default)</div>
+                    <input type="number" min={0} value={retention} disabled={!isOwner}
+                      onChange={(e) => setRetention(Number(e.target.value))} style={{ ...input, width: 160 }} />
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: isOwner ? "pointer" : "default" }}>
+                    <input type="checkbox" checked={redact} disabled={!isOwner} onChange={(e) => setRedact(e.target.checked)} />
+                    Mask PII on ingest
+                  </label>
+                  <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
                 </div>
 
                 <div style={label}>Members</div>

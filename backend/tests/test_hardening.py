@@ -39,11 +39,11 @@ def test_retention_keeps_only_the_newest_n(monkeypatch):
         db.commit()
         assert db.query(Run).filter(Run.workspace_id == w.id).count() == 5
 
-        _prune_runs(db, w.id)
+        _prune_runs(db, w)
         assert db.query(Run).filter(Run.workspace_id == w.id).count() == 3   # newest 3 survive
 
         monkeypatch.setattr(get_settings(), "runs_retention", 0)             # disabled → no-op
-        _prune_runs(db, w.id)
+        _prune_runs(db, w)
         assert db.query(Run).filter(Run.workspace_id == w.id).count() == 3
     finally:
         db.close()

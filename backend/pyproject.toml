@@ -1,6 +1,6 @@
 [project]
 name = "provekit"
-version = "0.4.0"
+version = "0.5.0"
 description = "Drop-in agent tracing — add one decorator, get a project key, review every run your agent makes."
 requires-python = ">=3.11"
 readme = "README.md"

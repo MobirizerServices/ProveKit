@@ -19,6 +19,12 @@ class _ProjectIn(BaseModel):
     name: str
 
 
+class _ProjectPatch(BaseModel):
+    name: str | None = None
+    retention: int | None = None
+    redact_pii: bool | None = None
+
+
 class _MemberIn(BaseModel):
     email: str
     role: str = "member"
@@ -46,7 +52,8 @@ def list_projects(user: User = Depends(get_current_user), db: Session = Depends(
     counts = dict(db.query(WorkspaceMember.workspace_id, func.count(WorkspaceMember.id))
                   .group_by(WorkspaceMember.workspace_id).all())
     return [{"id": w.id, "name": w.name, "role": role, "is_default": w.id == default.id,
-             "member_count": counts.get(w.id, 1), "created_at": iso_utc(w.created_at)}
+             "member_count": counts.get(w.id, 1), "retention": w.retention,
+             "redact_pii": w.redact_pii, "created_at": iso_utc(w.created_at)}
             for w, role in rows]
 
 
@@ -64,12 +71,18 @@ def create_project(data: _ProjectIn, user: User = Depends(get_current_user),
 
 
 @router.patch("/{pid}")
-def rename_project(pid: int, data: _ProjectIn, user: User = Depends(get_current_user),
+def update_project(pid: int, data: _ProjectPatch, user: User = Depends(get_current_user),
                    db: Session = Depends(get_db)):
+    """Owner-facing per-project settings: name, span retention, and PII masking on ingest."""
     ws = _require_owner(db, pid, user)
-    ws.name = (data.name or ws.name)[:160]
+    if data.name is not None:
+        ws.name = data.name[:160] or ws.name
+    if data.retention is not None:
+        ws.retention = max(0, data.retention)
+    if data.redact_pii is not None:
+        ws.redact_pii = data.redact_pii
     db.commit()
-    return {"id": ws.id, "name": ws.name}
+    return {"id": ws.id, "name": ws.name, "retention": ws.retention, "redact_pii": ws.redact_pii}
 
 
 @router.delete("/{pid}")

@@ -1,5 +1,6 @@
 "use client";
 
+import dagre from "@dagrejs/dagre";
 import { Background, BackgroundVariant, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useMemo, useState } from "react";
@@ -10,8 +11,8 @@ const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
 };
 
-const COL_X = 250;   // horizontal gap per depth level
-const ROW_Y = 96;    // vertical gap per leaf
+const NODE_W = 210;  // node box width for the layout engine
+const NODE_H = 60;   // approximate node box height
 
 function tokens(s: TraceSpan): string | null {
   const u = s.result?.meta?.usage;
@@ -109,20 +110,24 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
     if (hideSteps) for (const s of spans) if (s.type === "step") hidden.add(s.span_id);
 
     const visible = spans.filter((s) => !hidden.has(s.span_id));
+    const visibleIds = new Set(visible.map((s) => s.span_id));
 
-    // Layout only the visible nodes (leaf rows over the visible tree).
+    // Auto-layout the visible tree with dagre (left→right, ranked by depth). This gives tighter,
+    // better-balanced spacing than a naïve leaf layout and stays clean as traces get big.
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: "LR", nodesep: 26, ranksep: 60, marginx: 20, marginy: 20 });
+    g.setDefaultEdgeLabel(() => ({}));
+    visible.forEach((s) => g.setNode(s.span_id, { width: NODE_W, height: NODE_H }));
+    visible.forEach((s) => {
+      if (s.parent_span_id && visibleIds.has(s.parent_span_id)) g.setEdge(s.parent_span_id, s.span_id);
+    });
+    dagre.layout(g);
     const pos: Record<string, { x: number; y: number }> = {};
-    let leaf = 0;
-    const vkids = (id: string) => (kids[id] || []).filter((c) => !hidden.has(c.span_id));
-    const layout = (s: TraceSpan, depth: number): number => {
-      const ch = collapsed.has(s.span_id) ? [] : vkids(s.span_id);
-      let y: number;
-      if (ch.length === 0) { y = leaf * ROW_Y; leaf++; }
-      else { const ys = ch.map((c) => layout(c, depth + 1)); y = (ys[0] + ys[ys.length - 1]) / 2; }
-      pos[s.span_id] = { x: depth * COL_X, y };
-      return y;
-    };
-    roots.filter((r) => !hidden.has(r.span_id)).forEach((r) => layout(r, 0));
+    visible.forEach((s) => {
+      const n = g.node(s.span_id);
+      // dagre gives center coords; React Flow wants top-left.
+      pos[s.span_id] = n ? { x: n.x - NODE_W / 2, y: n.y - NODE_H / 2 } : { x: 0, y: 0 };
+    });
 
     const parentOf: Record<string, string | null> = {};
     for (const s of spans) parentOf[s.span_id] = s.parent_span_id && ids.has(s.parent_span_id) ? s.parent_span_id : null;

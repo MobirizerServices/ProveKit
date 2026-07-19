@@ -11,6 +11,40 @@ function ListSkeleton() {
   return <><Skeleton w="65%" h={12} /><Skeleton w="85%" h={10} mt={5} /><SkeletonStyles /></>;
 }
 
+function TraceRow({ t, active, onClick, fmt, indent }: {
+  t: TraceSummary; active: boolean; onClick: () => void; fmt: (s?: string) => string; indent?: boolean;
+}) {
+  return (
+    <button onClick={onClick} style={{ ...row(active), paddingLeft: indent ? 26 : 14 }} title={fmt(t.created_at)}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <span style={{ fontWeight: 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {t.label || `run ${t.id}`}
+        </span>
+        {t.status === "failed"
+          ? <span style={failBadge}>failed</span>
+          : <span style={{ ...dot, background: "var(--green)" }} />}
+      </div>
+      <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
+        {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {relTime(t.created_at)}
+        {!indent && t.session_id ? <span style={{ color: "var(--purple)" }}> · ◆ {t.session_id}</span> : ""}
+      </div>
+    </button>
+  );
+}
+
+// Group traces by session_id (ungrouped last), with per-group token totals.
+function sessionGroups(traces: TraceSummary[]) {
+  const map = new Map<string, TraceSummary[]>();
+  for (const t of traces) {
+    const k = t.session_id || "";
+    (map.get(k) || map.set(k, []).get(k)!).push(t);
+  }
+  return Array.from(map.entries())
+    .map(([session, items]) => ({ key: session || "__none__", session, items,
+      tokens: items.reduce((n, t) => n + (t.tokens || 0), 0) }))
+    .sort((a, b) => (a.session ? 0 : 1) - (b.session ? 0 : 1));   // real sessions first
+}
+
 // "2m ago" style relative time, with a couple of coarser buckets. Absolute goes on the title.
 function relTime(iso?: string): string {
   if (!iso) return "";
@@ -36,6 +70,7 @@ export default function TracesPage() {
   const [windowHours, setWindowHours] = useState(0);
   const [model, setModel] = useState("");
   const [sort, setSort] = useState<"recent" | "slowest" | "tokens">("recent");
+  const [groupBySession, setGroupBySession] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
@@ -59,6 +94,7 @@ export default function TracesPage() {
 
   const fmt = (s?: string) => (s ? new Date(s).toLocaleString() : "");
   const modelOptions = Array.from(new Set(traces.map((t) => t.model).filter(Boolean))) as string[];
+  const hasSessions = traces.some((t) => t.session_id);
   const shown = traces
     .filter((t) =>
       (!q || (t.label || "").toLowerCase().includes(q.toLowerCase())) &&
@@ -107,6 +143,10 @@ export default function TracesPage() {
                   <option value="slowest">↓ Slowest</option>
                   <option value="tokens">↓ Most tokens</option>
                 </select>
+                {hasSessions && (
+                  <button onClick={() => setGroupBySession((v) => !v)} style={chip(groupBySession)}
+                    title="Group multi-turn runs by session">◆ Sessions</button>
+                )}
               </div>
               <div style={{ ...panel, padding: 0, overflowY: "auto" }}>
               {!loaded ? (
@@ -119,22 +159,22 @@ export default function TracesPage() {
                 </div>
               ) : shown.length === 0 ? (
                 <div className="muted" style={{ padding: 14, fontSize: 12.5 }}>No traces match.</div>
+              ) : groupBySession ? (
+                sessionGroups(shown).map((g) => (
+                  <div key={g.key}>
+                    <div style={sessionHeader}>
+                      <span>{g.session ? `◆ ${g.session}` : "No session"}</span>
+                      <span className="muted" style={{ fontWeight: 400 }}>
+                        {g.items.length} turn{g.items.length === 1 ? "" : "s"}{g.tokens ? ` · ${g.tokens} tok` : ""}
+                      </span>
+                    </div>
+                    {g.items.map((t) => (
+                      <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => setSel(t.trace_id)} fmt={fmt} indent />
+                    ))}
+                  </div>
+                ))
               ) : shown.map((t) => (
-                <button key={t.trace_id || t.id} onClick={() => setSel(t.trace_id)} style={row(sel === t.trace_id)}
-                  title={fmt(t.created_at)}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontWeight: 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {t.label || `run ${t.id}`}
-                    </span>
-                    {t.status === "failed"
-                      ? <span style={failBadge}>failed</span>
-                      : <span style={{ ...dot, background: "var(--green)" }} />}
-                  </div>
-                  <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-                    {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {relTime(t.created_at)}
-                    {t.session_id ? <span style={{ color: "var(--purple)" }}> · ◆ {t.session_id}</span> : ""}
-                  </div>
-                </button>
+                <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => setSel(t.trace_id)} fmt={fmt} />
               ))}
               </div>
             </div>
@@ -232,6 +272,11 @@ const dot: React.CSSProperties = { width: 8, height: 8, borderRadius: 999, flexS
 const failBadge: React.CSSProperties = {
   flexShrink: 0, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
   color: "var(--red)", border: "1px solid var(--red)", borderRadius: 5, padding: "1px 6px",
+};
+const sessionHeader: React.CSSProperties = {
+  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+  padding: "7px 14px", fontSize: 11.5, fontWeight: 600, color: "var(--purple)",
+  background: "var(--bg-2)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0,
 };
 function row(active: boolean): React.CSSProperties {
   return {

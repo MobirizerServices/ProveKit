@@ -50,9 +50,22 @@ export default function AreaChart({ data, height = 160 }: { data: Point[]; heigh
             <text x={PAD.l - 6} y={y(v) + 3} textAnchor="end" fontSize="10" fill="var(--muted)">{v}</text>
           </g>
         ))}
-        {n > 0 && <path d={area("count")} fill="url(#pk-area)" />}
-        {n > 0 && <path d={line} fill="none" stroke="var(--blue)" strokeWidth="2" />}
-        {n > 0 && <path d={area("errors")} fill="var(--red)" fillOpacity="0.4" />}
+        {/* A single bucket (e.g. a fresh deploy or 1h window) can't form an area — draw bars
+            so it's still visible instead of a degenerate, invisible shape. */}
+        {n === 1 ? (
+          <>
+            <rect x={x(0) - 16} y={y(data[0].count)} width={32} height={PAD.t + ih - y(data[0].count)} rx={3} fill="var(--blue)" fillOpacity="0.75" />
+            {data[0].errors > 0 && <rect x={x(0) - 16} y={y(data[0].errors)} width={32} height={PAD.t + ih - y(data[0].errors)} rx={3} fill="var(--red)" fillOpacity="0.7" />}
+          </>
+        ) : n > 1 ? (
+          <>
+            <path d={area("count")} fill="url(#pk-area)" />
+            <path d={line} fill="none" stroke="var(--blue)" strokeWidth="2" />
+            <path d={area("errors")} fill="var(--red)" fillOpacity="0.4" />
+            {/* point dots so even sparse series read clearly */}
+            {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.count)} r="2.5" fill="var(--blue)" />)}
+          </>
+        ) : null}
         {/* x labels: first, middle, last */}
         {[0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => n > 0 && a.indexOf(v) === i).map((i) => (
           <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--muted)">{fmtLabel(data[i].t)}</text>

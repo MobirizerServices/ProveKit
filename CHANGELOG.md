@@ -2,6 +2,31 @@
 
 All notable changes to ProveKit. This project is pre-1.0; expect breaking changes.
 
+## 0.4.0 — Evaluation, dashboards, alerts, PII redaction
+
+ProveKit grows from tracing into the full loop: capture → curate → **evaluate**, plus
+operational monitoring and a production-safety net.
+
+### Evaluation
+- **Datasets** — named `{input, expected}` collections; curate by hand or **seed an item
+  straight from a trace**. Portal **Datasets** page + API (cookie + project key).
+- **Scorers** — `provekit.scorers`: `exact_match`, `contains`, `regex_match`, `json_valid`,
+  or your own `fn(output, expected) -> float`. Shared by client and server.
+- **`pk.evaluate(dataset, target, scorers)`** — runs a target over a dataset, scores each
+  output, records an **experiment**, and returns a summary. `assert summary["mean_score"] >= …`
+  to gate CI on regressions. See [docs/EVALUATION.md](docs/EVALUATION.md).
+- **Experiments** — per-scorer means and side-by-side comparison of runs on the same dataset.
+
+### Monitoring
+- **Dashboard** — trace volume, error rate, latency p50/p95, tokens, a traffic chart, and a
+  per-model breakdown over a window (`GET /api/metrics` + portal **Dashboard**).
+- **Alerts** — threshold rules over those metrics (error rate, latency, volume, tokens) with a
+  cooldown; `POST /api/alerts/check` evaluates them and emails on a breach (wire to a cron).
+
+### Security
+- **PII redaction** — optional server-side masking of emails / cards / SSNs / phones / secret
+  keys in captured input/output/error before storage (`PROVEKIT_REDACT_PII=true`).
+
 ## 0.3.0 — Capture everything from one SDK; debug over MCP
 
 The client stays a single SDK, but it now captures more with less code, and the portal gains

@@ -51,6 +51,28 @@ def test_key_status_filter_surfaces_only_failures():
     assert "t-bad" in ids and "t-ok" not in ids
 
 
+def test_window_hours_excludes_old_traces():
+    from datetime import timedelta
+
+    from provekit.database import SessionLocal
+    from provekit.models import Run, _now
+
+    c = _client()
+    key = c.post("/api/api-keys", json={"name": "win"}).json()["key"]
+    hdr = {"Authorization": f"Bearer {key}"}
+    c.post("/v1/traces", headers=hdr, json={"resourceSpans": [{"scopeSpans": [{"spans": [
+        _span("rec", "", {"gen_ai.operation.name": "invoke_agent"}, "agent", "t-recent"),
+    ]}]}]})
+    with SessionLocal() as db:
+        wsid = db.query(Run).filter(Run.trace_id == "t-recent").first().workspace_id
+        db.add(Run(workspace_id=wsid, type="agent", label="old", trace_id="t-old",
+                   span_id="o", parent_span_id="", created_at=_now() - timedelta(hours=48)))
+        db.commit()
+    got = c.get("/v1/traces", params={"window_hours": 24}, headers=hdr).json()
+    ids = {t["trace_id"] for t in got}
+    assert "t-recent" in ids and "t-old" not in ids
+
+
 def test_key_read_rejects_bad_key_and_unknown_trace():
     c = _client()
     bad = {"Authorization": "Bearer pk_nope"}

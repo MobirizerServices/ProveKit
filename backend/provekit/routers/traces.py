@@ -110,11 +110,17 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
 # The listing/detail logic is shared by two auth paths: the cookie-authed /api/* routes the
 # portal UI calls, and the key-authed /v1/* routes an MCP server or script calls with the
 # project key. Same data, two doors — so "debug via MCP" needs no new client code.
-def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None):
+def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
+                 window_hours: int | None = None):
     limit = max(1, min(limit, 200))
     q = (db.query(Run).filter(Run.workspace_id == ws.id, Run.parent_span_id == ""))
     if status:
         q = q.filter(Run.status == status)
+    if window_hours and window_hours > 0:
+        from datetime import timedelta
+
+        from ..models import _now
+        q = q.filter(Run.created_at >= _now() - timedelta(hours=window_hours))
     roots = q.order_by(Run.id.desc()).limit(limit).all()
     trace_ids = [r.trace_id for r in roots if r.trace_id]
     counts: dict = {}
@@ -148,11 +154,12 @@ def _get_trace(db: Session, ws: Workspace, trace_id: str):
 
 
 @runs_router.get("/traces")
-def list_traces(limit: int = 50, status: str | None = None, db: Session = Depends(get_db),
-                ws: Workspace = Depends(current_workspace)):
+def list_traces(limit: int = 50, status: str | None = None, window_hours: int | None = None,
+                db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     """One row per trace: its root span (the decorated entrypoint), with a span count and
-    total token usage (so the list is scannable at a glance). `status=failed` to filter."""
-    return _list_traces(db, ws, limit, status)
+    total token usage (so the list is scannable at a glance). `status=failed` filters to
+    failures; `window_hours=N` limits to the last N hours."""
+    return _list_traces(db, ws, limit, status, window_hours)
 
 
 @runs_router.get("/traces/{trace_id}")
@@ -166,11 +173,13 @@ def get_trace(trace_id: str, db: Session = Depends(get_db),
 # ---- key-authed read API (for the MCP server / scripts; same key as ingest) ----
 @router.get("/traces")
 def list_traces_by_key(request: Request, limit: int = 50, status: str | None = None,
-                       db: Session = Depends(get_db), authorization: str | None = Header(default=None)):
+                       window_hours: int | None = None, db: Session = Depends(get_db),
+                       authorization: str | None = Header(default=None)):
     """List traces using the project key (Bearer). Backs the ProveKit MCP server so an
-    agent can pull recent runs — `status=failed` surfaces just the failures to debug."""
+    agent can pull recent runs — `status=failed` surfaces just the failures to debug,
+    `window_hours=N` limits to the last N hours."""
     ws = _resolve_ingest_ws(db, request, authorization)
-    return _list_traces(db, ws, limit, status)
+    return _list_traces(db, ws, limit, status, window_hours)
 
 
 @router.get("/traces/{trace_id}")

@@ -7,65 +7,245 @@ import { api } from "@/lib/api";
 export default function Landing() {
   const [authed, setAuthed] = useState(false);
   useEffect(() => { api.me().then(() => setAuthed(true)).catch(() => {}); }, []);
-  const cta = authed ? "/traces" : "/login";
+  const primary = authed ? { href: "/traces", label: "Open portal" } : { href: "/login", label: "Get started free" };
 
   return (
-    <main style={wrap}>
-      <div style={{ maxWidth: 780, textAlign: "center" }}>
-        <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.5 }}>
-          <span style={{ color: "var(--accent)" }}>◇</span> ProveKit
+    <div className="lp">
+      <header className="lp-nav">
+        <div className="lp-brand"><span className="lp-logo">◇</span> Prove<b>Kit</b></div>
+        <nav className="lp-navlinks">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="https://github.com/MobirizerServices/ProveKit" target="_blank" rel="noreferrer">GitHub</a>
+          <Link href={authed ? "/traces" : "/login"} className="lp-signin">{authed ? "Portal" : "Sign in"}</Link>
+        </nav>
+      </header>
+
+      <section className="lp-hero">
+        <div className="lp-hero-copy">
+          <div className="lp-pill">Open source · Self-hostable · OpenTelemetry-native</div>
+          <h1>See exactly what your AI agent did.</h1>
+          <p>
+            Add <b>one decorator</b> and every run your agent makes — the model calls, the tools,
+            the retries, the whole nested flow — shows up in your portal. Then evaluate it, watch
+            it, and gate your CI on it. No connections to wire, no framework lock-in.
+          </p>
+          <div className="lp-cta">
+            <Link href={primary.href} className="btn lp-btn-primary">{primary.label}</Link>
+            <a href="#how" className="btn btn-ghost lp-btn">See how it works</a>
+          </div>
+          <div className="lp-trust">
+            <span>◆ One SDK, zero lock-in</span><span>◆ Traces · Evals · Dashboards</span><span>◆ Docker / Compose</span>
+          </div>
         </div>
-        <h1 style={{ fontSize: 40, lineHeight: 1.12, margin: "18px 0 0", letterSpacing: -1 }}>
-          Drop-in tracing for any AI agent.
-        </h1>
-        <p style={{ fontSize: 17, color: "var(--muted)", maxWidth: 560, margin: "16px auto 0", lineHeight: 1.5 }}>
-          Add one decorator, get a project key, and review every run your agent makes —
-          the model calls, the tools, the whole flow. No connections to configure, no
-          framework lock-in. Open source and self-hostable.
-        </p>
+        <TracePreview />
+      </section>
 
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", margin: "28px 0 40px" }}>
-          <Link href={cta} className="btn" style={{ padding: "11px 22px", fontSize: 15 }}>Get started</Link>
-          <a href="https://github.com/MobirizerServices/ProveKit" className="btn btn-ghost" style={{ padding: "11px 22px", fontSize: 15 }}>GitHub</a>
+      <section className="lp-code-band">
+        <div className="lp-code-copy">
+          <h2>Two lines to your first trace.</h2>
+          <p>
+            The SDK auto-instruments OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI and more —
+            plus your outbound HTTP — so you capture the full flow with no per-call wiring.
+          </p>
+          <ul className="lp-check">
+            <li>Fail-open by design — tracing never takes your agent down.</li>
+            <li>Nested spans classified agent · llm · tool · step.</li>
+            <li>Tokens, cost, latency, logs, and errors on every span.</li>
+          </ul>
         </div>
+        <pre className="lp-code">{`pip install "provekit[trace]"
 
-        <pre style={code}>{`pip install "provekit[trace]"
-
-# .env  (key from your project in the portal)
+# .env
 PROVEKIT_API_KEY=pk_...
-PROVEKIT_ENDPOINT=https://your-provekit-host
+PROVEKIT_ENDPOINT=https://your-host
 
+import provekit.auto          # one import — captures everything
+
+# optional: group a run under a named root
 import provekit.trace as pk
 
-@pk.trace(name="my-agent")
-def run_agent(question: str) -> str:
-    ...   # every run shows up in your portal`}</pre>
+@pk.trace(name="support-agent")
+def run(question):
+    ...   # OpenAI / Anthropic / tools capture themselves`}</pre>
+      </section>
 
-        <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 36, flexWrap: "wrap" }}>
-          {STEPS.map((st) => (
-            <div key={st.n} style={{ width: 210, textAlign: "left" }}>
-              <div style={{ color: "var(--accent)", fontWeight: 700, fontSize: 13 }}>{st.n}</div>
-              <div style={{ fontWeight: 600, fontSize: 14, margin: "4px 0 3px" }}>{st.t}</div>
-              <div className="muted" style={{ fontSize: 13, lineHeight: 1.45 }}>{st.d}</div>
+      <section id="features" className="lp-features">
+        <h2 className="lp-h2">Everything to prove your agent works</h2>
+        <p className="lp-sub">From the first trace to a CI regression gate — one platform, self-hostable.</p>
+        <div className="lp-grid">
+          {FEATURES.map((f) => (
+            <div key={f.t} className="lp-card">
+              <div className="lp-card-ic" style={{ color: f.c }}>{f.ic}</div>
+              <div className="lp-card-t">{f.t}</div>
+              <div className="lp-card-d">{f.d}</div>
             </div>
           ))}
         </div>
-      </div>
-    </main>
+      </section>
+
+      <section id="how" className="lp-how">
+        <h2 className="lp-h2">Live in two minutes</h2>
+        <div className="lp-steps">
+          {STEPS.map((s) => (
+            <div key={s.n} className="lp-step">
+              <div className="lp-step-n">{s.n}</div>
+              <div className="lp-step-t">{s.t}</div>
+              <div className="lp-step-d">{s.d}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="lp-final">
+        <h2>Ship your first trace today.</h2>
+        <p>Open source, self-hostable, and free to run. Bring your own keys, own your data.</p>
+        <div className="lp-cta" style={{ justifyContent: "center" }}>
+          <Link href={primary.href} className="btn lp-btn-primary">{primary.label}</Link>
+          <a href="https://github.com/MobirizerServices/ProveKit" className="btn btn-ghost lp-btn" target="_blank" rel="noreferrer">Star on GitHub</a>
+        </div>
+      </section>
+
+      <footer className="lp-footer">
+        <span><span className="lp-logo">◇</span> ProveKit</span>
+        <span className="muted">Drop-in agent tracing · evaluation · observability</span>
+      </footer>
+
+      <LandingStyles />
+    </div>
   );
 }
 
-const STEPS = [
-  { n: "1", t: "Create a project", d: "Sign in and grab a project key — one per app or environment." },
-  { n: "2", t: "Add the decorator", d: "pip install, drop the key in .env, wrap your agent's entrypoint." },
-  { n: "3", t: "Review the flow", d: "Every run streams to the portal — inspect each step's input and output." },
+function TracePreview() {
+  // A styled mini "trace" — the product's signature nested flow, drawn in CSS.
+  return (
+    <div className="lp-preview" aria-hidden>
+      <div className="lp-preview-bar">
+        <span className="lp-dot r" /><span className="lp-dot y" /><span className="lp-dot g" />
+        <span className="lp-preview-title">research-agent · 289ms · 1,904 tokens · ~$0.006</span>
+      </div>
+      <div className="lp-flow">
+        {ROWS.map((r, i) => (
+          <div key={i} className={`lp-row ${r.fail ? "fail" : ""}`} style={{ paddingLeft: 12 + r.d * 20 }}>
+            <span className="lp-badge" data-t={r.type}>{r.type}</span>
+            <span className="lp-row-label">{r.label}</span>
+            <span className="lp-row-bar"><span className="lp-row-fill" style={{ width: r.w, background: `var(${BAR[r.type]})` }} /></span>
+            <span className="lp-row-ms">{r.ms}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const BAR: Record<string, string> = { agent: "--accent", llm: "--blue", tool: "--purple", step: "--muted" };
+const ROWS = [
+  { type: "agent", label: "research-orchestrator", d: 0, w: "96%", ms: "289ms", fail: false },
+  { type: "llm", label: "chat gpt-4o-mini", d: 1, w: "22%", ms: "13ms", fail: false },
+  { type: "agent", label: "sub-agent: pricing", d: 1, w: "60%", ms: "67ms", fail: false },
+  { type: "tool", label: "retrieve", d: 2, w: "18%", ms: "11ms", fail: false },
+  { type: "step", label: "doc #0 · relevance 0.95", d: 3, w: "8%", ms: "4ms", fail: false },
+  { type: "llm", label: "chat gpt-4o", d: 2, w: "30%", ms: "13ms", fail: false },
+  { type: "tool", label: "fetch-attempt-1", d: 2, w: "14%", ms: "7ms", fail: true },
+  { type: "tool", label: "fetch-attempt-2", d: 2, w: "12%", ms: "6ms", fail: false },
+  { type: "llm", label: "synthesize · claude-sonnet-5", d: 1, w: "40%", ms: "12ms", fail: false },
 ];
 
-const wrap: React.CSSProperties = {
-  minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px",
-};
-const code: React.CSSProperties = {
-  textAlign: "left", margin: "0 auto", maxWidth: 560, padding: 18, borderRadius: 12,
-  background: "var(--panel)", border: "1px solid var(--border-strong)", fontSize: 12.5,
-  lineHeight: 1.6, fontFamily: "var(--font-mono)", overflowX: "auto", whiteSpace: "pre",
-};
+const FEATURES = [
+  { ic: "◇", c: "var(--accent)", t: "Drop-in tracing", d: "One import auto-captures OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI, and outbound HTTP — no per-call code." },
+  { ic: "❖", c: "var(--blue)", t: "Flow graph & waterfall", d: "See the run as an animated node graph or a time-proportional waterfall — inputs, outputs, tokens, cost, and logs per span." },
+  { ic: "✓", c: "var(--green)", t: "Evaluation & CI gates", d: "Build datasets from real traces, score with built-in or custom scorers, and fail your build on a regression with pk.evaluate()." },
+  { ic: "▲", c: "var(--amber)", t: "Dashboards & alerts", d: "Volume, error rate, latency p50/p95, tokens, and cost over time — with threshold alerts that email on a breach." },
+  { ic: "⌘", c: "var(--purple)", t: "Debug over MCP", d: "Point Claude Desktop or Cursor at your project key and let an agent query and reason over your traces — no extra client code." },
+  { ic: "⊞", c: "var(--accent)", t: "Multi-project & self-host", d: "Isolated projects with members and roles, per-project keys, PII redaction, retention — all on your own infra via Docker." },
+];
+
+const STEPS = [
+  { n: "1", t: "Create a project", d: "Sign in and grab a project key — one per app or environment." },
+  { n: "2", t: "Add the SDK", d: "pip install, drop the key in .env, add one import at your entrypoint." },
+  { n: "3", t: "Review the flow", d: "Every run streams to the portal — inspect, evaluate, and monitor it." },
+];
+
+function LandingStyles() {
+  return (
+    <style jsx global>{`
+      .lp { max-width: 1120px; margin: 0 auto; padding: 0 22px 60px; }
+      .lp a { color: inherit; text-decoration: none; }
+      .lp-nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 2px; position: sticky; top: 0; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(8px); z-index: 30; }
+      .lp-brand { font-weight: 600; font-size: 15px; } .lp-brand b { color: var(--muted); font-weight: 600; }
+      .lp-logo { color: var(--accent); }
+      .lp-navlinks { display: flex; align-items: center; gap: 22px; font-size: 13.5px; color: var(--muted); }
+      .lp-navlinks a:hover { color: var(--text); }
+      .lp-signin { padding: 7px 14px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text) !important; }
+      .lp-signin:hover { background: var(--panel-2); }
+
+      .lp-hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; padding: 54px 0 40px; position: relative; }
+      .lp-hero::before { content: ""; position: absolute; inset: -80px -200px auto; height: 360px; z-index: -1;
+        background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 16%, transparent), transparent),
+                    radial-gradient(closest-side, color-mix(in srgb, var(--blue) 12%, transparent), transparent);
+        background-position: 20% 0, 80% 20%; background-size: 60% 100%, 55% 90%; background-repeat: no-repeat; filter: blur(10px); }
+      .lp-pill { display: inline-block; font-size: 12px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 5px 12px; margin-bottom: 18px; }
+      .lp-hero h1 { font-size: 46px; line-height: 1.07; letter-spacing: -1.5px; margin: 0; }
+      .lp-hero-copy p { font-size: 16.5px; color: var(--muted); line-height: 1.55; margin: 18px 0 26px; max-width: 520px; }
+      .lp-hero-copy b { color: var(--text); }
+      .lp-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+      .lp-btn, .lp-btn-primary { padding: 12px 22px !important; font-size: 15px !important; }
+      .lp-btn-primary { background: var(--accent); color: #08120b; font-weight: 600; }
+      .lp-btn-primary:hover { filter: brightness(1.06); }
+      .lp-trust { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 26px; font-size: 12.5px; color: var(--faint); }
+
+      .lp-preview { border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: var(--sh-2); }
+      .lp-preview-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-2); }
+      .lp-dot { width: 9px; height: 9px; border-radius: 999px; } .lp-dot.r { background: #ff5f57; } .lp-dot.y { background: #febc2e; } .lp-dot.g { background: #28c840; }
+      .lp-preview-title { font-size: 11.5px; color: var(--muted); margin-left: 8px; font-family: var(--font-mono); }
+      .lp-flow { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
+      .lp-row { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+      .lp-row.fail .lp-row-label { color: var(--red); }
+      .lp-badge { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 1px 5px; border-radius: 4px; border: 1px solid; }
+      .lp-badge[data-t=agent] { color: var(--accent); border-color: var(--accent); }
+      .lp-badge[data-t=llm] { color: var(--blue); border-color: var(--blue); }
+      .lp-badge[data-t=tool] { color: var(--purple); border-color: var(--purple); }
+      .lp-badge[data-t=step] { color: var(--muted); border-color: var(--border-strong); }
+      .lp-row-label { flex: 0 0 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .lp-row-bar { flex: 1; height: 8px; background: var(--bg-2); border-radius: 4px; overflow: hidden; }
+      .lp-row-fill { display: block; height: 100%; border-radius: 4px; opacity: .85; }
+      .lp-row.fail .lp-row-fill { background: var(--red) !important; }
+      .lp-row-ms { flex: 0 0 42px; text-align: right; color: var(--muted); font-size: 10.5px; }
+
+      .lp-code-band { display: grid; grid-template-columns: 1fr 1.1fr; gap: 34px; align-items: center; padding: 44px 0; border-top: 1px solid var(--border); }
+      .lp-code-band h2 { font-size: 26px; letter-spacing: -0.6px; margin: 0 0 12px; }
+      .lp-code-copy p { color: var(--muted); font-size: 15px; line-height: 1.55; }
+      .lp-check { list-style: none; padding: 0; margin: 16px 0 0; }
+      .lp-check li { position: relative; padding-left: 22px; margin: 9px 0; font-size: 14px; color: var(--text); }
+      .lp-check li::before { content: "✓"; position: absolute; left: 0; color: var(--green); font-weight: 700; }
+      .lp-code { margin: 0; padding: 18px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border-strong); font-size: 12.5px; line-height: 1.6; font-family: var(--font-mono); overflow-x: auto; white-space: pre; box-shadow: var(--sh-1); }
+
+      .lp-features, .lp-how { padding: 50px 0; border-top: 1px solid var(--border); }
+      .lp-h2 { font-size: 30px; letter-spacing: -0.8px; text-align: center; margin: 0; }
+      .lp-sub { text-align: center; color: var(--muted); font-size: 15px; margin: 12px 0 34px; }
+      .lp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .lp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; transition: border-color .15s, transform .15s; }
+      .lp-card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+      .lp-card-ic { font-size: 22px; }
+      .lp-card-t { font-weight: 600; font-size: 15.5px; margin: 12px 0 6px; }
+      .lp-card-d { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+
+      .lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 820px; margin: 34px auto 0; }
+      .lp-step-n { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 14px; }
+      .lp-step-t { font-weight: 600; font-size: 15.5px; margin: 12px 0 5px; }
+      .lp-step-d { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+
+      .lp-final { text-align: center; padding: 60px 0 20px; border-top: 1px solid var(--border); }
+      .lp-final h2 { font-size: 32px; letter-spacing: -0.8px; margin: 0 0 10px; }
+      .lp-final p { color: var(--muted); font-size: 15.5px; margin: 0 0 26px; }
+      .lp-footer { display: flex; justify-content: space-between; align-items: center; padding: 30px 0 0; border-top: 1px solid var(--border); font-size: 13px; flex-wrap: wrap; gap: 10px; }
+
+      @media (max-width: 820px) {
+        .lp-hero, .lp-code-band { grid-template-columns: 1fr; }
+        .lp-grid, .lp-steps { grid-template-columns: 1fr; }
+        .lp-hero h1 { font-size: 36px; }
+        .lp-navlinks a:not(.lp-signin) { display: none; }
+      }
+    `}</style>
+  );
+}

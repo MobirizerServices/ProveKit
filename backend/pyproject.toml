@@ -92,11 +92,10 @@ source = ["provekit"]
 omit = ["provekit/migrations/*"]
 
 [tool.coverage.report]
-# CI gates on this. Provisionally 80 for the post-pivot MVP: the tracing spine (auth,
-# api-keys, trace SDK, workspace) is ~95-100%, while some utilities (email SMTP, sealing
-# crypto branches) lost their incidental coverage when the test-client suites were removed.
-# Raise back toward 90 as the nested-trace review + project features land with their tests.
-fail_under = 80
+# CI gates on this. Set below the current ~97% to leave headroom for cross-interpreter
+# variance; the only meaningfully-uncovered code is the Postgres-only pool/advisory-lock
+# branches in database.py (not exercisable against the SQLite test DB).
+fail_under = 95
 show_missing = true
 
 [tool.ruff]

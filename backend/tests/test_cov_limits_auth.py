@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from provekit.config import get_settings
 from provekit.database import SessionLocal
 from provekit.main import app
-from provekit.models import Run, User, Workspace
+from provekit.models import User
 from provekit.services import auth, limits
 
 
@@ -42,37 +42,20 @@ def test_redis_window(monkeypatch):
         limits._window.cache_clear()
 
 
-def test_enforce_dataset_size_and_prune(monkeypatch):
-    monkeypatch.setattr(get_settings(), "dataset_max_rows", 2)
-    with pytest.raises(Exception):
-        limits.enforce_dataset_size(5)
-    limits.enforce_dataset_size(1)         # under cap: no raise
-
-    db = SessionLocal()
-    try:
-        u = db.query(User).filter(User.email == "prune@x.com").first()
-        if not u:
-            u = User(email="prune@x.com", name="p"); db.add(u); db.commit(); db.refresh(u)
-        w = Workspace(name="prune-ws", owner_user_id=u.id); db.add(w); db.commit(); db.refresh(w)
-        for i in range(5):
-            db.add(Run(workspace_id=w.id, type="prompt", label=f"r{i}", status="completed"))
-        db.commit()
-        monkeypatch.setattr(get_settings(), "runs_retention", 2)
-        limits.prune_runs(db, w.id)
-        assert db.query(Run).filter(Run.workspace_id == w.id).count() == 2
-    finally:
-        db.close()
-
-
-def test_login_rate_and_prune_disabled(monkeypatch):
+def test_login_rate_disabled_returns_early(monkeypatch):
     monkeypatch.setattr(get_settings(), "login_attempts_per_min", 0)
     assert limits.check_login_rate("someone@x.com:1.2.3.4") is None   # disabled -> early return
-    monkeypatch.setattr(get_settings(), "runs_retention", 0)
-    db = SessionLocal()
-    try:
-        assert limits.prune_runs(db, 1) is None                       # disabled -> early return
-    finally:
-        db.close()
+
+
+def test_login_rate_trips_after_the_limit(monkeypatch):
+    monkeypatch.setattr(get_settings(), "login_attempts_per_min", 3)
+    limits._window.cache_clear()
+    ident = "brute@x.com:9.9.9.9"
+    for _ in range(3):
+        limits.check_login_rate(ident)          # within the limit: no raise
+    with pytest.raises(Exception):
+        limits.check_login_rate(ident)          # 4th -> 429
+    limits._window.cache_clear()
 
 
 def test_local_user_integrity_fallback(monkeypatch):

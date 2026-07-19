@@ -145,8 +145,8 @@ def healthz() -> JSONResponse:
     if get_settings().redis_url:
         checks["redis"] = False
         try:
-            from .services.runstore import _store
-            _store()._r.ping()
+            import redis
+            redis.from_url(get_settings().redis_url).ping()
             checks["redis"] = True
         except Exception:
             pass

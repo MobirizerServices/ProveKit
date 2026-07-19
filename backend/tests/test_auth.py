@@ -38,8 +38,10 @@ def test_local_user_creation_is_concurrency_safe():
             s.close()
 
     threads = [threading.Thread(target=worker) for _ in range(8)]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     assert not errors, errors           # no IntegrityError bubbled up as a 500
     assert len(set(ids)) == 1           # everyone resolved to the same local user

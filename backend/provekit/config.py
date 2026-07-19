@@ -40,6 +40,10 @@ class Settings(BaseSettings):
 
     thread_pool_size: int = 200
 
+    # Mask PII (emails, cards, SSNs, phones, common secret keys) in captured span
+    # input/output/error before it's stored. Off by default; a safety net for hosted use.
+    redact_pii: bool = False
+
     # Quotas (protect shared infra). 0 disables a given limit.
     ingest_rate_per_min: int = 600     # trace-ingest requests per project per minute
     login_attempts_per_min: int = 10   # login attempts per email+IP per minute

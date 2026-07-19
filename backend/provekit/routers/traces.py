@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, Run, Workspace, iso_utc
-from ..services import apikey, deploy, limits, otel, share
+from ..services import apikey, deploy, limits, otel, redact, share
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/v1", tags=["traces"])
@@ -52,6 +52,8 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     except Exception:
         return {"partialSuccess": {"rejectedSpans": 0, "errorMessage": "invalid JSON"}}
     rows = otel.ingest(payload)
+    if get_settings().redact_pii:
+        rows = [redact.scrub_run(kw) for kw in rows]
     for kw in rows:
         db.add(Run(workspace_id=ws.id, **kw))
     if rows:

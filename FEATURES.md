@@ -47,8 +47,10 @@ every run as a nested flow in the portal. This is the full feature inventory.
 
 - 5-table schema (users, workspaces, members, api_keys, runs); a single Alembic baseline that
   runs on boot. SQLite (local) / Postgres (prod).
-- Security headers, request-id, and body-size-limit middleware; SSRF guard; Fernet
-  secret-sealing; optional Sentry; health check.
+- Security headers, request-id, and body-size-limit middleware; SSRF guard; optional Sentry;
+  health check.
+- **Per-project ingest rate-limiting** and **trace retention** (old spans pruned to a cap) —
+  so a key can't fill the database.
 - **Docker** images (backend + frontend), Compose, and a Caddy reverse-proxy config.
 
 ## Packaging
@@ -66,5 +68,6 @@ every run as a nested flow in the portal. This is the full feature inventory.
 ## Not yet
 
 Multi-project UI (one project per account today) · cost estimates (tokens shown, not $) ·
-trace search / filter / pagination · SMTP wiring for email verification · a hosted instance.
+trace search / filter / pagination · a hosted instance. (Email verification/reset is wired —
+it just needs SMTP configured to actually send.)
 See the [launch checklist](docs/launch/LAUNCH.md) and [publishing guide](docs/PUBLISHING.md).

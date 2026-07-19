@@ -9,9 +9,10 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..database import get_db
 from ..models import Run, Workspace, iso_utc
-from ..services import apikey, deploy, otel
+from ..services import apikey, deploy, limits, otel
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/v1", tags=["traces"])
@@ -45,6 +46,7 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     """Accept an OTLP ExportTraceServiceRequest (JSON) and persist gen_ai spans as runs.
     Returns the OTLP success shape so standard exporters are satisfied."""
     ws = _resolve_ingest_ws(db, request, authorization)
+    limits.check_ingest_rate(ws.id)   # bound abuse/cost per project (429 when exceeded)
     try:
         payload = await request.json()
     except Exception:
@@ -54,7 +56,20 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
         db.add(Run(workspace_id=ws.id, **kw))
     if rows:
         db.commit()
+        _prune_runs(db, ws.id)        # enforce retention so the table doesn't grow forever
     return {"partialSuccess": {}}
+
+
+def _prune_runs(db: Session, ws_id: int) -> None:
+    """Keep only the newest `runs_retention` spans for a project; delete the rest."""
+    keep = get_settings().runs_retention
+    if keep <= 0:
+        return
+    stale = [r.id for r in db.query(Run.id).filter(Run.workspace_id == ws_id)
+             .order_by(Run.id.desc()).offset(keep).all()]
+    if stale:
+        db.query(Run).filter(Run.id.in_(stale)).delete(synchronize_session=False)
+        db.commit()
 
 
 class _KeyOut(BaseModel):

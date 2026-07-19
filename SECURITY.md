@@ -39,7 +39,10 @@ within 72 hours. Please include reproduction steps and the affected version.
 - **Response headers** — `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`,
   plus HSTS in hosted mode, are set by backend middleware (`observability.py`) and again at
   the proxy (`Caddyfile`).
-- **Body-size limits** — request bodies are capped by middleware to bound ingest abuse.
+- **Ingest abuse** — trace ingest is rate-limited per project (`INGEST_RATE_PER_MIN`), and old
+  spans are pruned to a retention cap (`RUNS_RETENTION`), so a valid key can't fill the
+  database without bound. Without `REDIS_URL` the rate window is per-worker (see below).
+- **Body-size limits** — request bodies are capped by middleware.
 
 ## Dependencies
 
@@ -52,10 +55,10 @@ within 72 hours. Please include reproduction steps and the affected version.
 - No third-party penetration test or formal audit has been performed.
 - **No Content-Security-Policy yet** — the other security headers ship, but script sources
   aren't constrained.
-- **No rate limit on trace ingest** — a valid key can write unbounded traces; add per-project
-  ingest limits before opening a public hosted instance.
-- SMTP isn't wired, so email-verification/reset messages aren't actually sent until you
-  configure a provider.
+- Without `REDIS_URL`, rate-limit windows are per-worker, so the effective ingest/login caps
+  scale with the number of uvicorn workers — set `REDIS_URL` for hard global caps.
+- Email verification/reset only sends once you configure SMTP (`SMTP_HOST`, …); until then
+  the links are logged, not delivered.
 - The SSRF guard does not defend against DNS rebinding without an egress proxy.
 
 Run `HOSTED=true` (with a strong `SECRET_KEY`, Postgres, TLS) for any internet-facing

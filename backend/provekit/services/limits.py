@@ -58,3 +58,16 @@ def check_login_rate(ident: str) -> None:
     if _window().hit(key, 60) > limit:
         raise HTTPException(429, "Too many login attempts — wait a minute.",
                             headers={"Retry-After": str(60 - (_now() % 60))})
+
+
+def check_ingest_rate(ws_id: int) -> None:
+    """Throttle trace-ingest requests per project to bound abuse/cost on a public instance.
+    Note: without REDIS_URL the window is per-worker, so the effective cap scales with the
+    number of uvicorn workers — set REDIS_URL for a hard global cap."""
+    limit = get_settings().ingest_rate_per_min
+    if limit <= 0:
+        return
+    key = f"ingest:{ws_id}:{_now() // 60}"
+    if _window().hit(key, 60) > limit:
+        raise HTTPException(429, "Ingest rate limit exceeded for this project.",
+                            headers={"Retry-After": str(60 - (_now() % 60))})

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 export default function Landing() {
   const [authed, setAuthed] = useState(false);
   useEffect(() => { api.me().then(() => setAuthed(true)).catch(() => {}); }, []);
-  const primary = authed ? { href: "/traces", label: "Open portal" } : { href: "/login", label: "Get started free" };
+  const primary = authed ? { href: "/traces", label: "Open portal" } : { href: "/signup", label: "Get started free" };
 
   return (
     <div className="lp">
@@ -15,9 +15,11 @@ export default function Landing() {
         <div className="lp-brand"><span className="lp-logo">◇</span> Prove<b>Kit</b></div>
         <nav className="lp-navlinks">
           <a href="#features">Features</a>
+          <a href="#flow">Agent flow</a>
           <a href="#how">How it works</a>
           <a href="https://github.com/MobirizerServices/ProveKit" target="_blank" rel="noreferrer">GitHub</a>
-          <Link href={authed ? "/traces" : "/login"} className="lp-signin">{authed ? "Portal" : "Sign in"}</Link>
+          {!authed && <Link href="/login">Sign in</Link>}
+          <Link href={authed ? "/traces" : "/signup"} className="lp-signin">{authed ? "Portal" : "Sign up"}</Link>
         </nav>
       </header>
 
@@ -68,6 +70,12 @@ import provekit.trace as pk
 @pk.trace(name="support-agent")
 def run(question):
     ...   # OpenAI / Anthropic / tools capture themselves`}</pre>
+      </section>
+
+      <section id="flow" className="lp-flowsec">
+        <h2 className="lp-h2">The whole agent flow, as it ran.</h2>
+        <p className="lp-sub">Nested agents, tool calls, retries and failures — a live node graph with the execution path lit up.</p>
+        <FlowVisual />
       </section>
 
       <section id="features" className="lp-features">
@@ -134,6 +142,58 @@ function TracePreview() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+const TYPE_C: Record<string, string> = { agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)" };
+
+function FlowVisual() {
+  // A self-contained SVG agent-flow graph — the product's signature node view, with
+  // animated directional edges (the selected path in accent, a failed exit in red).
+  const W = 156, H = 42;
+  const N: Record<string, { x: number; y: number; t: string; l: string }> = {
+    a: { x: 12, y: 128, t: "agent", l: "orchestrator" },
+    b: { x: 250, y: 26, t: "llm", l: "plan · gpt-4o" },
+    c: { x: 250, y: 128, t: "tool", l: "retrieve" },
+    d: { x: 486, y: 128, t: "step", l: "doc · 0.95" },
+    e: { x: 250, y: 230, t: "llm", l: "synthesize" },
+    f: { x: 486, y: 230, t: "tool", l: "fetch ✗" },
+  };
+  const E: { s: string; t: string; k?: "hot" | "fail" }[] = [
+    { s: "a", t: "b" }, { s: "a", t: "c" }, { s: "c", t: "d" },
+    { s: "a", t: "e", k: "hot" }, { s: "e", t: "f", k: "fail" },
+  ];
+  const path = (s: string, t: string) => {
+    const A = N[s], B = N[t];
+    const sx = A.x + W, sy = A.y + H / 2, tx = B.x, ty = B.y + H / 2, mx = sx + (tx - sx) / 2;
+    return `M ${sx} ${sy} C ${mx} ${sy} ${mx} ${ty} ${tx} ${ty}`;
+  };
+  return (
+    <div className="lp-flowbox">
+      <svg viewBox="0 0 654 300" className="lp-flowsvg" role="img" aria-label="Agent flow graph">
+        <defs>
+          {[["def", "var(--border-strong)"], ["hot", "var(--accent)"], ["fail", "var(--red)"]].map(([id, c]) => (
+            <marker key={id} id={`arw-${id}`} markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill={c} />
+            </marker>
+          ))}
+        </defs>
+        {E.map((e, i) => (
+          <path key={i} d={path(e.s, e.t)} fill="none" markerEnd={`url(#arw-${e.k || "def"})`}
+            className={`lp-edge ${e.k === "hot" ? "hot" : ""} ${e.k === "fail" ? "fail" : ""}`} />
+        ))}
+        {Object.entries(N).map(([id, n]) => (
+          <g key={id}>
+            <rect x={n.x} y={n.y} width={W} height={H} rx={10} className={`lp-fnode ${id === "f" ? "fail" : ""}`}
+              style={{ stroke: id === "f" ? "var(--red)" : TYPE_C[n.t] }} />
+            <text x={n.x + 12} y={n.y + 26} className="lp-ftext">
+              <tspan className="lp-ftag" style={{ fill: id === "f" ? "var(--red)" : TYPE_C[n.t] }}>{n.t.toUpperCase()}</tspan>
+              <tspan dx="8" style={{ fill: id === "f" ? "var(--red)" : "var(--text)" }}>{n.l}</tspan>
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
@@ -219,6 +279,21 @@ function LandingStyles() {
       .lp-check li { position: relative; padding-left: 22px; margin: 9px 0; font-size: 14px; color: var(--text); }
       .lp-check li::before { content: "✓"; position: absolute; left: 0; color: var(--green); font-weight: 700; }
       .lp-code { margin: 0; padding: 18px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border-strong); font-size: 12.5px; line-height: 1.6; font-family: var(--font-mono); overflow-x: auto; white-space: pre; box-shadow: var(--sh-1); }
+
+      .lp-flowsec { padding: 50px 0; border-top: 1px solid var(--border); }
+      .lp-flowbox { margin: 30px auto 0; max-width: 720px; border: 1px solid var(--border-strong); border-radius: 16px; background:
+        radial-gradient(120% 100% at 50% 0, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%), var(--panel);
+        padding: 18px; box-shadow: var(--sh-2); }
+      .lp-flowsvg { width: 100%; height: auto; display: block; }
+      .lp-fnode { fill: var(--panel-2); stroke-width: 1.4; }
+      .lp-fnode.fail { fill: color-mix(in srgb, var(--red) 8%, var(--panel-2)); }
+      .lp-ftext { font-family: var(--font-mono); font-size: 12.5px; }
+      .lp-ftag { font-size: 9px; font-weight: 700; letter-spacing: .4px; }
+      .lp-edge { stroke: var(--border-strong); stroke-width: 1.6; stroke-dasharray: 6 5; animation: rf-flow .6s linear infinite; }
+      .lp-edge.hot { stroke: var(--accent); stroke-width: 2.2; }
+      .lp-edge.fail { stroke: var(--red); stroke-width: 2; }
+      @keyframes rf-flow { to { stroke-dashoffset: -11; } }
+      @media (prefers-reduced-motion: reduce) { .lp-edge { animation: none; } }
 
       .lp-features, .lp-how { padding: 50px 0; border-top: 1px solid var(--border); }
       .lp-h2 { font-size: 30px; letter-spacing: -0.8px; text-align: center; margin: 0; }

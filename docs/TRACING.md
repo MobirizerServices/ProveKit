@@ -43,12 +43,26 @@ it the current context, so everything beneath it nests automatically:
 
 | Source | Captured |
 |---|---|
-| OpenAI / Anthropic calls | automatically — the `[trace]` extra auto-instruments them |
+| **LLM & framework calls** | automatically — see the auto-instrumented list below |
 | Any OTel-instrumented library | automatically — it nests under the current span |
-| Your own sub-steps | wrap them in `with pk.span("name"):` |
+| Your own sub-steps (tools, retrieval, branches) | wrap them in `with pk.span("name"):` |
 | The decorated call | its input (args) and output (return), timing, and status |
 
-Every span becomes a node in the trace, classified **agent · llm · tool · step**.
+Every span becomes a node in the trace, classified **agent · llm · tool · step**, with the
+model, provider, token usage, and input/output captured.
+
+### Auto-instrumented out of the box
+
+`pip install "provekit[trace]"` auto-captures **OpenAI** and **Anthropic**. For the full set,
+`pip install "provekit[trace-all]"` — one decorator then captures calls from any of these that
+your project uses (each instrumentor is dormant unless its library is installed):
+
+- **Providers:** OpenAI · Anthropic · Bedrock · Mistral · Groq · Google GenAI · Vertex AI · LiteLLM
+- **Frameworks:** LangChain · LlamaIndex · CrewAI · AutoGen · OpenAI Agents · smolagents · DSPy · Haystack · Guardrails · Instructor · Agno · Pydantic AI
+
+Anything else — your own tools, retrieval, business logic — you capture with `pk.span()`
+(below). That's the honest split: **LLM/framework calls are automatic; your own steps are one
+line each.**
 
 ## Sub-steps with `pk.span()`
 

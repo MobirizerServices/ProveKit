@@ -153,9 +153,15 @@ function TraceDetail({ spans }: { spans: TraceSpan[] }) {
           <TraceGraph spans={spans} selected={picked} onSelect={setPicked} />
           {sel && (
             <div style={{ marginTop: 12 }}>
-              <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>
-                <b style={{ color: "var(--text)" }}>{sel.label}</b>
-                {sel.request?.model ? ` · ${sel.request.model}` : ""} · {sel.duration_ms}ms
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{sel.label}</div>
+              <div className="muted mono" style={{ fontSize: 11, margin: "4px 0 10px", display: "flex", flexWrap: "wrap", gap: "3px 14px" }}>
+                <span>{sel.type}</span>
+                {sel.request?.provider && <span>provider={sel.request.provider}</span>}
+                {sel.request?.model && <span>model={sel.request.model}</span>}
+                {sel.request?.operation && <span>op={sel.request.operation}</span>}
+                <span style={{ color: sel.status === "failed" ? "var(--red)" : undefined }}>{sel.status}</span>
+                <span>{sel.duration_ms}ms</span>
+                {tokens(sel) && <span>{tokens(sel)}</span>}
               </div>
               <Field label="Input">{textOf(sel.request?.input)}</Field>
               <Field label="Output">{textOf(sel.result?.text)}</Field>

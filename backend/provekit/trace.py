@@ -36,11 +36,32 @@ _tracer = None          # set once configured; None means tracing is a no-op
 _configured = False
 
 # Best-effort auto-instrumentation: whichever of these are installed get enabled so their
-# calls nest under the decorated entrypoint. All optional — a missing one is silently skipped.
+# calls nest under the decorated entrypoint with no manual spans. All optional — a missing
+# package (or a class that moved) is silently skipped. Install the matching openinference
+# package (or use `provekit[trace-all]`) to light one up.
 _INSTRUMENTORS = [
+    # LLM providers
     ("openinference.instrumentation.openai", "OpenAIInstrumentor"),
     ("openinference.instrumentation.anthropic", "AnthropicInstrumentor"),
+    ("openinference.instrumentation.bedrock", "BedrockInstrumentor"),
+    ("openinference.instrumentation.mistralai", "MistralAIInstrumentor"),
+    ("openinference.instrumentation.groq", "GroqInstrumentor"),
+    ("openinference.instrumentation.google_genai", "GoogleGenAIInstrumentor"),
+    ("openinference.instrumentation.vertexai", "VertexAIInstrumentor"),
+    ("openinference.instrumentation.litellm", "LiteLLMInstrumentor"),
+    # agent frameworks
     ("openinference.instrumentation.langchain", "LangChainInstrumentor"),
+    ("openinference.instrumentation.llama_index", "LlamaIndexInstrumentor"),
+    ("openinference.instrumentation.crewai", "CrewAIInstrumentor"),
+    ("openinference.instrumentation.autogen", "AutogenInstrumentor"),
+    ("openinference.instrumentation.openai_agents", "OpenAIAgentsInstrumentor"),
+    ("openinference.instrumentation.smolagents", "SmolagentsInstrumentor"),
+    ("openinference.instrumentation.dspy", "DSPyInstrumentor"),
+    ("openinference.instrumentation.haystack", "HaystackInstrumentor"),
+    ("openinference.instrumentation.guardrails", "GuardrailsInstrumentor"),
+    ("openinference.instrumentation.instructor", "InstructorInstrumentor"),
+    ("openinference.instrumentation.agno", "AgnoInstrumentor"),
+    ("openinference.instrumentation.pydantic_ai", "OpenInferencePydanticAIInstrumentor"),
 ]
 
 

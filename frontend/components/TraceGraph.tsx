@@ -59,8 +59,8 @@ function SpanNode({ data }: { data: { span: TraceSpan; active: boolean } }) {
 
 const nodeTypes = { span: SpanNode };
 
-export default function TraceGraph({ spans, selected, onSelect }: {
-  spans: TraceSpan[]; selected: string | null; onSelect: (id: string) => void;
+export default function TraceGraph({ spans, selected, onSelect, fill }: {
+  spans: TraceSpan[]; selected: string | null; onSelect: (id: string) => void; fill?: boolean;
 }) {
   const { nodes, edges } = useMemo(() => {
     const ids = new Set(spans.map((s) => s.span_id));
@@ -116,7 +116,9 @@ export default function TraceGraph({ spans, selected, onSelect }: {
   }, [spans, selected]);
 
   return (
-    <div style={{ height: 480, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
+    <div style={fill
+      ? { height: "100%", width: "100%" }
+      : { height: 480, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
       <ReactFlow
         nodes={nodes} edges={edges} nodeTypes={nodeTypes}
         fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.15} maxZoom={2.5}

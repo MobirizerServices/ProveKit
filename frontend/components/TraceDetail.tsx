@@ -77,21 +77,23 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   const ids = new Set(spans.map((s) => s.span_id));
   const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
   const [picked, setPicked] = useState<string | null>(root?.span_id ?? null);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
   const totalCost = fmtCost(spans.reduce((n, s) => n + (estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens) || 0), 0) || null);
   const sel = spans.find((s) => s.span_id === picked) || root;
-  const meta = sel?.result?.meta || {};
-  const params = meta.params || {};
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
-        <div style={{ minWidth: 0 }}>
+      {/* Header: name + status-chip bar + view toggle */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 600 }}>{root?.label || "trace"}</span>
-          <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
-            {spans.length} span{spans.length === 1 ? "" : "s"} · {root?.duration_ms ?? 0}ms{totalTok ? ` · ${totalTok} tokens` : ""}{totalCost ? ` · ${totalCost}` : ""}
-          </span>
-          {root?.session_id && <span style={sessionBadge} title="session / thread">◆ {root.session_id}</span>}
+          <span style={chip()}>{spans.length} spans</span>
+          <span style={chip()}>{root?.duration_ms ?? 0}ms</span>
+          {totalTok ? <span style={chip()}>{totalTok.toLocaleString()} tok</span> : null}
+          {totalCost ? <span style={chip()}>{totalCost}</span> : null}
+          <span style={chip(root?.status === "failed" ? "var(--red)" : "var(--green)")}>{root?.status ?? "—"}</span>
+          {root?.session_id && <span style={chip("var(--purple)")} title="session / thread">◆ {root.session_id}</span>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
           {!readOnly && traceId && <ShareButton traceId={traceId} />}
@@ -106,50 +108,133 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
       </div>
 
       {view === "flow" ? (
-        <>
-          <TraceGraph spans={spans} selected={picked} onSelect={setPicked} />
-          {sel && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{sel.label}</div>
-              <div className="muted mono" style={{ fontSize: 11, margin: "4px 0 10px", display: "flex", flexWrap: "wrap", gap: "3px 14px" }}>
-                <span>{sel.type}</span>
-                {sel.request?.provider && <span>provider={sel.request.provider}</span>}
-                {sel.request?.model && <span>model={sel.request.model}</span>}
-                {sel.request?.operation && <span>op={sel.request.operation}</span>}
-                <span style={{ color: sel.status === "failed" ? "var(--red)" : undefined }}>{sel.status}</span>
-                <span>{sel.duration_ms}ms</span>
-                {tokens(sel) && <span>{tokens(sel)}</span>}
-                {(() => {
-                  const c = fmtCost(estimateCost(sel.request?.model, sel.result?.meta?.usage?.input_tokens, sel.result?.meta?.usage?.output_tokens));
-                  return c ? <span title="estimated cost">{c}</span> : null;
-                })()}
-              </div>
-              <ParamRow params={params} finish={meta.finish_reason} />
-              <IO label="Input" value={sel.request?.input} />
-              <IO label="Output" value={sel.result?.text} />
-              {(sel.error || sel.status === "failed") && <ErrorBlock error={sel.error} />}
-              {Array.isArray(meta.events) && meta.events.length > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  <div className="muted" style={fieldLabel}>Logs</div>
-                  <div style={{ ...pre, padding: 8 }}>
-                    {meta.events.map((e: any, i: number) => (
-                      <div key={i} style={{ display: "flex", gap: 8 }}>
-                        <span style={{ color: LOG_COLOR[e.level] || "var(--muted)", fontWeight: 600, minWidth: 44 }}>{e.level}</span>
-                        <span>{e.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        // Full-height studio: canvas fills the space, a resizable/collapsible inspector on the right.
+        <div style={{ display: "flex", height: "62vh", minHeight: 420, border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
+          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+            <TraceGraph spans={spans} selected={picked} onSelect={setPicked} fill />
+          </div>
+          {/* collapse toggle on the divider */}
+          <button onClick={() => setInspectorOpen((o) => !o)} title={inspectorOpen ? "Hide inspector" : "Show inspector"}
+            style={{ ...collapseBtn, right: inspectorOpen ? 388 : 8 }}>{inspectorOpen ? "›" : "‹"}</button>
+          {inspectorOpen && (
+            <div style={{ width: 380, flexShrink: 0, borderLeft: "1px solid var(--border)", overflowY: "auto", background: "var(--panel)" }}>
+              {sel ? <Inspector span={sel} traceId={traceId} readOnly={readOnly} /> : <div className="muted" style={{ padding: 16, fontSize: 13 }}>Click a node to inspect it.</div>}
             </div>
           )}
-        </>
+        </div>
       ) : (
         <Tree spans={spans} />
       )}
 
       {!readOnly && traceId && <FeedbackPanel traceId={traceId} />}
     </div>
+  );
+}
+
+// Right-hand node inspector — tabbed (Output / Raw / Node / Logs) with per-node CTAs.
+function Inspector({ span: s, traceId, readOnly }: { span: TraceSpan; traceId?: string; readOnly?: boolean }) {
+  const [tab, setTab] = useState<"output" | "raw" | "node" | "logs">("output");
+  const meta = s.result?.meta || {};
+  const params = meta.params || {};
+  const events: any[] = Array.isArray(meta.events) ? meta.events : [];
+  const cost = fmtCost(estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens));
+  const copy = (v: any) => navigator.clipboard?.writeText(typeof v === "string" ? v : JSON.stringify(v, null, 2));
+
+  const rows: [string, React.ReactNode][] = [
+    ["type", s.type],
+    ["status", <span style={{ color: s.status === "failed" ? "var(--red)" : "var(--green)" }}>{s.status}</span>],
+    ["duration", `${s.duration_ms} ms`],
+  ];
+  if (s.request?.provider) rows.push(["provider", s.request.provider]);
+  if (s.request?.model) rows.push(["model", s.request.model]);
+  if (s.request?.operation) rows.push(["operation", s.request.operation]);
+  if (params.temperature != null) rows.push(["temperature", String(params.temperature)]);
+  if (params.top_p != null) rows.push(["top_p", String(params.top_p)]);
+  if (params.max_tokens != null) rows.push(["max_tokens", String(params.max_tokens)]);
+  if (meta.finish_reason != null) rows.push(["finish_reason", String(meta.finish_reason)]);
+  if (tokens(s)) rows.push(["tokens", tokens(s)]);
+  if (cost) rows.push(["est. cost", cost]);
+  if (s.span_id) rows.push(["span id", <span className="mono" style={{ fontSize: 11 }}>{s.span_id}</span>]);
+  if (s.session_id) rows.push(["session", s.session_id]);
+
+  const tabs: [typeof tab, string, number?][] = [
+    ["output", "Output"], ["raw", "Raw"], ["node", "Node"], ["logs", "Logs", events.length],
+  ];
+
+  return (
+    <div>
+      <div style={{ position: "sticky", top: 0, background: "var(--panel)", padding: "12px 14px 0", zIndex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={insBadge(s.type, s.status)}>{s.type}</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
+        </div>
+        <div style={{ display: "flex", gap: 2, marginTop: 10, borderBottom: "1px solid var(--border)" }}>
+          {tabs.map(([t, label, n]) => (
+            <button key={t} onClick={() => setTab(t)} style={insTab(tab === t)}>
+              {label}{n ? <span style={{ marginLeft: 4, fontSize: 9.5, color: "var(--muted)" }}>{n}</span> : null}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: 14 }}>
+        {tab === "output" && (
+          <>
+            <IO label="Input" value={s.request?.input} />
+            <IO label="Output" value={s.result?.text} />
+            {(s.error || s.status === "failed") && <ErrorBlock error={s.error} />}
+          </>
+        )}
+        {tab === "raw" && (
+          <pre style={{ ...pre, maxHeight: "48vh" }}>{JSON.stringify({ request: s.request, result: s.result }, null, 2)}</pre>
+        )}
+        {tab === "node" && (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+            <tbody>
+              {rows.map(([k, v], i) => (
+                <tr key={i} style={{ borderTop: i ? "1px solid var(--border)" : "none" }}>
+                  <td style={{ padding: "7px 0", color: "var(--muted)", width: "42%" }}>{k}</td>
+                  <td style={{ padding: "7px 0", textAlign: "right", fontFamily: "var(--font-mono)" }}>{v}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === "logs" && (
+          events.length ? (
+            <div style={{ ...pre, padding: 8 }}>
+              {events.map((e, i) => (
+                <div key={i} style={{ display: "flex", gap: 8 }}>
+                  <span style={{ color: LOG_COLOR[e.level] || "var(--muted)", fontWeight: 600, minWidth: 44 }}>{e.level}</span>
+                  <span>{e.name}</span>
+                </div>
+              ))}
+            </div>
+          ) : <div className="muted" style={{ fontSize: 12.5 }}>No logs on this span.</div>
+        )}
+
+        {/* per-node CTAs */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+          <button className="btn btn-sm" onClick={() => copy(s.result?.text ?? s.request?.input ?? "")}>Copy I/O</button>
+          <button className="btn btn-sm" onClick={() => copy({ request: s.request, result: s.result })}>Copy JSON</button>
+          {!readOnly && traceId && <ScoreButtons traceId={traceId} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreButtons({ traceId }: { traceId: string }) {
+  const [done, setDone] = useState("");
+  const send = async (value: string) => {
+    try { await api.addFeedback(traceId, { name: "thumbs", value }); setDone(value === "up" ? "👍" : "👎"); setTimeout(() => setDone(""), 1500); } catch { /* ignore */ }
+  };
+  return (
+    <>
+      <button className="btn btn-sm" onClick={() => send("up")}>👍</button>
+      <button className="btn btn-sm" onClick={() => send("down")}>👎</button>
+      {done && <span style={{ fontSize: 12, alignSelf: "center" }}>{done} saved</span>}
+    </>
   );
 }
 
@@ -347,6 +432,27 @@ const sessionBadge: React.CSSProperties = {
   fontSize: 11, marginLeft: 8, padding: "1px 7px", borderRadius: 5, color: "var(--purple)",
   border: "1px solid var(--border-strong)",
 };
+function chip(color?: string): React.CSSProperties {
+  return {
+    fontSize: 11, padding: "2px 8px", borderRadius: 999, color: color || "var(--muted)",
+    border: `1px solid ${color ? color : "var(--border)"}`, background: "var(--bg-2)", whiteSpace: "nowrap",
+  };
+}
+const collapseBtn: React.CSSProperties = {
+  position: "absolute", top: 10, zIndex: 5, width: 22, height: 22, borderRadius: 6,
+  border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--muted)",
+  cursor: "pointer", fontSize: 14, lineHeight: 1, display: "grid", placeItems: "center",
+};
+function insBadge(type: string, status: string): React.CSSProperties {
+  const c = status === "failed" ? "var(--red)" : (TYPE_COLOR[type] || "var(--muted)");
+  return { fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
+    padding: "1px 5px", borderRadius: 4, color: c, border: `1px solid ${c}`, flexShrink: 0 };
+}
+function insTab(active: boolean): React.CSSProperties {
+  return { fontSize: 12, padding: "6px 10px", background: "none", border: "none", cursor: "pointer",
+    color: active ? "var(--text)" : "var(--muted)", fontWeight: active ? 600 : 400,
+    borderBottom: `2px solid ${active ? "var(--accent)" : "transparent"}`, marginBottom: -1 };
+}
 const pre: React.CSSProperties = {
   margin: 0, padding: 10, borderRadius: 8, background: "var(--bg-2)", border: "1px solid var(--border)",
   fontSize: 12, lineHeight: 1.5, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap",

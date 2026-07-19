@@ -72,6 +72,7 @@ export default function TracesPage() {
   const [sort, setSort] = useState<"recent" | "slowest" | "tokens">("recent");
   const [groupBySession, setGroupBySession] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [listOpen, setListOpen] = useState(true);
 
   const load = useCallback(() => {
     api.traces({ status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined })
@@ -107,7 +108,7 @@ export default function TracesPage() {
   return (
     <>
       <TopNav />
-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "24px 20px 80px" }}>
+      <main style={{ maxWidth: sel ? 1600 : 1180, margin: "0 auto", padding: "24px 20px 80px", transition: "max-width .2s" }}>
         <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Traces</h1>
         <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
           Every run your agent makes, captured from one decorator — the whole flow of model
@@ -117,8 +118,15 @@ export default function TracesPage() {
         {traces.length === 0 && !failuresOnly && !windowHours ? (
           <Onboarding origin={origin} />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: "76vh" }}>
+          <div style={{ display: "grid", gridTemplateColumns: listOpen ? "300px 1fr" : "0 1fr", gap: listOpen ? 16 : 0, transition: "grid-template-columns .2s, gap .2s", position: "relative" }}>
+            {/* collapse the trace list to give the flow studio the whole width */}
+            {sel && (
+              <button onClick={() => setListOpen((o) => !o)} title={listOpen ? "Hide list" : "Show list"}
+                style={{ position: "absolute", top: 6, left: listOpen ? 300 : -4, zIndex: 6, width: 22, height: 22, borderRadius: 6, border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--muted)", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "grid", placeItems: "center" }}>
+                {listOpen ? "‹" : "›"}
+              </button>
+            )}
+            <div style={{ display: listOpen ? "flex" : "none", flexDirection: "column", gap: 8, maxHeight: "76vh" }}>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter traces…"
                 style={{ background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 }} />
               <div style={{ display: "flex", gap: 6 }}>

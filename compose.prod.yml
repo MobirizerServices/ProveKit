@@ -64,6 +64,10 @@ services:
       # Tunable quotas (defaults are sensible): trace-ingest rate + span retention.
       INGEST_RATE_PER_MIN: "${INGEST_RATE_PER_MIN:-600}"
       RUNS_RETENTION: "${RUNS_RETENTION:-10000}"
+      # Bootstrap the /admin console for this account, larger uploads, optional PII masking.
+      SUPERUSER_EMAILS: "${SUPERUSER_EMAILS:-}"
+      MAX_BODY_BYTES: "${MAX_BODY_BYTES:-25000000}"
+      REDACT_PII: "${REDACT_PII:-false}"
     depends_on:
       db:
         condition: service_healthy

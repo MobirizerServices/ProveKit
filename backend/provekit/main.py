@@ -16,7 +16,7 @@ from .observability import (
     init_sentry,
     setup_logging,
 )
-from .routers import apikeys, auth, datasets, traces
+from .routers import apikeys, auth, datasets, experiments, traces
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -83,6 +83,8 @@ app.include_router(traces.ws_router)
 app.include_router(traces.runs_router)
 app.include_router(datasets.router)
 app.include_router(datasets.key_router)
+app.include_router(experiments.router)
+app.include_router(experiments.key_router)
 
 
 @app.get("/")

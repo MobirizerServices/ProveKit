@@ -126,6 +126,32 @@ class DatasetItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class Experiment(Base):
+    """One offline-evaluation run: a target executed over a dataset, scored. Compare
+    experiments on the same dataset to catch regressions before they ship."""
+    __tablename__ = "experiments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(160), default="")
+    dataset_id: Mapped[int | None] = mapped_column(ForeignKey("datasets.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class ExperimentResult(Base):
+    """One scored example within an experiment: the target's output for an item, plus the
+    per-scorer scores ({scorer_name: value})."""
+    __tablename__ = "experiment_results"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    experiment_id: Mapped[int] = mapped_column(ForeignKey("experiments.id"), index=True)
+    item_id: Mapped[int | None] = mapped_column(nullable=True)
+    input: Mapped[str] = mapped_column(Text, default="")
+    output: Mapped[str] = mapped_column(Text, default="")
+    expected: Mapped[str] = mapped_column(Text, default="")
+    scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Feedback(Base):
     """A score or annotation attached to a whole trace — a human thumbs-up, an LLM-judge
     score, or an offline-eval result. Many per trace; the portal shows them on the run."""

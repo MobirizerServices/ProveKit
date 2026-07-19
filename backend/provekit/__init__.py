@@ -11,6 +11,8 @@ captured automatically. `init`, `configure`, and `span` are also re-exported her
 `import provekit as pk` convenience; the `trace` decorator lives on the `provekit.trace`
 submodule (a same-named top-level export would shadow that module).
 """
+from provekit import scorers
+from provekit.eval import evaluate
 from provekit.trace import configure, init, span
 
-__all__ = ["init", "configure", "span"]
+__all__ = ["init", "configure", "span", "evaluate", "scorers"]

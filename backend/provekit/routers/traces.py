@@ -113,6 +113,7 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
     trace_ids = [r.trace_id for r in roots if r.trace_id]
     counts: dict = {}
     tokens: dict = {}
+    models: dict = {}
     if trace_ids:
         for tid, cnt in (db.query(Run.trace_id, func.count(Run.id))
                          .filter(Run.workspace_id == ws.id, Run.trace_id.in_(trace_ids))
@@ -120,12 +121,16 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
             counts[tid] = cnt
         for tid, result in (db.query(Run.trace_id, Run.result)
                             .filter(Run.workspace_id == ws.id, Run.trace_id.in_(trace_ids)).all()):
-            u = (result or {}).get("meta", {}).get("usage", {}) if isinstance(result, dict) else {}
+            meta = (result or {}).get("meta", {}) if isinstance(result, dict) else {}
+            u = meta.get("usage", {})
             tokens[tid] = tokens.get(tid, 0) + (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
+            if meta.get("model") and tid not in models:   # first model seen in the trace
+                models[tid] = meta["model"]
     return [{"id": r.id, "trace_id": r.trace_id, "label": r.label, "type": r.type,
              "status": r.status, "duration_ms": r.duration_ms,
              "span_count": counts.get(r.trace_id, 1) if r.trace_id else 1,
              "tokens": tokens.get(r.trace_id, 0), "session_id": r.session_id,
+             "model": models.get(r.trace_id),
              "created_at": iso_utc(r.created_at)} for r in roots]
 
 

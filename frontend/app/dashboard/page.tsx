@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, Metrics } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
+import AreaChart from "@/components/AreaChart";
 import TopNav from "@/components/TopNav";
 
 const WINDOWS = [
@@ -15,7 +16,6 @@ export default function DashboardPage() {
   const load = useCallback(() => { api.metrics(hours).then(setM).catch(() => {}); }, [hours]);
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
 
-  const maxCount = m ? Math.max(1, ...m.series.map((b) => b.count)) : 1;
   const cost = m ? fmtCost(m.by_model.reduce((n, r) => {
     // approximate: split tokens 50/50 in/out for the estimate
     return n + (estimateCost(r.model, Math.round(r.tokens / 2), Math.round(r.tokens / 2)) || 0);
@@ -51,22 +51,17 @@ export default function DashboardPage() {
             </div>
 
             <div style={{ ...panel, marginBottom: 20 }}>
-              <div style={label}>Traffic {hours <= 48 ? "(hourly)" : "(daily)"}</div>
-              {m.series.length === 0 ? (
-                <div className="muted" style={{ fontSize: 13 }}>No traces in this window.</div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 120, marginTop: 12 }}>
-                  {m.series.map((b) => {
-                    const h = Math.max(2, (b.count / maxCount) * 110);
-                    const errH = b.count ? (b.errors / b.count) * h : 0;
-                    return (
-                      <div key={b.t} title={`${b.t}\n${b.count} traces · ${b.errors} errors`}
-                        style={{ flex: 1, minWidth: 4, height: h, background: "var(--blue)", borderRadius: 3, position: "relative", display: "flex", alignItems: "flex-end" }}>
-                        {errH > 0 && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: errH, background: "var(--red)", borderRadius: 3 }} />}
-                      </div>
-                    );
-                  })}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={label}>Traffic {hours <= 48 ? "(hourly)" : "(daily)"}</div>
+                <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--muted)" }}>
+                  <span><span style={legendDot("var(--blue)")} /> traces</span>
+                  <span><span style={legendDot("var(--red)")} /> errors</span>
                 </div>
+              </div>
+              {m.series.length === 0 ? (
+                <div className="muted" style={{ fontSize: 13, padding: "40px 0", textAlign: "center" }}>No traces in this window.</div>
+              ) : (
+                <div style={{ marginTop: 10 }}><AreaChart data={m.series} height={170} /></div>
               )}
             </div>
 
@@ -112,6 +107,9 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 
 const panel: React.CSSProperties = { background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 };
 const label: React.CSSProperties = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)" };
+function legendDot(c: string): React.CSSProperties {
+  return { display: "inline-block", width: 8, height: 8, borderRadius: 999, background: c, marginRight: 4 };
+}
 const th: React.CSSProperties = { padding: "4px 8px", fontWeight: 500 };
 const td: React.CSSProperties = { padding: "6px 8px" };
 function toggle(active: boolean): React.CSSProperties {

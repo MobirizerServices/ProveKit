@@ -29,6 +29,7 @@ export default function TracesPage() {
   const [q, setQ] = useState("");
   const [failuresOnly, setFailuresOnly] = useState(false);
   const [windowHours, setWindowHours] = useState(0);
+  const [model, setModel] = useState("");
 
   const load = useCallback(() => {
     api.traces({ status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined })
@@ -50,7 +51,10 @@ export default function TracesPage() {
   }, [sel]);
 
   const fmt = (s?: string) => (s ? new Date(s).toLocaleString() : "");
-  const shown = traces.filter((t) => !q || (t.label || "").toLowerCase().includes(q.toLowerCase()));
+  const modelOptions = Array.from(new Set(traces.map((t) => t.model).filter(Boolean))) as string[];
+  const shown = traces.filter((t) =>
+    (!q || (t.label || "").toLowerCase().includes(q.toLowerCase())) &&
+    (!model || t.model === model));
 
   return (
     <>
@@ -77,6 +81,13 @@ export default function TracesPage() {
                   {WINDOWS.map((w) => <option key={w.hours} value={w.hours}>{w.label}</option>)}
                 </select>
               </div>
+              {modelOptions.length > 1 && (
+                <select value={model} onChange={(e) => setModel(e.target.value)}
+                  style={{ ...chip(!!model), appearance: "none" }} title="Filter by model">
+                  <option value="">All models</option>
+                  {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
               <div style={{ ...panel, padding: 0, overflowY: "auto" }}>
               {shown.length === 0 ? (
                 <div className="muted" style={{ padding: 14, fontSize: 12.5 }}>No traces match.</div>

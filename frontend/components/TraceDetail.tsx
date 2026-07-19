@@ -129,7 +129,7 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
               </div>
               <IO label="Input" value={sel.request?.input} />
               <IO label="Output" value={sel.result?.text} />
-              {sel.error && <Field label="Error">{sel.error}</Field>}
+              {(sel.error || sel.status === "failed") && <ErrorBlock error={sel.error} />}
               {Array.isArray(meta.events) && meta.events.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
                   <div className="muted" style={fieldLabel}>Logs</div>
@@ -261,7 +261,7 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
               {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
               <IO label="Input" value={s.request?.input} />
               <IO label="Output" value={s.result?.text} />
-              {s.error && <Field label="Error">{s.error}</Field>}
+              {(s.error || s.status === "failed") && <ErrorBlock error={s.error} />}
             </div>
           )}
           {render(s.span_id, depth + 1)}
@@ -269,6 +269,19 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
       );
     });
   return <div>{render("__root__", 0)}</div>;
+}
+
+function ErrorBlock({ error }: { error?: string }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4, color: "var(--red)", fontWeight: 600 }}>
+        ✕ Error
+      </div>
+      <pre style={{ ...pre, border: "1px solid var(--red)", background: "color-mix(in srgb, var(--red) 8%, var(--bg-2))", color: "var(--text)" }}>
+        {error?.trim() || <span className="muted">This span failed (no error message captured).</span>}
+      </pre>
+    </div>
+  );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

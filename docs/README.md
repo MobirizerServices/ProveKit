@@ -7,6 +7,7 @@
 - [MCP debug channel](MCP.md) — debug traces from Claude Desktop / Cursor by project key
 - [Publishing](PUBLISHING.md) — release `provekit` to PyPI
 - [Deployment](DEPLOY.md) — local vs hosted (TLS, Postgres, Redis)
+- [Examples](../examples/README.md) — a runnable demo agent that populates a portal with traces
 - [Contributing](../CONTRIBUTING.md) — clone to running
 - [Security](../SECURITY.md) — threat model, secret handling, disclosure
 

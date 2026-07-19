@@ -151,6 +151,95 @@ def test_agent_quality():
 Bring your own scorers too — any \`fn(output, expected) -> float\` works, including an
 LLM-as-judge. Now a bad prompt change turns red before it reaches your users.`,
   },
+  {
+    slug: "self-host-provekit",
+    title: "Self-hosting ProveKit with Docker",
+    date: "2026-07-18",
+    author: "The ProveKit team",
+    description:
+      "Run the whole ProveKit portal on your own infrastructure — your traces, your keys, your data. A short guide with Docker Compose.",
+    tags: ["self-host", "guide"],
+    minutes: 4,
+    body: `One of the reasons teams pick ProveKit is that it runs on **your** infrastructure.
+Your agent's traces never leave your environment, and you bring your own model keys.
+
+## What you run
+
+The portal is two services — a FastAPI backend and a Next.js frontend — behind a reverse
+proxy, with Postgres for storage and (optionally) Redis for shared rate limits. A production
+Compose file with Caddy and TLS ships in the repo.
+
+## Bring it up
+
+\`\`\`bash
+git clone https://github.com/MobirizerServices/ProveKit
+cd ProveKit
+cp .env.example .env         # set SECRET_KEY, DATABASE_URL, your domain
+docker compose -f compose.prod.yml up -d
+\`\`\`
+
+The backend runs its database migrations on boot, so the schema is ready on first start.
+
+## Point your agent at it
+
+\`\`\`bash
+PROVEKIT_ENDPOINT=https://provekit.your-company.com
+PROVEKIT_API_KEY=pk_...       # created in the portal
+\`\`\`
+
+## Data controls you own
+
+- **Retention** — cap the number of spans kept per project; older ones are pruned.
+- **PII masking** — redact emails, cards, and secrets on ingest, per project.
+- **Projects & members** — isolated workspaces with roles, so teams share safely.
+
+That's the whole story: clone, configure, \`docker compose up\`. See the
+[deployment guide](https://github.com/MobirizerServices/ProveKit/blob/main/docs/DEPLOY.md)
+for the details, including Postgres and backups.`,
+  },
+  {
+    slug: "provekit-vs-hosted-tools",
+    title: "ProveKit vs hosted agent-observability tools",
+    date: "2026-07-17",
+    author: "The ProveKit team",
+    description:
+      "How ProveKit compares to hosted SaaS observability tools — and when open-source, self-hosted tracing is the right call.",
+    tags: ["comparison", "observability"],
+    minutes: 5,
+    body: `The agent-observability space is crowded, and the hosted tools are good. So where
+does an **open-source, self-hostable** option like ProveKit fit?
+
+## What's the same
+
+The table stakes are shared: nested trace views, token and cost accounting, latency, an
+evaluation workflow, and dashboards. If you just want a hosted dashboard and don't mind your
+traces living in a vendor's cloud, a SaaS tool is a fine choice.
+
+## Where ProveKit is different
+
+- **Your data stays yours.** ProveKit is self-hostable — traces never leave your infra, and
+  you bring your own model keys. For teams with data-residency or compliance constraints,
+  that's often the deciding factor.
+- **Activation is one line.** \`import provekit.auto\` turns on tracing for the libraries you
+  already use — no per-call wiring, no framework migration.
+- **It's open source.** No seat pricing, no lock-in, and you can read and extend every line.
+- **Debug over MCP.** Point Claude Desktop or Cursor at your project key and let an assistant
+  query and reason over your traces — a workflow the hosted tools don't offer.
+
+## Where a hosted tool may win
+
+- If you'd rather not run any infrastructure at all, a managed service removes that work.
+- Large enterprises may want a vendor SLA, SSO, and support contracts out of the box.
+
+## The honest summary
+
+ProveKit aims for **observability-tool depth with one-line activation, on your own infra**. If
+"self-hosted, open source, our data" matters to you, that's exactly the wedge. If you want a
+fully managed cloud and don't need to own the deployment, a hosted tool is reasonable too.
+
+Either way — instrument your agents. Flying blind is the expensive option. You can
+[try ProveKit in two minutes](/signup).`,
+  },
 ];
 
 export function getPost(slug: string): Post | undefined {

@@ -1,10 +1,8 @@
 {
-  "/robots.txt/route": "app/robots.txt/route.js",
-  "/sitemap.xml/route": "app/sitemap.xml/route.js",
-  "/feed.xml/route": "app/feed.xml/route.js",
-  "/traces/page": "app/traces/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/signup/page": "app/signup/page.js",
-  "/blog/page": "app/blog/page.js",
-  "/blog/[slug]/page": "app/blog/[slug]/page.js"
+  "/api-keys/page": "app/api-keys/page.js",
+  "/page": "app/page.js",
+  "/traces/page": "app/traces/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/datasets/page": "app/datasets/page.js"
 }

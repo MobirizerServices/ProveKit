@@ -3,11 +3,22 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import GitHubStars from "@/components/GitHubStars";
 
 export default function Landing() {
   const [authed, setAuthed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => { api.me().then(() => setAuthed(true)).catch(() => {}); }, []);
   const primary = authed ? { href: "/traces", label: "Open portal" } : { href: "/signup", label: "Get started free" };
+  const navLinks = (
+    <>
+      <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
+      <a href="#flow" onClick={() => setMenuOpen(false)}>Agent flow</a>
+      <Link href="/blog" onClick={() => setMenuOpen(false)}>Blog</Link>
+      <a href="https://github.com/MobirizerServices/ProveKit" target="_blank" rel="noreferrer">GitHub</a>
+      {!authed && <Link href="/login">Sign in</Link>}
+    </>
+  );
 
   const ld = {
     "@context": "https://schema.org", "@type": "SoftwareApplication",
@@ -23,14 +34,14 @@ export default function Landing() {
       <header className="lp-nav">
         <div className="lp-brand"><span className="lp-logo">◇</span> Prove<b>Kit</b></div>
         <nav className="lp-navlinks">
-          <a href="#features">Features</a>
-          <a href="#flow">Agent flow</a>
-          <Link href="/blog">Blog</Link>
-          <a href="https://github.com/MobirizerServices/ProveKit" target="_blank" rel="noreferrer">GitHub</a>
-          {!authed && <Link href="/login">Sign in</Link>}
+          <span className="lp-navdesktop">{navLinks}</span>
           <Link href={authed ? "/traces" : "/signup"} className="lp-signin">{authed ? "Portal" : "Sign up"}</Link>
+          <button className="lp-burger" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
+            {menuOpen ? "✕" : "☰"}
+          </button>
         </nav>
       </header>
+      {menuOpen && <div className="lp-mobilemenu">{navLinks}</div>}
 
       <section className="lp-hero">
         <div className="lp-hero-copy">
@@ -96,6 +107,17 @@ def run(question):
         <FlowVisual />
       </section>
 
+      <section className="lp-demo">
+        <h2 className="lp-h2">See it in action</h2>
+        <p className="lp-sub">A real 37-span run — nested sub-agents, RAG retrieval, a failed-then-retried tool — in the Flow and Waterfall views.</p>
+        <div className="lp-demo-frame">
+          <div className="lp-demo-bar"><span className="lp-dot r" /><span className="lp-dot y" /><span className="lp-dot g" /></div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/demo-trace.gif" alt="ProveKit portal showing an agent trace as a node graph and a waterfall"
+            loading="lazy" width={1512} height={697} className="lp-demo-img" />
+        </div>
+      </section>
+
       <section id="features" className="lp-features">
         <h2 className="lp-h2">Everything to prove your agent works</h2>
         <p className="lp-sub">From the first trace to a CI regression gate — one platform, self-hostable.</p>
@@ -123,7 +145,44 @@ def run(question):
         </div>
       </section>
 
-      <section className="lp-faq">
+      <section className="lp-compare">
+        <h2 className="lp-h2">Why ProveKit</h2>
+        <p className="lp-sub">Observability-tool depth, activation in one line — and it runs on your own infra.</p>
+        <div className="lp-table-wrap">
+          <table className="lp-table">
+            <thead><tr><th>&nbsp;</th><th>Raw logs</th><th>Hosted SaaS tools</th><th>ProveKit</th></tr></thead>
+            <tbody>
+              {COMPARE.map((r) => (
+                <tr key={r.f}>
+                  <td>{r.f}</td>
+                  <td className={cls(r.logs)}>{sym(r.logs)}</td>
+                  <td className={cls(r.saas)}>{sym(r.saas)}</td>
+                  <td className={cls(r.pk)}>{sym(r.pk)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="lp-quotes">
+        <h2 className="lp-h2">Built for agent developers</h2>
+        <div className="lp-quote-grid">
+          {QUOTES.map((q) => (
+            <div key={q.by} className="lp-quote">
+              <div className="lp-quote-text">“{q.t}”</div>
+              <div className="lp-quote-by">— {q.by}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="faq" className="lp-faq">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org", "@type": "FAQPage",
+          mainEntity: FAQ.map((f) => ({ "@type": "Question", name: f.q,
+            acceptedAnswer: { "@type": "Answer", text: f.a } })),
+        }) }} />
         <h2 className="lp-h2">Questions</h2>
         <div className="lp-faq-grid">
           {FAQ.map((f) => (
@@ -140,7 +199,7 @@ def run(question):
         <p>Open source, self-hostable, and free to run. Bring your own keys, own your data.</p>
         <div className="lp-cta" style={{ justifyContent: "center" }}>
           <Link href={primary.href} className="btn lp-btn-primary">{primary.label}</Link>
-          <a href="https://github.com/MobirizerServices/ProveKit" className="btn btn-ghost lp-btn" target="_blank" rel="noreferrer">Star on GitHub</a>
+          <GitHubStars />
         </div>
       </section>
 
@@ -280,6 +339,26 @@ const FAQ = [
   { q: "Is there vendor lock-in?", a: "No. It's OpenTelemetry-native and open source — one SDK, standard formats, and you own the deployment." },
 ];
 
+type Cell = "yes" | "no" | "partial" | string;
+const sym = (v: Cell) => (v === "yes" ? "✓" : v === "no" ? "—" : v === "partial" ? "◐" : v);
+const cls = (v: Cell) => (v === "yes" ? "yes" : v === "no" ? "no" : "");
+
+const COMPARE: { f: string; logs: Cell; saas: Cell; pk: Cell }[] = [
+  { f: "Nested flow graph", logs: "no", saas: "yes", pk: "yes" },
+  { f: "One-line setup", logs: "no", saas: "partial", pk: "yes" },
+  { f: "Evaluation + CI gate", logs: "no", saas: "yes", pk: "yes" },
+  { f: "Dashboards + alerts", logs: "partial", saas: "yes", pk: "yes" },
+  { f: "Self-host, your data", logs: "yes", saas: "no", pk: "yes" },
+  { f: "Open source", logs: "yes", saas: "no", pk: "yes" },
+  { f: "Debug over MCP", logs: "no", saas: "no", pk: "yes" },
+];
+
+const QUOTES = [
+  { t: "It took one import to see the whole agent run — the failed tool call was obvious in seconds.", by: "AI engineer, early user" },
+  { t: "Finally an eval gate we can actually put in CI. A bad prompt change goes red before it ships.", by: "Platform team lead" },
+  { t: "Self-hosted, our keys, our data. That's the part that got it approved.", by: "Staff engineer" },
+];
+
 const FOOTER = [
   { h: "Product", links: [{ t: "Features", href: "/#features" }, { t: "Agent flow", href: "/#flow" }, { t: "Dashboard", href: "/dashboard" }, { t: "Pricing", href: "/#faq" }] },
   { h: "Resources", links: [{ t: "Blog", href: "/blog" }, { t: "Docs", href: "https://github.com/MobirizerServices/ProveKit/tree/main/docs" }, { t: "Changelog", href: "https://github.com/MobirizerServices/ProveKit/blob/main/CHANGELOG.md" }] },
@@ -299,6 +378,16 @@ function LandingStyles() {
       .lp-navlinks a:hover { color: var(--text); }
       .lp-signin { padding: 7px 14px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text) !important; }
       .lp-signin:hover { background: var(--panel-2); }
+      .lp-navdesktop { display: contents; }
+      .lp-burger { display: none; background: transparent; border: none; color: var(--text); font-size: 18px; cursor: pointer; padding: 4px 8px; }
+      .lp-mobilemenu { display: none; }
+      @media (max-width: 820px) {
+        .lp-navdesktop { display: none; }
+        .lp-burger { display: block; }
+        .lp-mobilemenu { display: flex; flex-direction: column; gap: 4px; padding: 10px 22px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 60px; background: var(--bg); z-index: 29; }
+        .lp-mobilemenu a { padding: 9px 6px; color: var(--muted); font-size: 15px; }
+        .lp-mobilemenu a:hover { color: var(--text); }
+      }
 
       .lp-hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; padding: 54px 0 40px; position: relative; }
       .lp-hero::before { content: ""; position: absolute; inset: -80px -200px auto; height: 360px; z-index: -1;
@@ -356,6 +445,26 @@ function LandingStyles() {
       @keyframes rf-flow { to { stroke-dashoffset: -11; } }
       @media (prefers-reduced-motion: reduce) { .lp-edge { animation: none; } }
 
+      .lp-demo { padding: 50px 0; border-top: 1px solid var(--border); text-align: center; }
+      .lp-demo-frame { max-width: 860px; margin: 30px auto 0; border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden; box-shadow: var(--sh-2); background: var(--panel); }
+      .lp-demo-bar { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-2); }
+      .lp-demo-img { display: block; width: 100%; height: auto; }
+
+      .lp-compare { padding: 50px 0; border-top: 1px solid var(--border); }
+      .lp-table-wrap { overflow-x: auto; max-width: 820px; margin: 30px auto 0; }
+      .lp-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      .lp-table th, .lp-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+      .lp-table th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+      .lp-table td:first-child { color: var(--muted); }
+      .lp-table .yes { color: var(--green); font-weight: 600; }
+      .lp-table .no { color: var(--faint); }
+
+      .lp-quotes { padding: 50px 0; border-top: 1px solid var(--border); }
+      .lp-quote-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 30px; }
+      .lp-quote { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+      .lp-quote-text { font-size: 14.5px; line-height: 1.55; }
+      .lp-quote-by { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+
       .lp-features, .lp-how { padding: 50px 0; border-top: 1px solid var(--border); }
       .lp-h2 { font-size: 30px; letter-spacing: -0.8px; text-align: center; margin: 0; }
       .lp-sub { text-align: center; color: var(--muted); font-size: 15px; margin: 12px 0 34px; }
@@ -395,9 +504,9 @@ function LandingStyles() {
 
       @media (max-width: 820px) {
         .lp-hero, .lp-code-band { grid-template-columns: 1fr; }
-        .lp-grid, .lp-steps, .lp-faq-grid { grid-template-columns: 1fr; }
+        .lp-grid, .lp-steps, .lp-faq-grid, .lp-quote-grid { grid-template-columns: 1fr; }
         .lp-hero h1 { font-size: 36px; }
-        .lp-navlinks a:not(.lp-signin) { display: none; }
+        .lp-navlinks .lp-hidemobile { display: none; }
         .lp-footer { gap: 24px; }
       }
     `}</style>

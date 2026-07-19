@@ -1,0 +1,71 @@
+# Co-host ProveKit on the SAME Contabo VPS as CereBroZen.
+#
+# cere's Caddy already owns host 80/443 and does auto-HTTPS. So ProveKit runs WITHOUT its own
+# Caddy: just the app containers, joined to cere's Docker network, and cere's Caddy fronts
+# provekit.online by container name (see the Caddy block in docs/DEPLOY_CONTABO_SHARED.md).
+#
+#   cp deploy/provekit.online.env.example deploy/provekit.online.env   # fill secrets
+#   # confirm cere's network name:  docker network ls | grep cere      (usually cerebrozen_default)
+#   CADDY_NETWORK=cerebrozen_default docker compose -f compose.contabo.yml up -d --build
+#
+# No ports are published to the host — cere's Caddy reaches these over the shared network.
+networks:
+  edge:
+    external: true
+    name: ${CADDY_NETWORK:-cerebrozen_default}   # the network cere's Caddy runs on
+  internal:
+    driver: bridge
+
+services:
+  provekit-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: provekit
+      POSTGRES_DB: provekit
+      POSTGRES_PASSWORD: ${PROVEKIT_DB_PASSWORD:?set PROVEKIT_DB_PASSWORD}
+    volumes:
+      - provekit-pg:/var/lib/postgresql/data
+    networks: [internal]
+    restart: unless-stopped
+
+  provekit-redis:
+    image: redis:7-alpine
+    networks: [internal]
+    restart: unless-stopped
+
+  provekit-backend:
+    build:
+      context: ./backend
+    container_name: provekit-backend    # cere's Caddy proxies to this name
+    env_file:
+      - deploy/provekit.online.env
+    environment:
+      # Point at THIS stack's db/redis (overrides whatever the env file has).
+      DATABASE_URL: "postgresql+psycopg://provekit:${PROVEKIT_DB_PASSWORD:?}@provekit-postgres:5432/provekit"
+      REDIS_URL: "redis://provekit-redis:6379/0"
+    networks: [internal, edge]     # edge → reachable by cere's Caddy as "provekit-backend"
+    depends_on:
+      - provekit-postgres
+      - provekit-redis
+    restart: unless-stopped
+
+  provekit-frontend:
+    build:
+      context: ./frontend
+      args:
+        # Not strictly needed (Caddy routes /api /v1 /healthz straight to the backend), but
+        # set correctly so any stray same-origin call still resolves.
+        API_PROXY_TARGET: "http://provekit-backend:8000"
+    container_name: provekit-frontend    # cere's Caddy proxies to this name
+    env_file:
+      - deploy/provekit.online.env
+    environment:
+      HOSTED: "true"      # middleware login gate
+      PORT: "3000"
+    networks: [edge]      # edge → reachable by cere's Caddy as "provekit-frontend"
+    depends_on:
+      - provekit-backend
+    restart: unless-stopped
+
+volumes:
+  provekit-pg:

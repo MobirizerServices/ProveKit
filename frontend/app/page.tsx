@@ -320,7 +320,8 @@ const ROWS = [
 const FEATURES = [
   { ic: "◇", c: "var(--accent)", t: "Drop-in tracing", d: "One import auto-captures OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI, and outbound HTTP — no per-call code." },
   { ic: "❖", c: "var(--blue)", t: "Flow graph & waterfall", d: "See the run as an animated node graph or a time-proportional waterfall — inputs, outputs, tokens, cost, and logs per span." },
-  { ic: "✓", c: "var(--green)", t: "Evaluation & CI gates", d: "Build datasets from real traces, score with built-in or custom scorers, and fail your build on a regression with pk.evaluate()." },
+  { ic: "▶", c: "var(--accent)", t: "Interactive debugging", d: "Don't just read logs — edit any captured LLM call's prompt or variables and re-run it with real data, diff the output, or replay the whole trace live from a step." },
+  { ic: "✓", c: "var(--green)", t: "Evaluation & CI gates", d: "Build datasets from real traces, score with built-in, LLM-judge, or custom scorers, and fail your build on a regression with pk.evaluate()." },
   { ic: "▲", c: "var(--amber)", t: "Dashboards & alerts", d: "Volume, error rate, latency p50/p95, tokens, and cost over time — with threshold alerts that email on a breach." },
   { ic: "⌘", c: "var(--purple)", t: "Debug over MCP", d: "Point Claude Desktop or Cursor at your project key and let an agent query and reason over your traces — no extra client code." },
   { ic: "⊞", c: "var(--accent)", t: "Multi-project & self-host", d: "Isolated projects with members and roles, per-project keys, PII redaction, retention — all on your own infra via Docker." },

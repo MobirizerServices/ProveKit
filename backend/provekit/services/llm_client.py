@@ -104,6 +104,38 @@ async def _anthropic(model, messages, params, api_key) -> dict:
             "finish_reason": data.get("stop_reason") or ""}
 
 
+async def judge(provider: str, model: str, question: str, expected: str, output: str,
+                *, api_key: str = "", base_url: str = "") -> float:
+    """Model-graded score in [0,1] for how well `output` matches `expected`. For the mock
+    provider it's a deterministic heuristic (no call); for real providers it grades via the model
+    and parses the number. Never raises — returns 0.0 on any failure."""
+    if (provider or "").lower() == "mock":
+        exp = (expected or "").strip().lower()
+        out = (output or "").strip().lower()
+        if not exp:
+            return 1.0 if out else 0.0
+        return 1.0 if exp in out else (0.5 if any(w in out for w in exp.split()) else 0.0)
+    messages = [
+        {"role": "system", "content": "You are a strict grader. Score how well the answer matches "
+         "the expected answer, from 0.0 (wrong) to 1.0 (perfect). Reply with ONLY the number."},
+        {"role": "user", "content": f"Question:\n{question}\n\nExpected answer:\n{expected}\n\n"
+         f"Answer to grade:\n{output}\n\nScore (0.0-1.0):"},
+    ]
+    try:
+        r = await complete(provider, model, messages, {"max_tokens": 8, "temperature": 0},
+                           api_key=api_key, base_url=base_url)
+    except LLMError:
+        return 0.0
+    import re
+    m = re.search(r"[01](?:\.\d+)?|0?\.\d+", r.get("output", ""))
+    if not m:
+        return 0.0
+    try:
+        return max(0.0, min(1.0, float(m.group())))
+    except ValueError:
+        return 0.0
+
+
 def _err(r: httpx.Response) -> str:
     """Extract a clean provider error message (both OpenAI and Anthropic nest it under 'error')."""
     try:

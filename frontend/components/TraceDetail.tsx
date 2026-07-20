@@ -80,6 +80,9 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   const [picked, setPicked] = useState<string | null>(root?.span_id ?? null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [pgSpan, setPgSpan] = useState<TraceSpan | null>(null);
+  const [tip, setTip] = useState(false);
+  useEffect(() => { try { setTip(!localStorage.getItem("pk_debug_tip")); } catch { /* no storage */ } }, []);
+  const dismissTip = () => { setTip(false); try { localStorage.setItem("pk_debug_tip", "1"); } catch { /* no storage */ } };
   const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
   const totalCost = fmtCost(spans.reduce((n, s) => n + (estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens) || 0), 0) || null);
   const sel = spans.find((s) => s.span_id === picked) || root;
@@ -108,6 +111,15 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
           </div>
         </div>
       </div>
+
+      {tip && !readOnly && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, padding: "8px 12px",
+          borderRadius: 8, fontSize: 12.5, background: "var(--accent-soft)", border: "1px solid var(--accent)" }}>
+          <span>✨</span>
+          <span style={{ flex: 1 }}><b>New — debug with real data:</b> click an <b>LLM</b> node, then <b>▶ Edit &amp; re-run</b> to edit its prompt/variables and re-run it, or <b>⑂ Replay flow</b> to fork the whole trace.</span>
+          <button onClick={dismissTip} className="btn btn-sm btn-ghost" style={{ flexShrink: 0 }}>Got it</button>
+        </div>
+      )}
 
       {view === "flow" ? (
         // Full-height studio: canvas fills the space, a resizable/collapsible inspector on the right.

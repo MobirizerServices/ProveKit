@@ -281,6 +281,45 @@ def test_playground_experiment_over_dataset():
             "messages": [{"role": "user", "content": "{{input}}"}]}).status_code == 404
 
 
+def test_llm_judge_mock_heuristic():
+    def j(exp, out):
+        return anyio.run(functools.partial(llm_client.judge, "mock", "m", "q", exp, out))
+    assert j("cat", "the cat sat") == 1.0        # expected substring present
+    assert j("cat", "a dog barks") == 0.0        # no overlap
+    assert j("big cat", "a small cat") == 0.5    # partial word overlap
+
+
+def test_llm_judge_real_provider_parses_number(monkeypatch):
+    monkeypatch.setattr(llm_client.httpx, "AsyncClient", _FakeClient)
+    _FakeClient.resp = _FakeResp(200, {"choices": [{"message": {"content": "0.8"},
+                                       "finish_reason": "stop"}], "usage": {}})
+    score = anyio.run(functools.partial(llm_client.judge, "openai", "gpt-4o",
+                      "q", "expected", "answer", api_key="sk-k"))
+    assert score == 0.8
+
+
+def test_experiment_with_llm_judge():
+    with TestClient(app, base_url="https://testserver") as c:
+        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        db = SessionLocal()
+        ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
+        ds = Dataset(workspace_id=ws_id, name="judged")
+        db.add(ds); db.commit(); db.refresh(ds)
+        db.add_all([
+            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="ping", expected="[mock:gpt-4o] ping."),
+            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="x", expected="totally unrelated"),
+        ])
+        db.commit(); dsid = ds.id; db.close()
+        r = c.post("/api/playground/experiment", json={
+            "dataset_id": dsid, "provider": "mock", "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "{{input}}"}],
+            "scorers": ["exact_match", "llm_judge"]})
+        assert r.status_code == 200, r.text
+        means = r.json()["scorer_means"]
+        assert "llm_judge" in means and "exact_match" in means
+        assert means["llm_judge"] == 0.5   # item1 matches (1.0), item2 unrelated (0.0)
+
+
 def test_prompt_versioning():
     with TestClient(app, base_url="https://testserver") as c:
         body = {"name": "greeter", "model": "gpt-4o",

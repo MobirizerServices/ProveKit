@@ -14,7 +14,7 @@ from ..database import get_db
 from ..models import DatasetItem, Experiment, ExperimentResult, Prompt, ProviderConnection, Workspace, _now, iso_utc
 from ..scorers import run_scorers
 from ..services import limits
-from ..services.llm_client import LLMError, complete
+from ..services.llm_client import LLMError, complete, judge
 from ..services.replay import reconstruct
 from ..services.replay import webhook as replay_webhook
 from ..services.sealing import mask_key, seal, unseal
@@ -265,10 +265,15 @@ async def playground_experiment(data: _ExpIn, db: Session = Depends(get_db),
                      dataset_id=data.dataset_id)
     db.add(exp); db.commit(); db.refresh(exp)
     try:
+        want_judge = "llm_judge" in data.scorers
+        sync_scorers = [s for s in data.scorers if s != "llm_judge"]
         for it in items:
             msgs = _fill(base_msgs, it.input, it.expected)
             r = await complete(provider, data.model, msgs, params, api_key=api_key, base_url=base_url)
-            scores = run_scorers(data.scorers, r["output"], it.expected)
+            scores = run_scorers(sync_scorers, r["output"], it.expected)
+            if want_judge:
+                scores["llm_judge"] = await judge(provider, data.model, it.input, it.expected,
+                                                  r["output"], api_key=api_key, base_url=base_url)
             db.add(ExperimentResult(workspace_id=ws.id, experiment_id=exp.id, item_id=it.id,
                                     input=it.input, output=r["output"], expected=it.expected, scores=scores))
         db.commit()

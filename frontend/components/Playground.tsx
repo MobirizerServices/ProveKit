@@ -42,6 +42,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const [saved, setSaved] = useState<SavedPrompt[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [dsId, setDsId] = useState("");
+  const [useJudge, setUseJudge] = useState(false);
   const [exp, setExp] = useState<ExperimentSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -103,7 +104,8 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     const messages = msgs.map((m) => ({ role: m.role, content: keep(m.content) }));
     try {
       setExp(await api.playgroundExperiment({
-        model, messages, params, dataset_id: Number(dsId), scorers: ["exact_match", "contains"],
+        model, messages, params, dataset_id: Number(dsId),
+        scorers: ["exact_match", "contains", ...(useJudge ? ["llm_judge"] : [])],
         ...(conn === "mock" ? { provider: "mock" } : { connection_id: Number(conn) }),
       }));
     } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
@@ -244,9 +246,14 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
                   {datasets.map((d) => <option key={d.id} value={String(d.id)}>{d.name} ({d.item_count})</option>)}
                 </select>
                 <button className="btn btn-sm" onClick={runExperiment} disabled={busy}>🧪 Run over dataset</button>
+                <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer" }}
+                  title="Also grade each output with the model (uses the selected connection)">
+                  <input type="checkbox" checked={useJudge} onChange={(e) => setUseJudge(e.target.checked)} /> LLM judge
+                </label>
                 {exp && (
                   <a href="/datasets" style={{ fontSize: 12.5, color: "var(--accent)" }}>
-                    scored {exp.result_count} · mean {exp.mean_score == null ? "—" : exp.mean_score.toFixed(2)} → view
+                    scored {exp.result_count} · mean {exp.mean_score == null ? "—" : exp.mean_score.toFixed(2)}
+                    {exp.scorer_means?.llm_judge != null ? ` · judge ${exp.scorer_means.llm_judge.toFixed(2)}` : ""} → view
                   </a>
                 )}
               </div>
@@ -272,7 +279,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
             return (
               <Panel key={i} title={`Run ${runs.length - i}`} accent={i === 0}
                 meta={`${r.usage.input_tokens}→${r.usage.output_tokens} tok${c ? ` · ${c}` : ""} · ${r.latency_ms}ms · ${r.provider}`}>
-                {r.output}
+                <DiffText from={origOut} to={r.output} />
               </Panel>
             );
           })}
@@ -280,6 +287,36 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
       </div>
     </div>
   );
+}
+
+// Word-level diff (LCS) so the New output highlights what changed vs the Original.
+function diffWords(a: string, b: string): { t: "same" | "add" | "del"; w: string }[] {
+  const A = a.split(/\s+/).filter(Boolean), B = b.split(/\s+/).filter(Boolean);
+  const n = A.length, m = B.length;
+  if (n > 800 || m > 800) return B.map((w) => ({ t: "same", w }));  // guard O(n·m) on huge outputs
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: { t: "same" | "add" | "del"; w: string }[] = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { out.push({ t: "same", w: A[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: "del", w: A[i] }); i++; }
+    else { out.push({ t: "add", w: B[j] }); j++; }
+  }
+  while (i < n) out.push({ t: "del", w: A[i++] });
+  while (j < m) out.push({ t: "add", w: B[j++] });
+  return out;
+}
+
+function DiffText({ from, to }: { from: string; to: string }) {
+  const parts = useMemo(() => diffWords(from, to), [from, to]);
+  if (!from) return <>{to}</>;   // nothing to diff against
+  return <>{parts.map((p, i) => p.t === "same"
+    ? <span key={i}>{p.w} </span>
+    : p.t === "add"
+      ? <span key={i} style={{ background: "color-mix(in srgb, var(--green) 24%, transparent)", borderRadius: 3 }}>{p.w} </span>
+      : <span key={i} style={{ color: "var(--red)", textDecoration: "line-through", opacity: 0.65 }}>{p.w} </span>)}</>;
 }
 
 function Field({ lbl, children }: { lbl: string; children: React.ReactNode }) {

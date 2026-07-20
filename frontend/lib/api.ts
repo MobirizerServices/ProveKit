@@ -33,7 +33,7 @@ export interface Feedback {
 
 export interface TraceQuery { status?: string; window_hours?: number; limit?: number; }
 
-export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; created_at: string; }
+export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; replay_url?: string; created_at: string; }
 export interface Member { user_id: number; email: string; name: string; role: string; }
 export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
 export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; project_count: number; created_at: string; }
@@ -69,7 +69,11 @@ export interface PlaygroundResult {
   output: string; usage: { input_tokens: number; output_tokens: number };
   latency_ms: number; finish_reason: string; provider: string; model: string;
 }
-export interface ReplayIn extends PlaygroundIn { origin_trace_id: string; fork_span_id: string; }
+export interface ReplayIn extends PlaygroundIn { origin_trace_id: string; fork_span_id: string; mode?: string; }
+export interface SavedPrompt {
+  id: number; name: string; version: number; model: string;
+  messages: PlaygroundMessage[]; params: Record<string, any>; created_at: string;
+}
 export interface ReplayResult {
   new_trace_id: string; replay_run_id: number; fork_output: string;
   live_count: number; span_count: number;
@@ -166,6 +170,10 @@ export const api = {
   deleteConnection: (id: number) => j(`/api/connections/${id}`, { method: "DELETE" }),
   playgroundRun: (p: PlaygroundIn) => j<PlaygroundResult>("/api/playground/run", { method: "POST", body: JSON.stringify(p) }),
   replay: (p: ReplayIn) => j<ReplayResult>("/api/replay", { method: "POST", body: JSON.stringify(p) }),
+  prompts: () => j<SavedPrompt[]>("/api/prompts"),
+  savePrompt: (p: { name: string; model?: string; messages?: PlaygroundMessage[]; params?: Record<string, any> }) =>
+    j<SavedPrompt>("/api/prompts", { method: "POST", body: JSON.stringify(p) }),
+  deletePrompt: (id: number) => j(`/api/prompts/${id}`, { method: "DELETE" }),
   // datasets
   datasets: () => j<Dataset[]>("/api/datasets"),
   dataset: (id: number) => j<DatasetDetail>(`/api/datasets/${id}`),
@@ -179,7 +187,7 @@ export const api = {
   projects: () => j<Project[]>("/api/projects"),
   createProject: (name: string) => j<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),
   renameProject: (id: number, name: string) => j<{ id: number; name: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
-  updateProject: (id: number, patch: { name?: string; retention?: number; redact_pii?: boolean }) => j<{ id: number; name: string; retention: number; redact_pii: boolean }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  updateProject: (id: number, patch: { name?: string; retention?: number; redact_pii?: boolean; replay_url?: string }) => j<{ id: number; name: string; retention: number; redact_pii: boolean; replay_url: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteProject: (id: number) => j(`/api/projects/${id}`, { method: "DELETE" }),
   members: (id: number) => j<Member[]>(`/api/projects/${id}/members`),
   addMember: (id: number, email: string, role = "member") => j<Member>(`/api/projects/${id}/members`, { method: "POST", body: JSON.stringify({ email, role }) }),

@@ -55,6 +55,9 @@ class Workspace(Base):
     # Per-project overrides (0 / False → fall back to the global config default).
     retention: Mapped[int] = mapped_column(Integer, default=0)      # keep last N spans; 0 = global
     redact_pii: Mapped[bool] = mapped_column(default=False)         # mask PII on ingest
+    # Optional endpoint ProveKit POSTs a fork override to for exact (webhook-mode) replay — the
+    # customer re-runs their real agent and returns OTLP. Empty → reconstructed replay only.
+    replay_url: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
@@ -201,6 +204,20 @@ class ReplayRun(Base):
     mode: Mapped[str] = mapped_column(String(16), default="reconstructed")  # reconstructed | webhook
     new_trace_id: Mapped[str] = mapped_column(String(32), default="", index=True)
     status: Mapped[str] = mapped_column(String(16), default="completed")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Prompt(Base):
+    """A saved prompt version from the playground — the edited messages/model/params, kept under
+    a name so it can be restored, compared, or promoted to code. Newest version wins on restore."""
+    __tablename__ = "prompts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(160), default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    model: Mapped[str] = mapped_column(String(120), default="")
+    messages: Mapped[list] = mapped_column(JSON, default=list)
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

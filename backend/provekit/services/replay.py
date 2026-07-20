@@ -18,10 +18,13 @@ from __future__ import annotations
 import json
 import secrets
 
+import httpx
 from sqlalchemy.orm import Session
 
-from ..models import ReplayRun, Run, Workspace, _now
-from .llm_client import complete
+from ..models import ReplayRun, Run, Workspace
+from . import otel
+from .llm_client import LLMError, complete
+from .netguard import guard_url
 
 
 def _messages(span_request: dict) -> list[dict]:
@@ -148,4 +151,47 @@ async def reconstruct(db: Session, ws: Workspace, origin_trace_id: str, fork_spa
 
     live = sum(1 for r in new_rows if (r.result.get("meta") or {}).get("replay_state") == "live")
     return {"new_trace_id": new_tid, "replay_run_id": rr.id, "fork_output": fork_output,
-            "live_count": live, "span_count": len(new_rows)}
+            "live_count": live, "span_count": len(new_rows), "mode": "reconstructed"}
+
+
+async def webhook(db: Session, ws: Workspace, origin_trace_id: str, fork_span_id: str,
+                  overrides: dict) -> dict:
+    """Exact replay: POST the fork override to the project's replay_url; the customer re-runs
+    their real agent and returns OTLP, which we ingest as a new branch. SSRF-guarded."""
+    if not ws.replay_url:
+        raise ValueError("no replay webhook configured for this project (Settings → Replay webhook)")
+    guard_url(ws.replay_url)   # block internal/metadata addresses in hosted mode
+    payload = {"origin_trace_id": origin_trace_id, "fork_span_id": fork_span_id, "overrides": overrides}
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as c:
+            r = await c.post(ws.replay_url, json=payload)
+    except httpx.HTTPError as e:
+        raise LLMError(f"replay webhook error: {e}") from e
+    if r.status_code >= 400:
+        raise LLMError(f"replay webhook returned {r.status_code}")
+    try:
+        rows = otel.ingest(r.json())
+    except Exception as e:
+        raise LLMError(f"replay webhook returned invalid OTLP: {e}") from e
+    if not rows:
+        raise ValueError("replay webhook returned no spans")
+
+    new_tid = rows[0].get("trace_id") or secrets.token_hex(16)
+    new_rows = []
+    for kw in rows:
+        kw = dict(kw)
+        kw["trace_id"] = kw.get("trace_id") or new_tid
+        res = dict(kw.get("result") or {})
+        meta = dict(res.get("meta") or {})
+        meta["replay_of"] = origin_trace_id
+        meta["replay_state"] = "live"      # the whole branch is a real, live re-execution
+        res["meta"] = meta
+        kw["result"] = res
+        new_rows.append(Run(workspace_id=ws.id, **kw))
+    db.add_all(new_rows)
+    rr = ReplayRun(workspace_id=ws.id, origin_trace_id=origin_trace_id, fork_span_id=fork_span_id,
+                   overrides=overrides, mode="webhook", new_trace_id=new_tid, status="completed")
+    db.add(rr)
+    db.commit(); db.refresh(rr)
+    return {"new_trace_id": new_tid, "replay_run_id": rr.id, "fork_output": "",
+            "live_count": len(new_rows), "span_count": len(new_rows), "mode": "webhook"}

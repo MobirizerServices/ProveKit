@@ -11,10 +11,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import ProviderConnection, Workspace, _now, iso_utc
+from ..models import Prompt, ProviderConnection, Workspace, _now, iso_utc
 from ..services import limits
 from ..services.llm_client import LLMError, complete
 from ..services.replay import reconstruct
+from ..services.replay import webhook as replay_webhook
 from ..services.sealing import mask_key, seal, unseal
 from ..services.workspace import current_workspace
 
@@ -138,6 +139,7 @@ class _ReplayIn(BaseModel):
     params: dict = {}
     connection_id: int | None = None
     provider: str | None = None
+    mode: str = "reconstructed"      # reconstructed | webhook
 
 
 @router.post("/replay")
@@ -149,11 +151,14 @@ async def replay(data: _ReplayIn, db: Session = Depends(get_db),
     params = dict(data.params or {})
     if params.get("max_tokens"):
         params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
-    provider, api_key, base_url = _resolve(db, ws, _RunIn(
-        model=data.model, messages=data.messages, params=params,
-        connection_id=data.connection_id, provider=data.provider))
     messages = [{"role": m.role, "content": m.content} for m in data.messages]
     try:
+        if data.mode == "webhook":
+            return await replay_webhook(db, ws, data.origin_trace_id, data.fork_span_id,
+                                        {"model": data.model, "messages": messages, "params": params})
+        provider, api_key, base_url = _resolve(db, ws, _RunIn(
+            model=data.model, messages=data.messages, params=params,
+            connection_id=data.connection_id, provider=data.provider))
         return await reconstruct(db, ws, data.origin_trace_id, data.fork_span_id,
                                  data.model, messages, params,
                                  provider=provider, api_key=api_key, base_url=base_url)
@@ -161,3 +166,47 @@ async def replay(data: _ReplayIn, db: Session = Depends(get_db),
         raise HTTPException(502, str(e))
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+# ---- saved prompt versions ----
+class _PromptIn(BaseModel):
+    name: str
+    model: str = ""
+    messages: list[_Msg] = []
+    params: dict = {}
+
+
+def _prompt_row(p: Prompt) -> dict:
+    return {"id": p.id, "name": p.name, "version": p.version, "model": p.model,
+            "messages": p.messages, "params": p.params, "created_at": iso_utc(p.created_at)}
+
+
+@router.get("/prompts")
+def list_prompts(db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    rows = (db.query(Prompt).filter(Prompt.workspace_id == ws.id)
+            .order_by(Prompt.id.desc()).all())
+    return [_prompt_row(p) for p in rows]
+
+
+@router.post("/prompts")
+def save_prompt(data: _PromptIn, db: Session = Depends(get_db),
+                ws: Workspace = Depends(current_workspace)):
+    if not data.name.strip():
+        raise HTTPException(422, "a name is required")
+    # auto-increment the version for this name within the project
+    prev = (db.query(Prompt).filter(Prompt.workspace_id == ws.id, Prompt.name == data.name.strip())
+            .order_by(Prompt.version.desc()).first())
+    p = Prompt(workspace_id=ws.id, name=data.name.strip()[:160], version=(prev.version + 1 if prev else 1),
+               model=data.model, messages=[m.model_dump() for m in data.messages], params=data.params)
+    db.add(p); db.commit(); db.refresh(p)
+    return _prompt_row(p)
+
+
+@router.delete("/prompts/{pid}")
+def delete_prompt(pid: int, db: Session = Depends(get_db),
+                  ws: Workspace = Depends(current_workspace)):
+    p = db.get(Prompt, pid)
+    if not p or p.workspace_id != ws.id:
+        raise HTTPException(404, "Prompt not found")
+    db.delete(p); db.commit()
+    return {"ok": True}

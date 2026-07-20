@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, PlaygroundResult, ProviderConnection, TraceSpan } from "@/lib/api";
+import { api, PlaygroundResult, ProviderConnection, SavedPrompt, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import { parseMessages } from "@/components/TraceDetail";
 
@@ -37,7 +37,9 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const [conns, setConns] = useState<ProviderConnection[]>([]);
   const [conn, setConn] = useState<string>("mock"); // "mock" or a connection id (string)
   const [vars, setVars] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<PlaygroundResult | null>(null);
+  const [runs, setRuns] = useState<PlaygroundResult[]>([]);   // newest first — A/B history
+  const [replayMode, setReplayMode] = useState<"reconstructed" | "webhook">("reconstructed");
+  const [saved, setSaved] = useState<SavedPrompt[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -47,6 +49,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
       const real = cs.find((c) => c.provider !== "mock");
       if (real) setConn(String(real.id));
     }).catch(() => {});
+    api.prompts().then(setSaved).catch(() => {});
   }, []);
 
   const varNames = useMemo(() => findVars(msgs), [msgs]);
@@ -69,9 +72,10 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   };
 
   const run = async () => {
-    setErr(""); setBusy(true); setResult(null);
+    setErr(""); setBusy(true);
     try {
-      setResult(await api.playgroundRun(payload()));
+      const r = await api.playgroundRun(payload());
+      setRuns((rs) => [r, ...rs]);   // keep prior runs as comparison columns
     } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
   };
 
@@ -79,16 +83,32 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     if (!traceId) return;
     setErr(""); setBusy(true);
     try {
-      const r = await api.replay({ ...payload(), origin_trace_id: traceId, fork_span_id: span.span_id });
+      const r = await api.replay({ ...payload(), origin_trace_id: traceId, fork_span_id: span.span_id, mode: replayMode });
       // open the new branch (deep-link handles selection); it renders with per-node replay badges
       window.location.href = `/traces?trace=${encodeURIComponent(r.new_trace_id)}`;
     } catch (e: any) { setErr(String(e.message || e)); setBusy(false); }
   };
 
+  const saveVersion = async () => {
+    const name = window.prompt("Save this prompt as (name):", span.label || "prompt");
+    if (!name) return;
+    try {
+      await api.savePrompt({ name, model, messages: msgs, params: { temperature: temperature === "" ? undefined : Number(temperature), max_tokens: Number(maxTokens) || 512 } });
+      api.prompts().then(setSaved).catch(() => {});
+    } catch (e: any) { setErr(String(e.message || e)); }
+  };
+  const loadVersion = (id: string) => {
+    const p = saved.find((x) => String(x.id) === id);
+    if (!p) return;
+    setModel(p.model || model);
+    if (p.messages?.length) setMsgs(p.messages.map((m) => ({ role: m.role, content: m.content })));
+    if (p.params?.temperature != null) setTemperature(String(p.params.temperature));
+    if (p.params?.max_tokens != null) setMaxTokens(String(p.params.max_tokens));
+  };
+
   const origOut = span.result?.text || "";
   const origUsage = span.result?.meta?.usage || {};
   const origCost = fmtCost(estimateCost(span.request?.model, origUsage.input_tokens, origUsage.output_tokens));
-  const newCost = result ? fmtCost(estimateCost(result.model, result.usage.input_tokens, result.usage.output_tokens)) : null;
 
   const setMsg = (i: number, patch: Partial<Msg>) =>
     setMsgs((ms) => ms.map((m, j) => (j === i ? { ...m, ...patch } : m)));
@@ -103,7 +123,17 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
           </span>
           <span className="muted" style={{ fontSize: 11.5 }}>edit &amp; re-run this call with real data</span>
         </div>
-        <button className="btn btn-sm btn-ghost" onClick={onClose}>✕ Close</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {saved.length > 0 && (
+            <select defaultValue="" onChange={(e) => { loadVersion(e.target.value); e.target.value = ""; }}
+              style={{ ...input, padding: "5px 8px", fontSize: 12 }} title="Load a saved prompt version">
+              <option value="" disabled>Load version…</option>
+              {saved.map((p) => <option key={p.id} value={String(p.id)}>{p.name} v{p.version}</option>)}
+            </select>
+          )}
+          <button className="btn btn-sm btn-ghost" onClick={saveVersion}>💾 Save version</button>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>✕ Close</button>
+        </div>
       </div>
 
       <div style={body}>
@@ -165,30 +195,47 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button className="btn" onClick={run} disabled={busy}>{busy ? "Running…" : "▶ Run"}</button>
             {traceId && (
-              <button className="btn btn-ghost" onClick={replay} disabled={busy}
-                title="Fork the whole trace here and re-run downstream calls with this edit"
-                style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>⑂ Replay flow</button>
+              <>
+                <button className="btn btn-ghost" onClick={replay} disabled={busy}
+                  title="Fork the whole trace here and re-run downstream calls with this edit"
+                  style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>⑂ Replay flow</button>
+                <select value={replayMode} onChange={(e) => setReplayMode(e.target.value as any)}
+                  style={{ ...input, padding: "5px 8px", fontSize: 12 }} title="reconstructed = from the trace; webhook = re-run your real agent">
+                  <option value="reconstructed">reconstructed</option>
+                  <option value="webhook">webhook (exact)</option>
+                </select>
+              </>
             )}
           </div>
           <div className="muted" style={{ fontSize: 11 }}>
-            <b>Run</b> re-runs just this call. <b>Replay flow</b> forks the trace here and threads
-            the new output through downstream calls — opens as a new branch.
+            <b>Run</b> re-runs just this call (each run is kept to compare). <b>Replay flow</b> forks the
+            trace here — <i>reconstructed</i> threads the new output through downstream calls;
+            <i> webhook</i> re-runs your real agent (Settings → Replay webhook).
           </div>
           {err && <div style={errBox}>{err}</div>}
         </div>
 
-        {/* right: original vs new */}
+        {/* right: original vs the run history (A/B) */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto" }}>
           <Panel title="Original" meta={`${(origUsage.input_tokens || 0)}→${(origUsage.output_tokens || 0)} tok${origCost ? ` · ${origCost}` : ""} · ${span.duration_ms}ms`}>
             {origOut || <span className="muted">—</span>}
           </Panel>
-          <Panel title="New" accent
-            meta={result ? `${result.usage.input_tokens}→${result.usage.output_tokens} tok${newCost ? ` · ${newCost}` : ""} · ${result.latency_ms}ms · ${result.provider}` : ""}>
-            {busy ? <span className="muted">Running…</span> : result ? result.output : <span className="muted">Edit the prompt and press Run.</span>}
-          </Panel>
+          {busy && <Panel title="Running…" accent><span className="muted">Calling the model…</span></Panel>}
+          {runs.length === 0 && !busy && (
+            <Panel title="New" accent><span className="muted">Edit the prompt and press Run. Each run is kept here to compare.</span></Panel>
+          )}
+          {runs.map((r, i) => {
+            const c = fmtCost(estimateCost(r.model, r.usage.input_tokens, r.usage.output_tokens));
+            return (
+              <Panel key={i} title={`Run ${runs.length - i}`} accent={i === 0}
+                meta={`${r.usage.input_tokens}→${r.usage.output_tokens} tok${c ? ` · ${c}` : ""} · ${r.latency_ms}ms · ${r.provider}`}>
+                {r.output}
+              </Panel>
+            );
+          })}
         </div>
       </div>
     </div>

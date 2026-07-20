@@ -8,9 +8,15 @@ from fastapi.testclient import TestClient
 
 from provekit.database import SessionLocal
 from provekit.main import app
-from provekit.models import ProviderConnection, Run
+from provekit.models import ProviderConnection, Run, Workspace
 from provekit.services import llm_client
+from provekit.services import replay as replay_mod
 from provekit.services.sealing import seal, unseal
+
+_OTLP = {"resourceSpans": [{"scopeSpans": [{"spans": [
+    {"name": "chat", "traceId": "webhookbranch0001", "spanId": "s1", "parentSpanId": "",
+     "startTimeUnixNano": "1000000000", "endTimeUnixNano": "1200000000", "status": {"code": 1},
+     "attributes": [{"key": "gen_ai.request.model", "value": {"stringValue": "gpt-4o"}}]}]}]}]}
 
 
 def test_seal_roundtrip():
@@ -205,3 +211,54 @@ def test_replay_missing_trace_404():
                    "provider": "mock", "model": "gpt-4o",
                    "messages": [{"role": "user", "content": "hi"}]})
         assert r.status_code == 404
+
+
+def test_replay_webhook(monkeypatch):
+    with TestClient(app, base_url="https://testserver") as c:
+        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        db = SessionLocal()
+        ws = db.get(Workspace, db.get(ProviderConnection, conn["id"]).workspace_id)
+        ws.replay_url = "https://hook.example/replay"; db.commit(); db.close()
+
+        monkeypatch.setattr(replay_mod, "guard_url", lambda u: None)      # skip DNS/SSRF check
+        monkeypatch.setattr(replay_mod.httpx, "AsyncClient", _FakeClient)
+        _FakeClient.resp = _FakeResp(200, _OTLP)
+
+        r = c.post("/api/replay", json={"origin_trace_id": "orig123", "fork_span_id": "f",
+                   "model": "gpt-4o", "messages": [{"role": "user", "content": "x"}], "mode": "webhook"})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["mode"] == "webhook" and d["span_count"] >= 1
+        # ProveKit POSTed the fork override to the configured webhook
+        assert _FakeClient.last["url"] == "https://hook.example/replay"
+        assert _FakeClient.last["json"]["fork_span_id"] == "f"
+        # the returned OTLP was ingested as a new branch tagged replay_of
+        db = SessionLocal()
+        run = db.query(Run).filter(Run.trace_id == d["new_trace_id"]).first()
+        db.close()
+        assert (run.result.get("meta") or {}).get("replay_of") == "orig123"
+
+
+def test_replay_webhook_unconfigured_404():
+    with TestClient(app, base_url="https://testserver") as c:
+        c.get("/api/connections")  # ensure the default workspace exists
+        db = SessionLocal()
+        for w in db.query(Workspace).all():   # ensure no workspace has a webhook configured
+            w.replay_url = ""
+        db.commit(); db.close()
+        r = c.post("/api/replay", json={"origin_trace_id": "o", "fork_span_id": "f",
+                   "model": "gpt-4o", "messages": [{"role": "user", "content": "x"}], "mode": "webhook"})
+        assert r.status_code == 404
+
+
+def test_prompt_versioning():
+    with TestClient(app, base_url="https://testserver") as c:
+        body = {"name": "greeter", "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "hi {{name}}"}], "params": {"temperature": 0.5}}
+        assert c.post("/api/prompts", json=body).json()["version"] == 1
+        v2 = c.post("/api/prompts", json=body).json()
+        assert v2["version"] == 2                       # same name → next version
+        rows = c.get("/api/prompts").json()
+        assert any(p["name"] == "greeter" and p["version"] == 2 for p in rows)
+        assert c.delete(f"/api/prompts/{v2['id']}").json()["ok"] is True
+        assert c.post("/api/prompts", json={"name": ""}).status_code == 422

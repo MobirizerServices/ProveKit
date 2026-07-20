@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [invite, setInvite] = useState("");
   const [retention, setRetention] = useState(0);
   const [redact, setRedact] = useState(false);
+  const [replayUrl, setReplayUrl] = useState("");
   const [err, setErr] = useState("");
 
   const load = useCallback(() => {
@@ -30,6 +31,7 @@ export default function SettingsPage() {
     setRename(p?.name || "");
     setRetention(p?.retention ?? 0);
     setRedact(p?.redact_pii ?? false);
+    setReplayUrl(p?.replay_url ?? "");
   }, [sel, projects]);
 
   const current = projects.find((p) => p.id === sel);
@@ -43,7 +45,7 @@ export default function SettingsPage() {
     setProjectId(p.id); // switch to the new project immediately
   });
   const doRename = () => wrap(async () => { if (sel) { await api.renameProject(sel, rename.trim()); load(); } });
-  const saveSettings = () => wrap(async () => { if (sel) { await api.updateProject(sel, { retention, redact_pii: redact }); load(); } });
+  const saveSettings = () => wrap(async () => { if (sel) { await api.updateProject(sel, { retention, redact_pii: redact, replay_url: replayUrl.trim() }); load(); } });
   const doDelete = () => wrap(async () => {
     if (sel && confirm("Delete this project and all its traces, datasets, and keys? This cannot be undone.")) {
       await api.deleteProject(sel);
@@ -106,6 +108,17 @@ export default function SettingsPage() {
                     <input type="checkbox" checked={redact} disabled={!isOwner} onChange={(e) => setRedact(e.target.checked)} />
                     Mask PII on ingest
                   </label>
+                  <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
+                </div>
+
+                <div style={label}>Replay webhook (optional)</div>
+                <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>
+                  For exact trace replay: ProveKit POSTs a fork override here and your agent returns
+                  OTLP. Leave blank to use reconstructed replay only.
+                </p>
+                <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+                  <input value={replayUrl} onChange={(e) => setReplayUrl(e.target.value)} disabled={!isOwner}
+                    placeholder="https://your-agent.example/replay" style={{ ...input, flex: 1 }} />
                   <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
                 </div>
 

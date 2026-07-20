@@ -23,6 +23,7 @@ class _ProjectPatch(BaseModel):
     name: str | None = None
     retention: int | None = None
     redact_pii: bool | None = None
+    replay_url: str | None = None
 
 
 class _MemberIn(BaseModel):
@@ -53,7 +54,7 @@ def list_projects(user: User = Depends(get_current_user), db: Session = Depends(
                   .group_by(WorkspaceMember.workspace_id).all())
     return [{"id": w.id, "name": w.name, "role": role, "is_default": w.id == default.id,
              "member_count": counts.get(w.id, 1), "retention": w.retention,
-             "redact_pii": w.redact_pii, "created_at": iso_utc(w.created_at)}
+             "redact_pii": w.redact_pii, "replay_url": w.replay_url, "created_at": iso_utc(w.created_at)}
             for w, role in rows]
 
 
@@ -81,8 +82,11 @@ def update_project(pid: int, data: _ProjectPatch, user: User = Depends(get_curre
         ws.retention = max(0, data.retention)
     if data.redact_pii is not None:
         ws.redact_pii = data.redact_pii
+    if data.replay_url is not None:
+        ws.replay_url = data.replay_url.strip()[:500]
     db.commit()
-    return {"id": ws.id, "name": ws.name, "retention": ws.retention, "redact_pii": ws.redact_pii}
+    return {"id": ws.id, "name": ws.name, "retention": ws.retention, "redact_pii": ws.redact_pii,
+            "replay_url": ws.replay_url}
 
 
 @router.delete("/{pid}")

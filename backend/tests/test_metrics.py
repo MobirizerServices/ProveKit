@@ -34,6 +34,11 @@ def test_metrics_aggregate():
         assert m["latency_p95_ms"] >= m["latency_p50_ms"]
         assert any(row["model"] == "gpt-4o" and row["tokens"] >= 120 for row in m["by_model"])
         assert isinstance(m["series"], list) and len(m["series"]) >= 1
+        # each bucket trends volume, errors, latency percentiles, and tokens
+        b = m["series"][0]
+        assert {"t", "count", "errors", "p50", "p95", "tokens"} <= set(b)
+        assert b["p95"] >= b["p50"] >= 0
+        assert sum(x["tokens"] for x in m["series"]) >= 120
 
 
 def _failed_tool(trace, msg):

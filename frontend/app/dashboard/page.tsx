@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Metrics } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import AreaChart from "@/components/AreaChart";
+import TrendChart from "@/components/TrendChart";
 import AlertsPanel from "@/components/AlertsPanel";
 import { CardGridSkeleton, Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
@@ -16,6 +17,7 @@ const WINDOWS = [
 export default function DashboardPage() {
   const [m, setM] = useState<Metrics | null>(null);
   const [hours, setHours] = useState(24);
+  const [chart, setChart] = useState<"traffic" | "latency" | "tokens">("traffic");
   const load = useCallback(() => { api.metrics(hours).then(setM).catch(() => {}); }, [hours]);
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
 
@@ -58,17 +60,35 @@ export default function DashboardPage() {
             </div>
 
             <div style={{ ...panel, marginBottom: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={label}>Traffic {hours <= 48 ? "(hourly)" : "(daily)"}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2 }}>
+                  {(["traffic", "latency", "tokens"] as const).map((c) => (
+                    <button key={c} onClick={() => setChart(c)} style={toggle(chart === c)}>
+                      {c === "traffic" ? "Traffic" : c === "latency" ? "Latency" : "Tokens"}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--muted)" }}>
-                  <span><span style={legendDot("var(--blue)")} /> traces</span>
-                  <span><span style={legendDot("var(--red)")} /> errors</span>
+                  {chart === "traffic" && <><span><span style={legendDot("var(--blue)")} /> traces</span><span><span style={legendDot("var(--red)")} /> errors</span></>}
+                  {chart === "latency" && <><span><span style={legendDot("var(--blue)")} /> p50</span><span><span style={legendDot("var(--amber)")} /> p95</span></>}
+                  {chart === "tokens" && <span><span style={legendDot("var(--purple)")} /> tokens</span>}
+                  <span style={{ opacity: 0.7 }}>{hours <= 48 ? "hourly" : "daily"}</span>
                 </div>
               </div>
               {m.series.length === 0 ? (
                 <div className="muted" style={{ fontSize: 13, padding: "40px 0", textAlign: "center" }}>No traces in this window.</div>
               ) : (
-                <div style={{ marginTop: 10 }}><AreaChart data={m.series} height={170} /></div>
+                <div style={{ marginTop: 10 }}>
+                  {chart === "traffic" && <AreaChart data={m.series} height={170} />}
+                  {chart === "latency" && (
+                    <TrendChart data={m.series} height={170} fmtY={fmtMs}
+                      lines={[{ key: "p50", color: "var(--blue)", label: "p50" }, { key: "p95", color: "var(--amber)", label: "p95" }]} />
+                  )}
+                  {chart === "tokens" && (
+                    <TrendChart data={m.series} height={170} fmtY={fmtNum}
+                      lines={[{ key: "tokens", color: "var(--purple)", label: "tokens" }]} />
+                  )}
+                </div>
               )}
             </div>
 
@@ -114,6 +134,14 @@ function typeBadge(t: string): React.CSSProperties {
   const c = TYPE_COLOR[t] || "var(--muted)";
   return { fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
     padding: "1px 6px", borderRadius: 4, color: c, border: `1px solid ${c}`, flexShrink: 0 };
+}
+function fmtMs(v: number): string {
+  return v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`;
+}
+function fmtNum(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(v >= 10_000 ? 0 : 1)}k`;
+  return `${Math.round(v)}`;
 }
 function relTime(iso: string): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);

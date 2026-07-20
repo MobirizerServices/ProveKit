@@ -47,7 +47,7 @@ export interface AlertIn { name?: string; metric: string; comparator?: string; t
 export interface Metrics {
   window_hours: number; trace_count: number; error_count: number; error_rate: number;
   latency_p50_ms: number; latency_p95_ms: number; total_tokens: number;
-  series: { t: string; count: number; errors: number }[];
+  series: { t: string; count: number; errors: number; p50?: number; p95?: number; tokens?: number }[];
   by_model: { model: string; calls: number; tokens: number }[];
   fail_by_type?: { type: string; count: number }[];
   top_errors?: { error: string; type: string; count: number }[];

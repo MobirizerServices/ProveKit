@@ -55,27 +55,42 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
     errors = sum(1 for r in roots if r.status == "failed")
     count = len(roots)
 
-    # time series: bucket roots by hour (or day for wide windows)
+    def _bucket_key(dt) -> str:
+        return dt.strftime("%Y-%m-%d") if by_day else dt.strftime("%Y-%m-%dT%H:00")
+
+    # time series: bucket roots by hour (or day for wide windows). Each bucket carries volume,
+    # errors, per-bucket latency percentiles, and tokens — enough to trend all four over time.
     series: dict[str, dict] = {}
+    bucket_durs: dict[str, list] = {}
     for r in roots:
         dt = r.created_at
         if dt is None:
             continue
-        key = dt.strftime("%Y-%m-%d") if by_day else dt.strftime("%Y-%m-%dT%H:00")
-        b = series.setdefault(key, {"t": key, "count": 0, "errors": 0})
+        key = _bucket_key(dt)
+        b = series.setdefault(key, {"t": key, "count": 0, "errors": 0, "tokens": 0, "p50": 0, "p95": 0})
         b["count"] += 1
         if r.status == "failed":
             b["errors"] += 1
+        bucket_durs.setdefault(key, []).append(r.duration_ms or 0)
 
-    # token totals + per-model breakdown, across all spans in the window
-    spanq = db.query(Run.result, Run.request).filter(Run.workspace_id == ws.id)
+    for key, durs in bucket_durs.items():
+        ds = sorted(durs)
+        series[key]["p50"] = _pct(ds, 50)
+        series[key]["p95"] = _pct(ds, 95)
+
+    # token totals + per-model breakdown + per-bucket tokens, across all spans in the window
+    spanq = db.query(Run.result, Run.request, Run.created_at).filter(Run.workspace_id == ws.id)
     if cutoff is not None:
         spanq = spanq.filter(Run.created_at >= cutoff)
     total_tokens = 0
     by_model: dict[str, dict] = {}
-    for result, request in spanq.limit(_SPAN_CAP):
+    for result, request, created in spanq.limit(_SPAN_CAP):
         tok = _usage_tokens(result)
         total_tokens += tok
+        if tok and created is not None:
+            b = series.get(_bucket_key(created))
+            if b is not None:
+                b["tokens"] += tok
         model = (request or {}).get("model") if isinstance(request, dict) else None
         if model:
             m = by_model.setdefault(model, {"model": model, "calls": 0, "tokens": 0})

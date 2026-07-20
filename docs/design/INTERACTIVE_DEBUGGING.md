@@ -1,8 +1,9 @@
 # Design: Interactive Debugging — edit-and-re-run with real data
 
-**Status:** proposal for review · **Author:** (draft) · **Scope:** turn ProveKit's trace view
-from a read-only log viewer into an interactive debugger where you edit a captured run's
-prompt/variables and re-run it against real data.
+**Status:** ✅ implemented (M1–M4 + Phase-3, all shipped & verified live) — see the user guide at
+[../DEBUGGING.md](../DEBUGGING.md). · **Scope:** turn ProveKit's trace view from a read-only log
+viewer into an interactive debugger where you edit a captured run's prompt/variables and re-run it
+against real data.
 
 ---
 

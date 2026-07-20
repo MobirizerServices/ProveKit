@@ -2,7 +2,25 @@
 
 All notable changes to ProveKit. This project is pre-1.0; expect breaking changes.
 
-## Unreleased — Live in production + portal polish
+## Unreleased — Interactive debugging + live in production
+
+- **Interactive debugging — edit a captured run and re-run it with real data.** Turns the trace
+  view from a log viewer into a debugger ([design](docs/design/INTERACTIVE_DEBUGGING.md),
+  [guide](docs/DEBUGGING.md)):
+  - **Prompt playground** — an *Edit & re-run* action on any LLM span opens an editor seeded from
+    the captured call (messages, model, params, and auto-detected `{{variables}}`). Run it against
+    a provider connection and the new output is **diffed** against the original with tokens / cost /
+    latency; each run is kept as an **A/B** column. Save/restore **prompt versions**.
+  - **Trace replay harness** — *Replay flow* forks the whole trace at a span. **Reconstructed**
+    mode (framework-agnostic) re-runs the fork live and threads its new output through downstream
+    calls that consumed it, badging each node LIVE / SAME / DIVERGED; **webhook** mode POSTs the
+    override to your agent's `replay_url` for an exact re-run (SSRF-guarded, returns OTLP).
+  - **Evaluate an edit** — *Run over dataset* scores an edited prompt against a golden set
+    (`{{input}}`/`{{expected}}`) and saves a real experiment.
+  - **Model connections** — per-project BYO keys (OpenAI / Anthropic / OpenAI-compatible), stored
+    **sealed** and never returned to the browser; a keyless **Mock** provider works out of the box.
+
+## Live in production + portal polish
 
 - **Live at [provekit.online](https://provekit.online)** — deployed on a dedicated VPS with its
   own Caddy (auto-HTTPS), Postgres, Redis; `HOSTED` login gate on; verified end-to-end (signup →

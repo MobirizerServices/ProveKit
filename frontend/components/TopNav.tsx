@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/traces", label: "Traces" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/datasets", label: "Datasets" },
+  { href: "/prompts", label: "Prompts" },
   { href: "/api-keys", label: "Project keys" },
 ];
 

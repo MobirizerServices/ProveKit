@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
-from ..models import Feedback, Run, Workspace, iso_utc
+from ..models import Feedback, Run, SpanNote, Workspace, iso_utc
 from ..services import apikey, deploy, limits, otel, redact, share
+from ..services.auth import get_current_user
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/v1", tags=["traces"])
@@ -207,6 +208,51 @@ def add_feedback(trace_id: str, data: _FeedbackIn, db: Session = Depends(get_db)
 def list_feedback(trace_id: str, db: Session = Depends(get_db),
                   ws: Workspace = Depends(current_workspace)):
     return _list_feedback(db, ws, trace_id)
+
+
+# ---- per-span collaboration notes ----
+class _NoteIn(BaseModel):
+    span_id: str = ""
+    body: str
+
+
+def _note_row(n: SpanNote) -> dict:
+    return {"id": n.id, "trace_id": n.trace_id, "span_id": n.span_id, "author": n.author,
+            "body": n.body, "created_at": iso_utc(n.created_at)}
+
+
+@runs_router.get("/traces/{trace_id}/notes")
+def list_notes(trace_id: str, db: Session = Depends(get_db),
+               ws: Workspace = Depends(current_workspace)):
+    rows = (db.query(SpanNote).filter(SpanNote.workspace_id == ws.id, SpanNote.trace_id == trace_id)
+            .order_by(SpanNote.id.asc()).all())
+    return [_note_row(n) for n in rows]
+
+
+@runs_router.post("/traces/{trace_id}/notes")
+def add_note(trace_id: str, data: _NoteIn, request: Request, db: Session = Depends(get_db),
+             ws: Workspace = Depends(current_workspace)):
+    if not data.body.strip():
+        raise HTTPException(422, "note body is required")
+    author = ""
+    try:
+        author = (get_current_user(request, db).name or "")[:120]
+    except Exception:
+        pass
+    n = SpanNote(workspace_id=ws.id, trace_id=trace_id, span_id=(data.span_id or "")[:16],
+                 author=author, body=data.body.strip()[:4000])
+    db.add(n); db.commit(); db.refresh(n)
+    return _note_row(n)
+
+
+@runs_router.delete("/notes/{nid}")
+def delete_note(nid: int, db: Session = Depends(get_db),
+                ws: Workspace = Depends(current_workspace)):
+    n = db.get(SpanNote, nid)
+    if not n or n.workspace_id != ws.id:
+        raise HTTPException(404, "Note not found")
+    db.delete(n); db.commit()
+    return {"ok": True}
 
 
 @router.post("/traces/{trace_id}/feedback")

@@ -221,6 +221,18 @@ class Prompt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class SpanNote(Base):
+    """A teammate's note pinned to one span of a trace — inline collaboration on a specific step."""
+    __tablename__ = "span_notes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    trace_id: Mapped[str] = mapped_column(String(32), index=True)
+    span_id: Mapped[str] = mapped_column(String(16), default="")
+    author: Mapped[str] = mapped_column(String(120), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Feedback(Base):
     """A score or annotation attached to a whole trace — a human thumbs-up, an LLM-judge
     score, or an offline-eval result. Many per trace; the portal shows them on the run."""

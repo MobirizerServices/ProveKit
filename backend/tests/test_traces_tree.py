@@ -12,6 +12,16 @@ def _span(span_id, parent, attrs, name, trace="t-tree-1"):
             "attributes": [{"key": k, "value": {"stringValue": str(v)}} for k, v in attrs.items()]}
 
 
+def test_span_notes():
+    with TestClient(app) as c:
+        n = c.post("/api/traces/t-notes/notes", json={"span_id": "s1", "body": "check this step"}).json()
+        assert n["body"] == "check this step" and n["span_id"] == "s1"
+        assert any(x["id"] == n["id"] for x in c.get("/api/traces/t-notes/notes").json())
+        assert c.delete(f"/api/notes/{n['id']}").json()["ok"] is True
+        assert c.get("/api/traces/t-notes/notes").json() == []
+        assert c.post("/api/traces/t-notes/notes", json={"body": ""}).status_code == 422
+
+
 def test_trace_content_search():
     with TestClient(app) as c:
         c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [

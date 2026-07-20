@@ -148,7 +148,7 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
 
 // Right-hand node inspector — tabbed (Output / Raw / Node / Logs) with per-node CTAs.
 function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSpan; traceId?: string; readOnly?: boolean; onPlayground?: (s: TraceSpan) => void }) {
-  const [tab, setTab] = useState<"output" | "raw" | "node" | "logs">("output");
+  const [tab, setTab] = useState<"output" | "raw" | "node" | "logs" | "notes">("output");
   const meta = s.result?.meta || {};
   const params = meta.params || {};
   const events: any[] = Array.isArray(meta.events) ? meta.events : [];
@@ -175,6 +175,7 @@ function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSp
   const tabs: [typeof tab, string, number?][] = [
     ["output", "Output"], ["raw", "Raw"], ["node", "Node"], ["logs", "Logs", events.length],
   ];
+  if (!readOnly && traceId) tabs.push(["notes", "Notes"]);
 
   return (
     <div>
@@ -228,6 +229,8 @@ function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSp
           ) : <div className="muted" style={{ fontSize: 12.5 }}>No logs on this span.</div>
         )}
 
+        {tab === "notes" && traceId && <SpanNotes traceId={traceId} spanId={s.span_id} />}
+
         {/* per-node CTAs */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
           {!readOnly && s.type === "llm" && onPlayground && (
@@ -239,6 +242,45 @@ function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSp
           {!readOnly && traceId && <ScoreButtons traceId={traceId} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Per-span collaboration notes, shown in the inspector's Notes tab.
+function SpanNotes({ traceId, spanId }: { traceId: string; spanId: string }) {
+  const [notes, setNotes] = useState<import("@/lib/api").SpanNote[] | null>(null);
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = () => api.notes(traceId).then(setNotes).catch(() => setNotes([]));
+  useEffect(() => { load(); }, [traceId]);
+  const mine = (notes || []).filter((n) => n.span_id === spanId);
+  const add = async () => {
+    if (!body.trim()) return;
+    setBusy(true);
+    try { await api.addNote(traceId, { span_id: spanId, body: body.trim() }); setBody(""); load(); }
+    finally { setBusy(false); }
+  };
+  const fmt = (s: string) => { try { return new Date(s).toLocaleString(); } catch { return ""; } };
+  return (
+    <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+        {notes == null ? <span className="muted" style={{ fontSize: 12.5 }}>Loading…</span>
+          : mine.length === 0 ? <span className="muted" style={{ fontSize: 12.5 }}>No notes on this span yet.</span>
+          : mine.map((n) => (
+            <div key={n.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{n.body}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 5 }}>
+                <span className="muted" style={{ fontSize: 10.5 }}>{n.author || "—"} · {fmt(n.created_at)}</span>
+                <button className="btn btn-sm btn-ghost" onClick={async () => { await api.deleteNote(n.id); load(); }}>Delete</button>
+              </div>
+            </div>
+          ))}
+      </div>
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a note for your team…"
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) add(); }}
+        style={{ width: "100%", minHeight: 56, resize: "vertical", background: "var(--panel-2)", color: "var(--text)",
+          border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 10px", fontSize: 12.5 }} />
+      <button className="btn btn-sm" onClick={add} disabled={busy || !body.trim()} style={{ marginTop: 6 }}>Add note</button>
     </div>
   );
 }

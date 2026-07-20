@@ -79,6 +79,7 @@ export interface ExperimentSummary {
   result_count: number; scorer_means: Record<string, number>; mean_score: number | null;
 }
 export interface PlaygroundExperimentIn extends PlaygroundIn { dataset_id: number; name?: string; scorers?: string[]; }
+export interface SpanNote { id: number; trace_id: string; span_id: string; author: string; body: string; created_at: string; }
 export interface ReplayResult {
   new_trace_id: string; replay_run_id: number; fork_output: string;
   live_count: number; span_count: number;
@@ -181,6 +182,9 @@ export const api = {
     j<SavedPrompt>("/api/prompts", { method: "POST", body: JSON.stringify(p) }),
   deletePrompt: (id: number) => j(`/api/prompts/${id}`, { method: "DELETE" }),
   playgroundExperiment: (p: PlaygroundExperimentIn) => j<ExperimentSummary>("/api/playground/experiment", { method: "POST", body: JSON.stringify(p) }),
+  notes: (traceId: string) => j<SpanNote[]>(`/api/traces/${traceId}/notes`),
+  addNote: (traceId: string, n: { span_id?: string; body: string }) => j<SpanNote>(`/api/traces/${traceId}/notes`, { method: "POST", body: JSON.stringify(n) }),
+  deleteNote: (id: number) => j(`/api/notes/${id}`, { method: "DELETE" }),
   // datasets
   datasets: () => j<Dataset[]>("/api/datasets"),
   dataset: (id: number) => j<DatasetDetail>(`/api/datasets/${id}`),

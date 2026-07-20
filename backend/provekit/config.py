@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     # Quotas (protect shared infra). 0 disables a given limit.
     ingest_rate_per_min: int = 600     # trace-ingest requests per project per minute
     login_attempts_per_min: int = 10   # login attempts per email+IP per minute
+    playground_monthly_usd_cap: float = 25.0   # per-project cap on playground/replay spend; 0 = off
     runs_retention: int = 10000        # keep last N spans per project (older ones pruned)
     max_body_bytes: int = 2_000_000    # reject request bodies larger than this
 

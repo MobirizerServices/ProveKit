@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import DatasetItem, Experiment, ExperimentResult, Prompt, ProviderConnection, Workspace, _now, iso_utc
 from ..scorers import run_scorers
-from ..services import limits
+from ..services import limits, pricing
 from ..services.llm_client import LLMError, complete, judge
 from ..services.replay import reconstruct
 from ..services.replay import webhook as replay_webhook
@@ -113,6 +113,7 @@ def _resolve(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, str, str]:
 async def playground_run(data: _RunIn, db: Session = Depends(get_db),
                          ws: Workspace = Depends(current_workspace)):
     limits.check_playground_rate(ws.id)
+    limits.check_spend_cap(ws.id)
     if not data.messages:
         raise HTTPException(422, "at least one message is required")
     params = dict(data.params or {})
@@ -129,6 +130,8 @@ async def playground_run(data: _RunIn, db: Session = Depends(get_db),
     result["latency_ms"] = round((time.monotonic() - t0) * 1000)
     result["provider"] = provider
     result["model"] = data.model
+    limits.record_spend(ws.id, pricing.estimate(data.model, result["usage"].get("input_tokens"),
+                                                result["usage"].get("output_tokens")))
     return result
 
 
@@ -148,6 +151,7 @@ class _ReplayIn(BaseModel):
 async def replay(data: _ReplayIn, db: Session = Depends(get_db),
                  ws: Workspace = Depends(current_workspace)):
     limits.check_playground_rate(ws.id)
+    limits.check_spend_cap(ws.id)
     if not data.messages:
         raise HTTPException(422, "at least one message is required")
     params = dict(data.params or {})
@@ -248,6 +252,7 @@ def _fill(messages: list[dict], item_input: str, item_expected: str) -> list[dic
 async def playground_experiment(data: _ExpIn, db: Session = Depends(get_db),
                                 ws: Workspace = Depends(current_workspace)):
     limits.check_playground_rate(ws.id)
+    limits.check_spend_cap(ws.id)
     items = (db.query(DatasetItem)
              .filter(DatasetItem.workspace_id == ws.id, DatasetItem.dataset_id == data.dataset_id)
              .order_by(DatasetItem.id.asc()).limit(_EXP_ITEM_CAP).all())
@@ -270,6 +275,8 @@ async def playground_experiment(data: _ExpIn, db: Session = Depends(get_db),
         for it in items:
             msgs = _fill(base_msgs, it.input, it.expected)
             r = await complete(provider, data.model, msgs, params, api_key=api_key, base_url=base_url)
+            limits.record_spend(ws.id, pricing.estimate(data.model, r["usage"].get("input_tokens"),
+                                                        r["usage"].get("output_tokens")))
             scores = run_scorers(sync_scorers, r["output"], it.expected)
             if want_judge:
                 scores["llm_judge"] = await judge(provider, data.model, it.input, it.expected,

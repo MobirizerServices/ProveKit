@@ -26,6 +26,17 @@ class _MemoryWindow:
                 self._c.popitem(last=False)
             return count
 
+    def add(self, key: str, amount: float, ttl: int) -> float:
+        with self._lock:
+            total = float(self._c.get(key, 0.0)) + amount
+            self._c[key] = total
+            self._c.move_to_end(key)
+            return total
+
+    def get_float(self, key: str) -> float:
+        with self._lock:
+            return float(self._c.get(key, 0.0))
+
 
 class _RedisWindow:
     def __init__(self, url: str):
@@ -37,6 +48,16 @@ class _RedisWindow:
         pipe.incr(key)
         pipe.expire(key, ttl)
         return pipe.execute()[0]
+
+    def add(self, key: str, amount: float, ttl: int) -> float:
+        pipe = self._r.pipeline()
+        pipe.incrbyfloat(key, amount)
+        pipe.expire(key, ttl)
+        return float(pipe.execute()[0])
+
+    def get_float(self, key: str) -> float:
+        v = self._r.get(key)
+        return float(v) if v else 0.0
 
 
 @lru_cache
@@ -58,6 +79,24 @@ def check_login_rate(ident: str) -> None:
     if _window().hit(key, 60) > limit:
         raise HTTPException(429, "Too many login attempts — wait a minute.",
                             headers={"Retry-After": str(60 - (_now() % 60))})
+
+
+def _spend_key(ws_id: int) -> str:
+    return f"spend:{ws_id}:{time.strftime('%Y-%m', time.gmtime())}"   # per project, per calendar month
+
+
+def check_spend_cap(ws_id: int) -> None:
+    """Reject a re-run if this project has already hit its monthly playground/replay spend cap.
+    Checked before the call (which then adds its own cost via record_spend). Cap of 0 disables."""
+    cap = get_settings().playground_monthly_usd_cap
+    if cap and cap > 0 and _window().get_float(_spend_key(ws_id)) >= cap:
+        raise HTTPException(402, f"Monthly playground spend cap of ${cap:.2f} reached for this project.")
+
+
+def record_spend(ws_id: int, usd: float) -> None:
+    """Accrue estimated cost of a re-run toward the project's monthly total (35-day TTL)."""
+    if usd > 0:
+        _window().add(_spend_key(ws_id), usd, 35 * 24 * 3600)
 
 
 def check_playground_rate(ws_id: int) -> None:

@@ -82,5 +82,9 @@ measured regression check in one click.
 ## Guardrails
 
 - Re-runs are **rate-limited** per project and capped at a hard max-tokens ceiling.
+- A per-project **monthly spend cap** (`PLAYGROUND_MONTHLY_USD_CAP`, default $25; 0 disables) —
+  playground/reconstructed-replay/eval calls estimate their cost and a 402 is returned once the
+  month's total is reached. (Webhook replays run on your own infra with your keys, so they don't
+  count toward this.)
 - Dataset evaluations are capped to a bounded number of items per run.
 - Provider keys are sealed at rest, never logged, and used only server-side.

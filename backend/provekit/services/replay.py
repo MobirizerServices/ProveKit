@@ -22,7 +22,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from ..models import ReplayRun, Run, Workspace
-from . import otel
+from . import limits, otel, pricing
 from .llm_client import LLMError, complete
 from .netguard import guard_url
 
@@ -100,6 +100,8 @@ async def reconstruct(db: Session, ws: Workspace, origin_trace_id: str, fork_spa
             state = "unchanged"
         elif s.span_id == fork_span_id:
             r = await complete(provider, model, messages, params, api_key=api_key, base_url=base_url)
+            limits.record_spend(ws.id, pricing.estimate(model, r["usage"].get("input_tokens"),
+                                                        r["usage"].get("output_tokens")))
             old_out = _text_of(res)
             fork_output = r["output"]
             if old_out and old_out != fork_output:
@@ -116,8 +118,11 @@ async def reconstruct(db: Session, ws: Workspace, origin_trace_id: str, fork_spa
                 any_changed = any_changed or ch
                 new_msgs.append({"role": m["role"], "content": c})
             if any_changed:
-                r = await complete(provider, req.get("model") or model, new_msgs, params,
+                dmodel = req.get("model") or model
+                r = await complete(provider, dmodel, new_msgs, params,
                                    api_key=api_key, base_url=base_url)
+                limits.record_spend(ws.id, pricing.estimate(dmodel, r["usage"].get("input_tokens"),
+                                                            r["usage"].get("output_tokens")))
                 old_out = _text_of(res)
                 if old_out and old_out != r["output"]:
                     subs[old_out] = r["output"]

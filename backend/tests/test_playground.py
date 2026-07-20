@@ -320,6 +320,38 @@ def test_experiment_with_llm_judge():
         assert means["llm_judge"] == 0.5   # item1 matches (1.0), item2 unrelated (0.0)
 
 
+def test_pricing_estimate():
+    from provekit.services import pricing
+    assert pricing.estimate("mock", 1000, 1000) == 0.0
+    assert pricing.estimate(None, 1000, 1000) == 0.0
+    # gpt-4o: $2.50/1M in, $10/1M out → 1M in + 1M out = 12.50
+    assert round(pricing.estimate("gpt-4o", 1_000_000, 1_000_000), 2) == 12.50
+    # prefix match on a dated model id
+    assert pricing.estimate("gpt-4o-2024-08-06", 1_000_000, 0) == 2.50
+    # unknown model → non-zero fallback (so spend still accrues)
+    assert pricing.estimate("some-new-model", 1_000_000, 0) > 0
+
+
+def test_spend_cap_enforced(monkeypatch):
+    from provekit.services import limits
+    from provekit.config import get_settings
+    get_settings.cache_clear()
+    monkeypatch.setenv("PLAYGROUND_MONTHLY_USD_CAP", "0.01")
+    get_settings.cache_clear()
+    limits._window.cache_clear()
+    try:
+        ws_id = 987654
+        limits.check_spend_cap(ws_id)          # under cap → ok
+        limits.record_spend(ws_id, 0.05)       # now over the $0.01 cap
+        import pytest
+        with pytest.raises(Exception) as e:
+            limits.check_spend_cap(ws_id)
+        assert "402" in str(e.value) or "cap" in str(e.value).lower()
+    finally:
+        get_settings.cache_clear()
+        limits._window.cache_clear()
+
+
 def test_prompt_versioning():
     with TestClient(app, base_url="https://testserver") as c:
         body = {"name": "greeter", "model": "gpt-4o",

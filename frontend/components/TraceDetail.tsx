@@ -16,8 +16,11 @@ const ROLE_COLOR: Record<string, string> = {
   system: "var(--purple)", user: "var(--blue)", assistant: "var(--green)", tool: "var(--amber)",
 };
 
-// Detect and normalize an LLM message list so we can render it as a chat transcript
-// instead of a raw JSON blob. Returns null when the value isn't message-shaped.
+// Detect and normalize an LLM message list so we can render it as a chat transcript instead of
+// a raw JSON blob. Handles a bare array, a {"messages": [...]} wrapper (OpenInference's
+// input.value / current gen_ai.input.messages shape), and — for completions-style payloads like
+// legacy {"prompt": "..."} calls — falls back to a single user message so content isn't lost.
+// Returns null only when the value truly isn't message-shaped (plain non-JSON text).
 export function parseMessages(v: any): { role: string; content: string }[] | null {
   let data = v;
   if (typeof v === "string") {
@@ -26,15 +29,25 @@ export function parseMessages(v: any): { role: string; content: string }[] | nul
     try { data = JSON.parse(t); } catch { return null; }
   }
   if (!data) return null;
-  const arr = Array.isArray(data) ? data : Array.isArray(data?.messages) ? data.messages : null;
-  if (!arr) return null;
+  let arr = Array.isArray(data) ? data : Array.isArray(data?.messages) ? data.messages : null;
+  if (!arr) {
+    // data is a non-array object here (an array would have satisfied the ternary above).
+    const fallback = typeof data?.prompt === "string" ? data.prompt
+      : typeof data?.input === "string" ? data.input
+      : typeof data?.text === "string" ? data.text : null;
+    if (fallback == null) return null;
+    arr = [{ role: "user", content: fallback }];
+  }
   const msgs = arr.map((m: any) => {
     if (m == null || typeof m !== "object") return null;
     const role = m.role || m.type || m.name;
     if (!role) return null;
     let content = m.content ?? m.text ?? m.message ?? "";
     if (Array.isArray(content)) {
-      content = content.map((c: any) => (typeof c === "string" ? c : c?.text ?? JSON.stringify(c))).join("");
+      // Flatten multimodal content blocks to their text parts only — a non-text block (image,
+      // audio, …) can't be edited as text, and dumping its raw JSON would get sent back to the
+      // model verbatim if re-run, so it's replaced with a short placeholder instead.
+      content = content.map((c: any) => (typeof c === "string" ? c : c?.text || (c?.type ? `[${c.type}]` : ""))).filter(Boolean).join(" ");
     } else if (typeof content !== "string") {
       content = JSON.stringify(content, null, 2);
     }

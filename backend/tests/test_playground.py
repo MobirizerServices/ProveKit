@@ -320,6 +320,37 @@ def test_experiment_with_llm_judge():
         assert means["llm_judge"] == 0.5   # item1 matches (1.0), item2 unrelated (0.0)
 
 
+def test_messages_extraction_is_framework_agnostic():
+    """Real captured traces come in several shapes depending on the instrumentor: current
+    gen_ai.input.messages (bare array), OpenInference input.value ({"messages": [...]} wrapper),
+    legacy completions-style ({"prompt": "..."}), and multimodal content blocks. None of these
+    should silently drop the prompt content."""
+    msgs = replay_mod._messages
+
+    # bare array (current gen_ai.* convention)
+    assert msgs({"input": json.dumps([{"role": "user", "content": "hi"}])}) == [{"role": "user", "content": "hi"}]
+
+    # {"messages": [...]} wrapper (OpenInference input.value / full request body)
+    wrapped = json.dumps({"messages": [{"role": "system", "content": "Be terse."},
+                                       {"role": "user", "content": "Hi there"}], "model": "gpt-4o"})
+    assert msgs({"input": wrapped}) == [{"role": "system", "content": "Be terse."},
+                                        {"role": "user", "content": "Hi there"}]
+
+    # legacy completions-style payload with no "messages" key — must NOT silently drop content
+    assert msgs({"input": json.dumps({"prompt": "Once upon a time"})}) == [
+        {"role": "user", "content": "Once upon a time"}]
+
+    # multimodal content blocks — flattened to text, not a Python-repr dump
+    mm = json.dumps([{"role": "user", "content": [
+        {"type": "text", "text": "Describe this image"}, {"type": "image_url", "image_url": {"url": "data:..."}}]}])
+    assert msgs({"input": mm}) == [{"role": "user", "content": "Describe this image"}]
+
+    # edge cases: empty/missing input never crash, always return a usable single message
+    assert msgs({"input": ""}) == [{"role": "user", "content": ""}]
+    assert msgs({}) == [{"role": "user", "content": ""}]
+    assert msgs({"input": "plain unstructured text"}) == [{"role": "user", "content": "plain unstructured text"}]
+
+
 def test_pricing_estimate():
     from provekit.services import pricing
     assert pricing.estimate("mock", 1000, 1000) == 0.0

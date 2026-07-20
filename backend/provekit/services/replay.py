@@ -27,13 +27,31 @@ from .llm_client import LLMError, complete
 from .netguard import guard_url
 
 
+def _content_text(content) -> str:
+    """Flatten a message's content to plain text: a string as-is, or a list of multimodal
+    content blocks (OpenAI/Anthropic-style {"type":"text","text":...} + non-text blocks) joined
+    by their text parts — so a re-run sends clean text, not a Python repr of the block list."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [c if isinstance(c, str) else (c.get("text") or "") for c in content if isinstance(c, (str, dict))]
+        return " ".join(p for p in parts if p)
+    return str(content) if content else ""
+
+
 def _messages(span_request: dict) -> list[dict]:
-    """Best-effort extraction of chat messages from a captured LLM span's request."""
+    """Best-effort extraction of chat messages from a captured LLM span's request. Handles a
+    bare array, a {"messages": [...]} wrapper (the shape OpenInference's `input.value` and
+    current gen_ai.input.messages both use), and — for completions-style or unrecognized
+    payloads (e.g. legacy {"prompt": "..."} calls) — falls back to prompt/input/text or the raw
+    JSON as a single user message, so content is never silently dropped."""
     raw = (span_request or {}).get("input")
     if isinstance(raw, list):
         data = raw
     elif isinstance(raw, str):
         s = raw.strip()
+        if not s:
+            return [{"role": "user", "content": ""}]
         if s.startswith("[") or s.startswith("{"):
             try:
                 data = json.loads(s)
@@ -43,11 +61,23 @@ def _messages(span_request: dict) -> list[dict]:
             return [{"role": "user", "content": raw}]
     else:
         return [{"role": "user", "content": ""}]
-    arr = data if isinstance(data, list) else data.get("messages", [])
+
+    if isinstance(data, list):
+        arr = data
+    elif isinstance(data, dict):
+        arr = data.get("messages")
+        if not isinstance(arr, list):
+            for key in ("prompt", "input", "text"):
+                if isinstance(data.get(key), str) and data[key]:
+                    return [{"role": "user", "content": data[key]}]
+            return [{"role": "user", "content": json.dumps(data)}]
+    else:
+        arr = None
+
     out = []
     for m in arr or []:
         if isinstance(m, dict) and m.get("role"):
-            out.append({"role": str(m["role"]), "content": str(m.get("content", ""))})
+            out.append({"role": str(m["role"]), "content": _content_text(m.get("content", ""))})
     return out or [{"role": "user", "content": ""}]
 
 

@@ -123,7 +123,7 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
               {sel ? <Inspector span={sel} traceId={traceId} readOnly={readOnly} onPlayground={setPgSpan} /> : <div className="muted" style={{ padding: 16, fontSize: 13 }}>Click a node to inspect it.</div>}
             </div>
           )}
-          {pgSpan && <Playground span={pgSpan} onClose={() => setPgSpan(null)} />}
+          {pgSpan && <Playground span={pgSpan} traceId={traceId} onClose={() => setPgSpan(null)} />}
         </div>
       ) : (
         <Tree spans={spans} />

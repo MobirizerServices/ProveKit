@@ -69,6 +69,11 @@ export interface PlaygroundResult {
   output: string; usage: { input_tokens: number; output_tokens: number };
   latency_ms: number; finish_reason: string; provider: string; model: string;
 }
+export interface ReplayIn extends PlaygroundIn { origin_trace_id: string; fork_span_id: string; }
+export interface ReplayResult {
+  new_trace_id: string; replay_run_id: number; fork_output: string;
+  live_count: number; span_count: number;
+}
 
 export interface Dataset { id: number; name: string; description: string; item_count: number; created_at: string; }
 export interface DatasetItem { id: number; dataset_id: number; input: string; expected: string; meta: any; created_at: string; }
@@ -160,6 +165,7 @@ export const api = {
   createConnection: (c: ConnectionIn) => j<ProviderConnection>("/api/connections", { method: "POST", body: JSON.stringify(c) }),
   deleteConnection: (id: number) => j(`/api/connections/${id}`, { method: "DELETE" }),
   playgroundRun: (p: PlaygroundIn) => j<PlaygroundResult>("/api/playground/run", { method: "POST", body: JSON.stringify(p) }),
+  replay: (p: ReplayIn) => j<ReplayResult>("/api/replay", { method: "POST", body: JSON.stringify(p) }),
   // datasets
   datasets: () => j<Dataset[]>("/api/datasets"),
   dataset: (id: number) => j<DatasetDetail>(`/api/datasets/${id}`),

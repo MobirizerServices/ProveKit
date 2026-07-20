@@ -1,11 +1,14 @@
-"""Interactive debugging: provider connections (sealed BYO keys), the mock re-run path, and
-the OpenAI/Anthropic request shaping (mocked httpx — no real network)."""
+"""Interactive debugging: provider connections (sealed BYO keys), the mock re-run path, the
+OpenAI/Anthropic request shaping (mocked httpx — no real network), and the replay harness."""
 import functools
+import json
 
 import anyio
 from fastapi.testclient import TestClient
 
+from provekit.database import SessionLocal
 from provekit.main import app
+from provekit.models import ProviderConnection, Run
 from provekit.services import llm_client
 from provekit.services.sealing import seal, unseal
 
@@ -145,3 +148,60 @@ def test_unknown_provider_raises():
         assert False
     except llm_client.LLMError:
         pass
+
+
+# ---- replay harness ----
+def _seed_replay_trace(ws_id: int) -> str:
+    """A 3-span trace where a downstream LLM ('decide') consumes the fork LLM's output."""
+    db = SessionLocal()
+    tid = "rep" + "0" * 29
+    db.add_all([
+        Run(workspace_id=ws_id, type="agent", label="root", trace_id=tid, span_id="r",
+            parent_span_id="", request={}, result={"text": "final"}),
+        Run(workspace_id=ws_id, type="llm", label="analyze", trace_id=tid, span_id="f",
+            parent_span_id="r",
+            request={"model": "gpt-4o", "input": json.dumps([{"role": "user", "content": "Analyze the docs."}])},
+            result={"text": "ANALYSIS_ONE", "meta": {"usage": {"input_tokens": 10, "output_tokens": 3}}}),
+        Run(workspace_id=ws_id, type="llm", label="decide", trace_id=tid, span_id="d",
+            parent_span_id="r",
+            request={"model": "gpt-4o", "input": json.dumps([{"role": "user", "content": "Given ANALYSIS_ONE, decide."}])},
+            result={"text": "DECISION_X", "meta": {"usage": {"input_tokens": 8, "output_tokens": 2}}}),
+    ])
+    db.commit(); db.close()
+    return tid
+
+
+def test_replay_reconstructed_threads_downstream():
+    with TestClient(app, base_url="https://testserver") as c:
+        # a connection pins the exact current_workspace the replay will run in
+        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        db = SessionLocal()
+        ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
+        db.close()
+        tid = _seed_replay_trace(ws_id)
+
+        r = c.post("/api/replay", json={
+            "origin_trace_id": tid, "fork_span_id": "f", "provider": "mock", "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "Analyze the docs MORE carefully."}]})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["new_trace_id"] and d["new_trace_id"] != tid
+        assert d["live_count"] >= 2   # the fork + the threaded downstream call both ran live
+
+        # inspect the new branch: root unchanged, fork live, downstream threaded → live
+        db = SessionLocal()
+        states = {s.label: (s.result.get("meta") or {}).get("replay_state")
+                  for s in db.query(Run).filter(Run.trace_id == d["new_trace_id"]).all()}
+        # the downstream call's input had the old output substituted with the new one
+        decide = db.query(Run).filter(Run.trace_id == d["new_trace_id"], Run.label == "decide").first()
+        db.close()
+        assert states == {"root": "unchanged", "analyze": "live", "decide": "live"}
+        assert "ANALYSIS_ONE" not in decide.request["input"]   # threaded away
+
+
+def test_replay_missing_trace_404():
+    with TestClient(app, base_url="https://testserver") as c:
+        r = c.post("/api/replay", json={"origin_trace_id": "nope", "fork_span_id": "x",
+                   "provider": "mock", "model": "gpt-4o",
+                   "messages": [{"role": "user", "content": "hi"}]})
+        assert r.status_code == 404

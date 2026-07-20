@@ -26,8 +26,9 @@ function findVars(msgs: Msg[]): string[] {
 }
 
 // The interactive playground: edit a captured LLM call's prompt / model / params / variables and
-// re-run it against a provider connection (or the keyless mock), diffing the new output.
-export default function Playground({ span, onClose }: { span: TraceSpan; onClose: () => void }) {
+// re-run it against a provider connection (or the keyless mock), diffing the new output. When a
+// traceId is present, "Replay flow" forks the whole trace at this span and re-runs downstream.
+export default function Playground({ span, traceId, onClose }: { span: TraceSpan; traceId?: string; onClose: () => void }) {
   const [msgs, setMsgs] = useState<Msg[]>(() => seedMessages(span));
   const [model, setModel] = useState(span.request?.model || "gpt-4o");
   const p = span.result?.meta?.params || {};
@@ -57,18 +58,31 @@ export default function Playground({ span, onClose }: { span: TraceSpan; onClose
   const substitute = (text: string) =>
     text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, k) => (vars[k] ?? `{{${k}}}`));
 
-  const run = async () => {
-    setErr(""); setBusy(true); setResult(null);
+  const payload = () => {
     const params: Record<string, any> = { max_tokens: Number(maxTokens) || 512 };
     if (temperature !== "") params.temperature = Number(temperature);
-    const payload = {
+    return {
       model, messages: msgs.map((m) => ({ role: m.role, content: substitute(m.content) })),
       params, from_span_id: span.span_id,
       ...(conn === "mock" ? { provider: "mock" } : { connection_id: Number(conn) }),
     };
+  };
+
+  const run = async () => {
+    setErr(""); setBusy(true); setResult(null);
     try {
-      setResult(await api.playgroundRun(payload));
+      setResult(await api.playgroundRun(payload()));
     } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
+  };
+
+  const replay = async () => {
+    if (!traceId) return;
+    setErr(""); setBusy(true);
+    try {
+      const r = await api.replay({ ...payload(), origin_trace_id: traceId, fork_span_id: span.span_id });
+      // open the new branch (deep-link handles selection); it renders with per-node replay badges
+      window.location.href = `/traces?trace=${encodeURIComponent(r.new_trace_id)}`;
+    } catch (e: any) { setErr(String(e.message || e)); setBusy(false); }
   };
 
   const origOut = span.result?.text || "";
@@ -151,9 +165,18 @@ export default function Playground({ span, onClose }: { span: TraceSpan; onClose
             </div>
           </div>
 
-          <button className="btn" onClick={run} disabled={busy} style={{ alignSelf: "flex-start" }}>
-            {busy ? "Running…" : "▶ Run"}
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="btn" onClick={run} disabled={busy}>{busy ? "Running…" : "▶ Run"}</button>
+            {traceId && (
+              <button className="btn btn-ghost" onClick={replay} disabled={busy}
+                title="Fork the whole trace here and re-run downstream calls with this edit"
+                style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>⑂ Replay flow</button>
+            )}
+          </div>
+          <div className="muted" style={{ fontSize: 11 }}>
+            <b>Run</b> re-runs just this call. <b>Replay flow</b> forks the trace here and threads
+            the new output through downstream calls — opens as a new branch.
+          </div>
           {err && <div style={errBox}>{err}</div>}
         </div>
 

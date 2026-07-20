@@ -14,6 +14,7 @@ from ..database import get_db
 from ..models import ProviderConnection, Workspace, _now, iso_utc
 from ..services import limits
 from ..services.llm_client import LLMError, complete
+from ..services.replay import reconstruct
 from ..services.sealing import mask_key, seal, unseal
 from ..services.workspace import current_workspace
 
@@ -126,3 +127,37 @@ async def playground_run(data: _RunIn, db: Session = Depends(get_db),
     result["provider"] = provider
     result["model"] = data.model
     return result
+
+
+# ---- the replay harness: fork a trace at a span, re-run the flow with the edit ----
+class _ReplayIn(BaseModel):
+    origin_trace_id: str
+    fork_span_id: str
+    model: str
+    messages: list[_Msg]
+    params: dict = {}
+    connection_id: int | None = None
+    provider: str | None = None
+
+
+@router.post("/replay")
+async def replay(data: _ReplayIn, db: Session = Depends(get_db),
+                 ws: Workspace = Depends(current_workspace)):
+    limits.check_playground_rate(ws.id)
+    if not data.messages:
+        raise HTTPException(422, "at least one message is required")
+    params = dict(data.params or {})
+    if params.get("max_tokens"):
+        params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
+    provider, api_key, base_url = _resolve(db, ws, _RunIn(
+        model=data.model, messages=data.messages, params=params,
+        connection_id=data.connection_id, provider=data.provider))
+    messages = [{"role": m.role, "content": m.content} for m in data.messages]
+    try:
+        return await reconstruct(db, ws, data.origin_trace_id, data.fork_span_id,
+                                 data.model, messages, params,
+                                 provider=provider, api_key=api_key, base_url=base_url)
+    except LLMError as e:
+        raise HTTPException(502, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))

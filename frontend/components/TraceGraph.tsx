@@ -76,6 +76,15 @@ function SpanNode({ data }: { data: NodeData }) {
             {data.collapsed ? "+" : "−"}
           </button>
         )}
+        {(() => {
+          const rs = (s.result?.meta as any)?.replay_state as string | undefined;
+          if (!rs) return null;
+          const c = rs === "live" ? "var(--green)" : rs === "diverged" ? "var(--amber)"
+            : rs === "unchanged" ? "var(--border-strong)" : "var(--muted)";
+          return <span title={`replay: ${rs}`} style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 700,
+            textTransform: "uppercase", letterSpacing: 0.3, padding: "1px 4px", borderRadius: 3,
+            color: c, border: `1px solid ${c}` }}>{rs === "live" ? "LIVE" : rs === "diverged" ? "DIVERGED" : rs === "unchanged" ? "SAME" : "REC"}</span>;
+        })()}
         {data.slow && <span title="among the slowest spans" style={{ flexShrink: 0, fontSize: 11, color: "var(--amber)" }}>⏱</span>}
         <span aria-label={s.status} style={{ flexShrink: 0, fontSize: 12, fontWeight: 700,
           color: s.status === "failed" ? "var(--red)" : "var(--green)" }}>

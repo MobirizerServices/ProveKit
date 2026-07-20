@@ -56,6 +56,23 @@ python examples/langgraph_demo.py     # same PROVEKIT_API_KEY / PROVEKIT_ENDPOIN
 Verified end-to-end: one trace per question, each a `langgraph-agent → LangGraph → {retrieve,
 generate → LLM}` flow with token usage on the model span — captured from the one decorator.
 
+## `langgraph_complex_demo.py` — a deep multi-agent LangGraph orchestrator
+
+The LangGraph analogue of `complex_demo.py`: one run is a **70-span** trace exercising nearly
+every LangGraph feature — a **parallel map-reduce fan-out** (the `Send` API dispatches a research
+branch per subtopic), a **compiled sub-graph used as a node**, a bounded **reflection cycle**
+(critique → revise → critique), a **flaky tool that fails then retries** (a red span inside a
+green run), and **five distinct models** so the dashboard's per-model + cost breakdowns fill in.
+Still one `@pk.trace`, still offline by default.
+
+```bash
+pip install "provekit[trace-all]" langgraph langchain-core
+python examples/langgraph_complex_demo.py     # same PROVEKIT_API_KEY / PROVEKIT_ENDPOINT
+```
+
+Verified end-to-end: ~70 spans, ~11k tokens, ~$0.04 across gpt-4o / gpt-4o-mini / claude-sonnet-5,
+with a feedback score. Great for stress-testing the Flow graph (Collapse all / Heat) and Waterfall.
+
 ## Try evaluation
 
 Once you have traces, use **"add to dataset"** on a trace (or the Datasets page) to build a

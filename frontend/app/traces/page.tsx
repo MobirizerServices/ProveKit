@@ -6,6 +6,7 @@ import { api, TraceSpan, TraceSummary } from "@/lib/api";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 import TraceDetail from "@/components/TraceDetail";
+import TraceCompare from "@/components/TraceCompare";
 
 function ListSkeleton() {
   return <><Skeleton w="65%" h={12} /><Skeleton w="85%" h={10} mt={5} /><SkeletonStyles /></>;
@@ -63,6 +64,7 @@ const WINDOWS: { label: string; hours: number }[] = [
 export default function TracesPage() {
   const [traces, setTraces] = useState<TraceSummary[]>([]);
   const [sel, setSel] = useState<string | null>(null);
+  const [vs, setVs] = useState<string | null>(null);   // second trace for side-by-side compare
   const [spans, setSpans] = useState<TraceSpan[] | null>(null);
   const [origin, setOrigin] = useState("https://your-provekit-host");
   const [q, setQ] = useState("");
@@ -182,12 +184,12 @@ export default function TracesPage() {
                       </span>
                     </div>
                     {g.items.map((t) => (
-                      <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => setSel(t.trace_id)} fmt={fmt} indent />
+                      <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => { setSel(t.trace_id); setVs(null); }} fmt={fmt} indent />
                     ))}
                   </div>
                 ))
               ) : shown.map((t) => (
-                <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => setSel(t.trace_id)} fmt={fmt} />
+                <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => { setSel(t.trace_id); setVs(null); }} fmt={fmt} />
               ))}
               </div>
             </div>
@@ -195,10 +197,24 @@ export default function TracesPage() {
             <div style={{ ...panel, minHeight: 220 }}>
               {!sel ? (
                 <div className="muted" style={{ fontSize: 13 }}>Select a trace to see its flow.</div>
+              ) : vs ? (
+                <TraceCompare aId={sel} bId={vs} onClose={() => setVs(null)} />
               ) : !spans ? (
                 <DetailSkeleton />
               ) : (
-                <TraceDetail spans={spans} traceId={sel ?? undefined} />
+                <>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                    <select value="" onChange={(e) => e.target.value && setVs(e.target.value)}
+                      title="Compare this trace against another"
+                      style={{ background: "var(--panel-2)", color: "var(--muted)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "5px 9px", fontSize: 12 }}>
+                      <option value="">⇄ Compare with…</option>
+                      {shown.filter((t) => t.trace_id && t.trace_id !== sel).slice(0, 30).map((t) => (
+                        <option key={t.trace_id} value={t.trace_id}>{t.label} · {t.trace_id.slice(0, 8)} · {fmt(t.created_at).replace(/:\d\d /, " ")}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <TraceDetail spans={spans} traceId={sel ?? undefined} />
+                </>
               )}
             </div>
           </div>

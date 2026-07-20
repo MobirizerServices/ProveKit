@@ -12,6 +12,23 @@ def _span(span_id, parent, attrs, name, trace="t-tree-1"):
             "attributes": [{"key": k, "value": {"stringValue": str(v)}} for k, v in attrs.items()]}
 
 
+def test_trace_content_search():
+    with TestClient(app) as c:
+        c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+            _span("sr1", "", {"gen_ai.operation.name": "invoke_agent",
+                              "gen_ai.output.messages": "the mitochondria is the powerhouse"},
+                  "agent", trace="t-search-a")]}]}]})
+        c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+            _span("sr2", "", {"gen_ai.operation.name": "invoke_agent",
+                              "gen_ai.output.messages": "quarterly revenue projections"},
+                  "agent", trace="t-search-b")]}]}]})
+        # search matches on span content, not just the label
+        tids = {t["trace_id"] for t in c.get("/api/traces", params={"q": "mitochondria"}).json()}
+        assert "t-search-a" in tids and "t-search-b" not in tids
+        # no match → empty list
+        assert c.get("/api/traces", params={"q": "zzz-no-such-content"}).json() == []
+
+
 def test_agent_trace_lists_as_one_root_and_returns_a_tree():
     with TestClient(app) as c:
         payload = {"resourceSpans": [{"scopeSpans": [{"spans": [

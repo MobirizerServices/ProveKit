@@ -99,7 +99,7 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
 # portal UI calls, and the key-authed /v1/* routes an MCP server or script calls with the
 # project key. Same data, two doors — so "debug via MCP" needs no new client code.
 def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
-                 window_hours: int | None = None):
+                 window_hours: int | None = None, search: str | None = None):
     limit = max(1, min(limit, 200))
     q = (db.query(Run).filter(Run.workspace_id == ws.id, Run.parent_span_id == ""))
     if status:
@@ -109,6 +109,18 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
 
         from ..models import _now
         q = q.filter(Run.created_at >= _now() - timedelta(hours=window_hours))
+    if search and search.strip():
+        # Full-text-ish: match a trace if ANY of its spans contains the term in its label or its
+        # (JSON) request/result — so you can find a run by something it said, not just the label.
+        from sqlalchemy import String, cast, or_
+        term = f"%{search.strip()}%"
+        match_tids = [t for (t,) in db.query(Run.trace_id).filter(
+            Run.workspace_id == ws.id,
+            or_(Run.label.ilike(term), cast(Run.request, String).ilike(term),
+                cast(Run.result, String).ilike(term))).distinct().limit(500).all()]
+        if not match_tids:
+            return []
+        q = q.filter(Run.trace_id.in_(match_tids))
     roots = q.order_by(Run.id.desc()).limit(limit).all()
     trace_ids = [r.trace_id for r in roots if r.trace_id]
     counts: dict = {}
@@ -240,11 +252,13 @@ def read_shared_trace(token: str, db: Session = Depends(get_db)):
 
 @runs_router.get("/traces")
 def list_traces(limit: int = 50, status: str | None = None, window_hours: int | None = None,
+                q: str | None = None,
                 db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     """One row per trace: its root span (the decorated entrypoint), with a span count and
     total token usage (so the list is scannable at a glance). `status=failed` filters to
-    failures; `window_hours=N` limits to the last N hours."""
-    return _list_traces(db, ws, limit, status, window_hours)
+    failures; `window_hours=N` limits to the last N hours; `q=text` full-text-searches span
+    labels and input/output content."""
+    return _list_traces(db, ws, limit, status, window_hours, search=q)
 
 
 @runs_router.get("/traces/{trace_id}")

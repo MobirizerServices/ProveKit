@@ -31,7 +31,7 @@ export interface Feedback {
   comment: string; source: string; created_at: string;
 }
 
-export interface TraceQuery { status?: string; window_hours?: number; limit?: number; }
+export interface TraceQuery { status?: string; window_hours?: number; limit?: number; q?: string; }
 
 export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; replay_url?: string; created_at: string; }
 export interface Member { user_id: number; email: string; name: string; role: string; }
@@ -148,6 +148,7 @@ export const api = {
     if (query?.status) p.set("status", query.status);
     if (query?.window_hours) p.set("window_hours", String(query.window_hours));
     if (query?.limit) p.set("limit", String(query.limit));
+    if (query?.q) p.set("q", query.q);
     const qs = p.toString();
     return j<TraceSummary[]>(`/api/traces${qs ? `?${qs}` : ""}`);
   },

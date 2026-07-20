@@ -66,6 +66,7 @@ export default function TracesPage() {
   const [spans, setSpans] = useState<TraceSpan[] | null>(null);
   const [origin, setOrigin] = useState("https://your-provekit-host");
   const [q, setQ] = useState("");
+  const [dq, setDq] = useState("");   // debounced query sent to the server
   const [failuresOnly, setFailuresOnly] = useState(false);
   const [windowHours, setWindowHours] = useState(0);
   const [model, setModel] = useState("");
@@ -75,9 +76,12 @@ export default function TracesPage() {
   const [listOpen, setListOpen] = useState(true);
 
   const load = useCallback(() => {
-    api.traces({ status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined })
+    api.traces({ status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined, q: dq || undefined })
       .then((t) => { setTraces(t); setLoaded(true); }).catch(() => setLoaded(true));
-  }, [failuresOnly, windowHours]);
+  }, [failuresOnly, windowHours, dq]);
+
+  // Debounce the search box → server (searches span content, not just the loaded labels).
+  useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 300); return () => clearTimeout(t); }, [q]);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -100,9 +104,7 @@ export default function TracesPage() {
   const modelOptions = Array.from(new Set(traces.map((t) => t.model).filter(Boolean))) as string[];
   const hasSessions = traces.some((t) => t.session_id);
   const shown = traces
-    .filter((t) =>
-      (!q || (t.label || "").toLowerCase().includes(q.toLowerCase())) &&
-      (!model || t.model === model))
+    .filter((t) => (!model || t.model === model))   // text search is server-side now (content, not just label)
     .sort((a, b) =>
       sort === "slowest" ? (b.duration_ms || 0) - (a.duration_ms || 0)
       : sort === "tokens" ? (b.tokens || 0) - (a.tokens || 0)
@@ -130,7 +132,7 @@ export default function TracesPage() {
               </button>
             )}
             <div style={{ display: listOpen ? "flex" : "none", flexDirection: "column", gap: 8, maxHeight: "76vh" }}>
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter traces…"
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search label or content…"
                 style={{ background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 }} />
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => setFailuresOnly((v) => !v)} style={chip(failuresOnly)}

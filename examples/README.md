@@ -40,6 +40,22 @@ Verified end-to-end: 4 traces, ~80 spans total, 25% error rate, ~4k tokens acros
 gpt-4o / gpt-4o-mini / claude-sonnet-5, with feedback scores and deep span metadata
 (temperature, max_tokens, finish_reason). Great for showing off the Flow graph and Waterfall.
 
+## `langgraph_demo.py` — a real LangGraph agent, auto-traced
+
+Shows ProveKit's **zero-code auto-capture** with a real framework: a two-node LangGraph
+(`retrieve` → `generate`) wrapped in a single `@pk.trace`. The graph nodes and the LangChain
+LLM call nest underneath automatically via the OpenInference LangChain instrumentor — no manual
+spans. Runs **fully offline** by default (a canned chat model stands in for the LLM, so no
+OpenAI/Anthropic key is needed); set `OPENAI_API_KEY` to use `gpt-4o-mini` instead.
+
+```bash
+pip install "provekit[trace-all]" langgraph langchain-core
+python examples/langgraph_demo.py     # same PROVEKIT_API_KEY / PROVEKIT_ENDPOINT as above
+```
+
+Verified end-to-end: one trace per question, each a `langgraph-agent → LangGraph → {retrieve,
+generate → LLM}` flow with token usage on the model span — captured from the one decorator.
+
 ## Try evaluation
 
 Once you have traces, use **"add to dataset"** on a trace (or the Datasets page) to build a

@@ -291,6 +291,12 @@ function toggleBtn(active: boolean): React.CSSProperties {
   };
 }
 
+// Compact duration label: "840ms", "1.2s", "12s".
+function fmtDur(ms: number): string {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s`;
+  return `${Math.round(ms)}ms`;
+}
+
 function Tree({ spans }: { spans: TraceSpan[] }) {
   const [open, setOpen] = useState<string | null>(spans[0]?.span_id ?? null);
   const kids: Record<string, TraceSpan[]> = {};
@@ -304,39 +310,65 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
     return v ? BigInt(v) : null;
   };
   const starts = spans.map(startNs).filter((x): x is bigint => x !== null);
+  const hasReal = starts.length > 0;
   const t0 = starts.length ? starts.reduce((a, b) => (b < a ? b : a)) : 0n;
-  let totalNs = 1;
-  for (const s of spans) {
-    const st = startNs(s);
-    if (st === null) continue;
-    const end = Number(st - t0) + (s.duration_ms || 0) * 1e6;
-    if (end > totalNs) totalNs = end;
+
+  // Synthetic fallback timing: when spans carry no wall-clock timestamps we still want a
+  // readable waterfall, so lay siblings out sequentially (each starts when the previous ends)
+  // nested under their parent's start. It's an approximation — flagged in the UI below —
+  // because without timestamps we can't know which siblings actually ran in parallel.
+  const synth: Record<string, number> = {};
+  {
+    let cursor = 0;
+    const layout = (s: TraceSpan, start: number) => {
+      synth[s.span_id] = start;
+      let c = start;
+      for (const ch of kids[s.span_id] || []) { layout(ch, c); c += ch.duration_ms || 0; }
+    };
+    for (const r of kids["__root__"] || []) { layout(r, cursor); cursor += r.duration_ms || 0; }
   }
-  const bar = (s: TraceSpan) => {
+
+  // A span's start offset (ms from trace start): real timestamp if present, else synthetic.
+  const offsetMs = (s: TraceSpan): number => {
     const st = startNs(s);
-    if (st === null) return null;
-    const left = (Number(st - t0) / totalNs) * 100;
-    const width = Math.max(((s.duration_ms || 0) * 1e6 / totalNs) * 100, 1.2);
-    return { left: Math.min(left, 99), width: Math.min(width, 100 - Math.min(left, 99)) };
+    if (st !== null) return Number(st - t0) / 1e6;
+    return synth[s.span_id] ?? 0;
   };
+  const totalMs = Math.max(1, ...spans.map((s) => offsetMs(s) + (s.duration_ms || 0)));
+
+  const bar = (s: TraceSpan) => {
+    const left = (offsetMs(s) / totalMs) * 100;
+    const width = Math.max(((s.duration_ms || 0) / totalMs) * 100, 0.8);
+    return { left: Math.min(left, 99.2), width: Math.min(width, 100 - Math.min(left, 99.2)) };
+  };
+
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  // Vertical gridlines at each quarter, drawn behind every bar track so they line up.
+  const gridBg = "repeating-linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), var(--border) calc(25% - 1px), var(--border) 25%)";
+
   const render = (parent: string, depth: number): React.ReactNode =>
     (kids[parent] || []).map((s) => {
       const b = bar(s);
+      const off = offsetMs(s);
+      const pct = Math.round(((s.duration_ms || 0) / totalMs) * 100);
+      const failed = s.status === "failed";
       return (
         <div key={s.span_id}>
           <button onClick={() => setOpen(open === s.span_id ? null : s.span_id)} style={spanRow(open === s.span_id)}>
-            <span style={{ paddingLeft: depth * 16, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, flex: "0 0 46%" }}>
+            <span style={{ paddingLeft: depth * 16, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, flex: "0 0 42%" }}>
               <span style={badge(s.type)}>{s.type}</span>
               <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
             </span>
-            <span style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", borderRadius: 4 }}>
-              {b && <span style={{ position: "absolute", top: 3, height: 10, borderRadius: 3,
+            <span title={`start +${fmtDur(off)} · ${s.duration_ms}ms · ${pct}% of trace`}
+              style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", backgroundImage: gridBg, borderRadius: 4 }}>
+              <span style={{ position: "absolute", top: 3, height: 10, borderRadius: 3,
                 left: `${b.left}%`, width: `${b.width}%`, minWidth: 3,
-                background: s.status === "failed" ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)"), opacity: 0.85 }} />}
+                background: failed ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)"),
+                opacity: 0.9, boxShadow: open === s.span_id ? "0 0 0 1px var(--text)" : "none" }} />
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
               {tokens(s) && <span className="muted mono" style={{ fontSize: 10.5 }} title="input → output tokens">{tokens(s)}</span>}
-              <span className="muted" style={{ fontSize: 11, width: 54, textAlign: "right" }}>{s.duration_ms}ms</span>
+              <span className="mono" style={{ fontSize: 11, width: 58, textAlign: "right", color: failed ? "var(--red)" : "var(--muted)" }}>{fmtDur(s.duration_ms || 0)}</span>
             </span>
           </button>
           {open === s.span_id && (
@@ -344,14 +376,38 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
               {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
               <IO label="Input" value={s.request?.input} />
               <IO label="Output" value={s.result?.text} />
-              {(s.error || s.status === "failed") && <ErrorBlock error={s.error} />}
+              {(s.error || failed) && <ErrorBlock error={s.error} />}
             </div>
           )}
           {render(s.span_id, depth + 1)}
         </div>
       );
     });
-  return <div>{render("__root__", 0)}</div>;
+
+  return (
+    <div>
+      {/* time ruler aligned with the bar tracks */}
+      <div style={{ display: "flex", alignItems: "center", padding: "0 0 6px", fontSize: 10, color: "var(--muted)" }}>
+        <span style={{ flex: "0 0 42%" }} />
+        <span style={{ position: "relative", flex: 1, height: 12 }}>
+          {ticks.map((f) => (
+            <span key={f} style={{ position: "absolute", left: `${f * 100}%`,
+              transform: f === 1 ? "translateX(-100%)" : f === 0 ? "none" : "translateX(-50%)", whiteSpace: "nowrap" }}>
+              {fmtDur(f * totalMs)}
+            </span>
+          ))}
+        </span>
+        <span style={{ flex: "0 0 82px" }} />
+      </div>
+      {render("__root__", 0)}
+      {!hasReal && (
+        <div className="muted" style={{ fontSize: 11, marginTop: 12, display: "flex", alignItems: "flex-start", gap: 6, lineHeight: 1.5 }}>
+          <span style={{ flexShrink: 0 }}>ⓘ</span>
+          <span>Approximate timing — no per-span timestamps were captured, so siblings are laid out sequentially. Absolute offsets may differ if some spans actually ran in parallel.</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Invocation parameters on an LLM span, shown as labelled chips (only if any were captured).

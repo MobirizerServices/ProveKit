@@ -129,7 +129,10 @@ function Failures({ m }: { m: Metrics }) {
   const byType = m.fail_by_type ?? [];
   const errors = m.top_errors ?? [];
   const recent = m.recent_failures ?? [];
-  if (!m.error_count) {
+  // Gate on span-level failures, not just failed root traces: a failed child span (e.g. a
+  // retried tool call) inside an otherwise-successful trace is still worth surfacing here.
+  const totalFails = byType.reduce((n, r) => n + r.count, 0);
+  if (!totalFails) {
     return (
       <div style={{ ...panel, marginTop: 20, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ color: "var(--green)", fontSize: 15 }}>✓</span>
@@ -140,7 +143,7 @@ function Failures({ m }: { m: Metrics }) {
   const maxType = Math.max(1, ...byType.map((r) => r.count));
   return (
     <div style={{ ...panel, marginTop: 20 }}>
-      <div style={{ ...label, marginBottom: 12, color: "var(--red)" }}>Failures · {m.error_count}</div>
+      <div style={{ ...label, marginBottom: 12, color: "var(--red)" }}>Failures · {totalFails} span{totalFails === 1 ? "" : "s"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(200px, 1fr) minmax(220px, 1.4fr)", gap: 22, alignItems: "start" }} className="fail-grid">
         {/* by span type */}
         <div>

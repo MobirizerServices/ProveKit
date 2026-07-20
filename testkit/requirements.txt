@@ -1,0 +1,11 @@
+# ProveKit Test Kit — install with:  pip install -r requirements.txt
+
+# The tracing SDK + framework instrumentors (LangChain/LangGraph, OpenAI, Anthropic, …)
+provekit[trace-all]>=0.6.0
+
+# The LangGraph demos (run_langgraph.py / run_langgraph_complex.py)
+langgraph>=0.2
+langchain-core>=0.3
+
+# Loads your .env automatically
+python-dotenv>=1.0

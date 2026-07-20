@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, Feedback, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import TraceGraph, { heatColor } from "@/components/TraceGraph";
+import Playground from "@/components/Playground";
 
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
@@ -78,6 +79,7 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
   const [picked, setPicked] = useState<string | null>(root?.span_id ?? null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [pgSpan, setPgSpan] = useState<TraceSpan | null>(null);
   const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
   const totalCost = fmtCost(spans.reduce((n, s) => n + (estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens) || 0), 0) || null);
   const sel = spans.find((s) => s.span_id === picked) || root;
@@ -118,9 +120,10 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
             style={{ ...collapseBtn, right: inspectorOpen ? 388 : 8 }}>{inspectorOpen ? "›" : "‹"}</button>
           {inspectorOpen && (
             <div className="flow-inspector" style={{ width: 380, flexShrink: 0, borderLeft: "1px solid var(--border)", overflowY: "auto", background: "var(--panel)" }}>
-              {sel ? <Inspector span={sel} traceId={traceId} readOnly={readOnly} /> : <div className="muted" style={{ padding: 16, fontSize: 13 }}>Click a node to inspect it.</div>}
+              {sel ? <Inspector span={sel} traceId={traceId} readOnly={readOnly} onPlayground={setPgSpan} /> : <div className="muted" style={{ padding: 16, fontSize: 13 }}>Click a node to inspect it.</div>}
             </div>
           )}
+          {pgSpan && <Playground span={pgSpan} onClose={() => setPgSpan(null)} />}
         </div>
       ) : (
         <Tree spans={spans} />
@@ -132,7 +135,7 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
 }
 
 // Right-hand node inspector — tabbed (Output / Raw / Node / Logs) with per-node CTAs.
-function Inspector({ span: s, traceId, readOnly }: { span: TraceSpan; traceId?: string; readOnly?: boolean }) {
+function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSpan; traceId?: string; readOnly?: boolean; onPlayground?: (s: TraceSpan) => void }) {
   const [tab, setTab] = useState<"output" | "raw" | "node" | "logs">("output");
   const meta = s.result?.meta || {};
   const params = meta.params || {};
@@ -215,6 +218,10 @@ function Inspector({ span: s, traceId, readOnly }: { span: TraceSpan; traceId?: 
 
         {/* per-node CTAs */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+          {!readOnly && s.type === "llm" && onPlayground && (
+            <button className="btn btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+              onClick={() => onPlayground(s)} title="Edit this call's prompt and re-run it with real data">▶ Edit &amp; re-run</button>
+          )}
           <button className="btn btn-sm" onClick={() => copy(s.result?.text ?? s.request?.input ?? "")}>Copy I/O</button>
           <button className="btn btn-sm" onClick={() => copy({ request: s.request, result: s.result })}>Copy JSON</button>
           {!readOnly && traceId && <ScoreButtons traceId={traceId} />}

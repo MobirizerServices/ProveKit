@@ -148,7 +148,12 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     if (p.params?.max_tokens != null) setMaxTokens(String(p.params.max_tokens));
   };
 
-  const origOut = span.result?.text || "";
+  // A captured completion can itself be message-shaped (e.g. a reconstructed single-item
+  // [{"role":"assistant","content":"..."}] from indexed OpenInference attributes) — extract the
+  // clean text instead of showing the raw JSON, matching how the main Inspector renders it.
+  const origOutRaw = span.result?.text || "";
+  const origMsgs = parseMessages(origOutRaw);
+  const origOut = origMsgs && origMsgs.length ? origMsgs.map((m) => m.content).join("\n") : origOutRaw;
   const origUsage = span.result?.meta?.usage || {};
   const origCost = fmtCost(estimateCost(span.request?.model, origUsage.input_tokens, origUsage.output_tokens));
 

@@ -16,6 +16,18 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
   failed-span errors, node status glyphs, share-link expiry, loading skeletons, and the
   `~$0.0000`/minimap bug fixes.
 
+## 0.6.0 — `provekit-demo` smoke test + LangGraph examples
+
+- **`provekit-demo` console command** — after `pip install "provekit[trace]"`, run `provekit-demo`
+  to send a small gallery of traces (nested spans, a multi-turn session, a failed run, a feedback
+  score) to your portal and verify a fresh key end-to-end in ~10 seconds. No LLM key needed.
+- **LangGraph examples** — `examples/langgraph_demo.py` (a two-node graph) and
+  `examples/langgraph_complex_demo.py` (a ~70-span multi-agent orchestrator: parallel map-reduce
+  fan-out, a compiled sub-graph, a reflection cycle, a flaky-retry tool, five models) — each
+  captured from one `@pk.trace`, offline by default.
+- **SDK:** quiet the benign `DependencyConflict` errors auto-instrumentation logged when a
+  provider library (openai/anthropic) isn't installed — they alarmed first-time users.
+
 ## 0.5.0 — Multiple projects, admin console, and a real landing page
 
 ### Projects (multi-tenant)

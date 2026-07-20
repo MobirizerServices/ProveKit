@@ -1,6 +1,6 @@
 [project]
 name = "provekit"
-version = "0.5.0"
+version = "0.6.0"
 description = "Drop-in agent tracing — add one decorator, get a project key, review every run your agent makes."
 requires-python = ">=3.11"
 readme = "README.md"
@@ -34,6 +34,8 @@ dependencies = [
 [project.scripts]
 # The MCP debug server. Needs the [mcp] extra installed to run.
 provekit-mcp = "provekit.mcp:main"
+# A zero-setup smoke test: `provekit-demo` sends a gallery of traces to your portal.
+provekit-demo = "provekit.demo:main"
 
 [project.urls]
 Homepage = "https://github.com/MobirizerServices/ProveKit"
@@ -125,7 +127,7 @@ provekit = [
 source = ["provekit"]
 # Migrations are one-shot schema DDL replayed by Alembic, not application logic; they live
 # inside the package so wheels ship them, which would otherwise drag them into the report.
-omit = ["provekit/migrations/*"]
+omit = ["provekit/migrations/*", "provekit/demo.py"]
 
 [tool.coverage.report]
 # CI gates on this. Set below the current ~97% to leave headroom for cross-interpreter

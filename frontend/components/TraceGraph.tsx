@@ -21,7 +21,7 @@ const NODE_H = 60;   // approximate node box height
 
 // Latency heat: 0 (fastest) → green, 0.5 → amber, 1 (slowest) → red. Used by the optional
 // "Heat" overlay so the eye lands on the expensive spans without reading every number.
-function heatColor(t: number, alpha = 1): string {
+export function heatColor(t: number, alpha = 1): string {
   const c = Math.max(0, Math.min(1, t));
   const hue = 120 * (1 - c); // 120=green → 0=red
   return `hsla(${hue}, 72%, 55%, ${alpha})`;

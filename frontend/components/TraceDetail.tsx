@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, Feedback, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
-import TraceGraph from "@/components/TraceGraph";
+import TraceGraph, { heatColor } from "@/components/TraceGraph";
 
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
@@ -299,6 +299,8 @@ function fmtDur(ms: number): string {
 
 function Tree({ spans }: { spans: TraceSpan[] }) {
   const [open, setOpen] = useState<string | null>(spans[0]?.span_id ?? null);
+  const [heat, setHeat] = useState(false);
+  const maxDur = Math.max(1, ...spans.map((s) => s.duration_ms || 0));
   const kids: Record<string, TraceSpan[]> = {};
   const ids = new Set(spans.map((s) => s.span_id));
   for (const s of spans) {
@@ -363,7 +365,7 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
               style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", backgroundImage: gridBg, borderRadius: 4 }}>
               <span style={{ position: "absolute", top: 3, height: 10, borderRadius: 3,
                 left: `${b.left}%`, width: `${b.width}%`, minWidth: 3,
-                background: failed ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)"),
+                background: failed ? "var(--red)" : heat ? heatColor((s.duration_ms || 0) / maxDur) : (TYPE_COLOR[s.type] || "var(--muted)"),
                 opacity: 0.9, boxShadow: open === s.span_id ? "0 0 0 1px var(--text)" : "none" }} />
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -386,6 +388,19 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
 
   return (
     <div>
+      {/* toolbar: latency-heat toggle (mirrors the flow graph), with a legend when on */}
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        {heat && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "var(--muted)" }}>
+            <span>fast</span>
+            <span style={{ width: 54, height: 7, borderRadius: 4, background: `linear-gradient(90deg, ${heatColor(0)}, ${heatColor(0.5)}, ${heatColor(1)})` }} />
+            <span>slow · {fmtDur(maxDur)}</span>
+          </div>
+        )}
+        {spans.length > 1 && (
+          <button onClick={() => setHeat((v) => !v)} title="Colour bars by latency" style={toggleBtn(heat)}>{heat ? "Heat ✓" : "Heat"}</button>
+        )}
+      </div>
       {/* time ruler aligned with the bar tracks */}
       <div style={{ display: "flex", alignItems: "center", padding: "0 0 6px", fontSize: 10, color: "var(--muted)" }}>
         <span style={{ flex: "0 0 42%" }} />

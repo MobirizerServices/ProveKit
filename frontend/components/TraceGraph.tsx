@@ -19,6 +19,14 @@ const MINI_COLOR: Record<string, string> = {
 const NODE_W = 210;  // node box width for the layout engine
 const NODE_H = 60;   // approximate node box height
 
+// Latency heat: 0 (fastest) → green, 0.5 → amber, 1 (slowest) → red. Used by the optional
+// "Heat" overlay so the eye lands on the expensive spans without reading every number.
+function heatColor(t: number, alpha = 1): string {
+  const c = Math.max(0, Math.min(1, t));
+  const hue = 120 * (1 - c); // 120=green → 0=red
+  return `hsla(${hue}, 72%, 55%, ${alpha})`;
+}
+
 function tokens(s: TraceSpan): string | null {
   const u = s.result?.meta?.usage;
   if (!u || u.input_tokens == null) return null;
@@ -27,12 +35,17 @@ function tokens(s: TraceSpan): string | null {
 
 interface NodeData {
   span: TraceSpan; active: boolean; childCount?: number; collapsed?: boolean;
-  onToggle?: (id: string) => void; dim?: boolean; slow?: boolean;
+  onToggle?: (id: string) => void; dim?: boolean; slow?: boolean; heat?: number | null;
 }
 
 function SpanNode({ data }: { data: NodeData }) {
   const s = data.span;
-  const color = s.status === "failed" ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)");
+  const failed = s.status === "failed";
+  const typeColor = failed ? "var(--red)" : (TYPE_COLOR[s.type] || "var(--muted)");
+  // In heat mode the border/tint reflect latency; otherwise they reflect span type.
+  const heatOn = data.heat != null;
+  const hc = heatOn ? heatColor(data.heat!) : null;
+  const color = failed ? "var(--red)" : (hc ?? typeColor);
   const tok = tokens(s);
   const cost = fmtCost(estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens));
   const nEvents = Array.isArray(s.result?.meta?.events) ? s.result!.meta!.events.length : 0;
@@ -40,7 +53,8 @@ function SpanNode({ data }: { data: NodeData }) {
   return (
     <div style={{
       minWidth: 176, maxWidth: 220, padding: "9px 11px", borderRadius: 10,
-      background: "var(--panel)", border: `1px solid ${color}`,
+      background: heatOn && !failed ? `linear-gradient(0deg, ${heatColor(data.heat!, 0.14)}, var(--panel))` : "var(--panel)",
+      border: `1px solid ${color}`,
       boxShadow: data.active ? `0 0 0 2px ${color}` : "var(--sh-1)", cursor: "pointer",
       opacity: data.dim ? 0.28 : 1, transition: "opacity .15s",
     }}>
@@ -48,7 +62,7 @@ function SpanNode({ data }: { data: NodeData }) {
       <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
         <span style={{
           fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
-          padding: "1px 5px", borderRadius: 4, color, border: `1px solid ${color}`, flexShrink: 0,
+          padding: "1px 5px", borderRadius: 4, color: typeColor, border: `1px solid ${typeColor}`, flexShrink: 0,
         }}>{s.type}</span>
         <span style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
           {s.label}
@@ -71,6 +85,11 @@ function SpanNode({ data }: { data: NodeData }) {
       <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
         {s.duration_ms}ms{tok ? ` · ${tok}` : ""}{cost ? ` · ${cost}` : ""}{s.status === "failed" ? " · failed" : ""}
       </div>
+      {heatOn && !failed && (
+        <div style={{ marginTop: 5, height: 4, borderRadius: 3, background: "var(--bg-2)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.max(4, data.heat! * 100)}%`, background: heatColor(data.heat!), borderRadius: 3 }} />
+        </div>
+      )}
       {data.collapsed && hasKids && (
         <div style={{ fontSize: 9.5, marginTop: 3, color }}>▸ {data.childCount} hidden span{data.childCount === 1 ? "" : "s"}</div>
       )}
@@ -90,6 +109,7 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [hideSteps, setHideSteps] = useState(false);
   const [search, setSearch] = useState("");
+  const [heat, setHeat] = useState(false);
   const toggle = useCallback((id: string) => {
     setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }, []);
@@ -100,6 +120,9 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
     if (ds.length < 3) return Infinity;
     return ds[Math.floor(ds.length * 0.9)] || Infinity;
   }, [spans]);
+
+  // Slowest span in the trace → the top of the heat scale.
+  const maxDur = useMemo(() => Math.max(1, ...spans.map((s) => s.duration_ms || 0)), [spans]);
 
   const { nodes, edges } = useMemo(() => {
     const ids = new Set(spans.map((s) => s.span_id));
@@ -158,6 +181,7 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
           data: { span: s, active: selected === s.span_id, childCount: descCount[s.span_id] || 0,
             collapsed: collapsed.has(s.span_id), onToggle: toggle,
             slow: (s.duration_ms || 0) >= slowThreshold && (s.duration_ms || 0) > 0,
+            heat: heat ? (s.duration_ms || 0) / maxDur : null,
             dim: !!q && !matched },
         };
       }),
@@ -176,7 +200,7 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
         };
       }),
     };
-  }, [spans, selected, collapsed, hideSteps, toggle, search, slowThreshold]);
+  }, [spans, selected, collapsed, hideSteps, toggle, search, slowThreshold, heat, maxDur]);
 
   const hasSteps = useMemo(() => spans.some((s) => s.type === "step"), [spans]);
 
@@ -199,7 +223,18 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
           ? <button style={tbBtn()} onClick={() => setCollapsed(new Set())}>Expand all</button>
           : parents.length > 1 && <button style={tbBtn()} onClick={() => setCollapsed(new Set(parents))}>Collapse all</button>}
         {hasSteps && <button style={tbBtn(hideSteps)} onClick={() => setHideSteps((v) => !v)}>{hideSteps ? "Show steps" : "Hide steps"}</button>}
+        {spans.length > 1 && <button style={tbBtn(heat)} title="Colour nodes by latency" onClick={() => setHeat((v) => !v)}>{heat ? "Heat ✓" : "Heat"}</button>}
       </div>
+      {/* heat legend */}
+      {heat && (
+        <div style={{ position: "absolute", top: 8, right: 8, zIndex: 5,
+          display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6,
+          background: "var(--panel)", border: "1px solid var(--border-strong)", fontSize: 10.5, color: "var(--muted)" }}>
+          <span>fast</span>
+          <span style={{ width: 60, height: 7, borderRadius: 4, background: `linear-gradient(90deg, ${heatColor(0)}, ${heatColor(0.5)}, ${heatColor(1)})` }} />
+          <span>slow · {maxDur}ms</span>
+        </div>
+      )}
       <ReactFlow
         nodes={nodes} edges={edges} nodeTypes={nodeTypes}
         fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.15} maxZoom={2.5}

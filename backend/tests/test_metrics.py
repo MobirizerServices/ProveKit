@@ -36,6 +36,29 @@ def test_metrics_aggregate():
         assert isinstance(m["series"], list) and len(m["series"]) >= 1
 
 
+def _failed_tool(trace, msg):
+    return {"name": "fetch", "traceId": trace, "spanId": "t", "parentSpanId": "r",
+            "startTimeUnixNano": "1000000000", "endTimeUnixNano": "1100000000",
+            "status": {"code": 2, "message": msg},
+            "attributes": [{"key": "gen_ai.tool.name", "value": {"stringValue": "fetch"}}]}
+
+
+def test_metrics_failure_breakdown():
+    with TestClient(app, base_url="https://testserver") as c:
+        c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+            _root("f-1", code=2), _failed_tool("f-1", "ConnectionError: timeout")]}]}]})
+
+        m = c.get("/api/metrics", params={"window_hours": 24}).json()
+        # failing span types are broken out (an agent root + a tool both failed)
+        types = {row["type"]: row["count"] for row in m["fail_by_type"]}
+        assert types.get("tool", 0) >= 1 and types.get("agent", 0) >= 1
+        # the tool's error message surfaces in top_errors
+        assert any("ConnectionError" in e["error"] and e["type"] == "tool" for e in m["top_errors"])
+        # recent_failures lists the latest failing spans, newest first
+        assert len(m["recent_failures"]) >= 2
+        assert all({"label", "type", "error", "trace_id", "at"} <= set(f) for f in m["recent_failures"])
+
+
 def test_metrics_empty_window_is_safe():
     with TestClient(app, base_url="https://testserver") as c:
         # a 0-length window edge: window_hours far in the future filter → still valid shape

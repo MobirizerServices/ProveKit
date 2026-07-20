@@ -4,6 +4,7 @@ import math
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -81,6 +82,30 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
             m["calls"] += 1
             m["tokens"] += tok
 
+    # Failure breakdown: which span types fail, the most common error messages, and the
+    # latest failing spans — so the dashboard answers "what's broken?", not just "how often".
+    def _fail_filter(q):
+        q = q.filter(Run.workspace_id == ws.id, Run.status == "failed")
+        return q.filter(Run.created_at >= cutoff) if cutoff is not None else q
+
+    fail_by_type = [
+        {"type": t, "count": c}
+        for t, c in _fail_filter(db.query(Run.type, func.count(Run.id)))
+        .group_by(Run.type).order_by(func.count(Run.id).desc()).all()
+    ]
+    top_errors = [
+        {"error": (e or "").splitlines()[0][:160] if e else "(no message)", "type": t, "count": c}
+        for e, t, c in _fail_filter(db.query(Run.error, Run.type, func.count(Run.id)))
+        .filter(Run.error != "").group_by(Run.error, Run.type)
+        .order_by(func.count(Run.id).desc()).limit(6).all()
+    ]
+    recent_failures = [
+        {"label": r.label, "type": r.type, "trace_id": r.trace_id,
+         "error": (r.error or "").splitlines()[0][:160] if r.error else "",
+         "at": iso_utc(r.created_at)}
+        for r in _fail_filter(db.query(Run)).order_by(Run.id.desc()).limit(8).all()
+    ]
+
     return {
         "window_hours": window_hours,
         "trace_count": count,
@@ -91,5 +116,8 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
         "total_tokens": total_tokens,
         "series": sorted(series.values(), key=lambda b: b["t"]),
         "by_model": sorted(by_model.values(), key=lambda m: m["tokens"], reverse=True)[:10],
+        "fail_by_type": fail_by_type,
+        "top_errors": top_errors,
+        "recent_failures": recent_failures,
         "generated_at": iso_utc(_now()),
     }

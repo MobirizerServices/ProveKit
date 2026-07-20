@@ -111,7 +111,13 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   .flow-studio .flow-canvas { height: 52vh; }
   .flow-inspector { width: 100% !important; border-left: none !important; border-top: 1px solid var(--border); }
   .flow-collapse-btn { display: none !important; }
+  /* dashboard failures panel: two columns stack */
+  .fail-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
 }
+
+/* dashboard failures: recent-failure rows highlight on hover */
+.fail-row { transition: border-color .12s, background .12s; }
+.fail-row:hover { border-color: var(--border-strong); background: var(--bg-2); }
 
 /* project switcher */
 .proj-switch { position: relative; margin-left: 12px; }

@@ -97,11 +97,101 @@ export default function DashboardPage() {
               )}
             </div>
 
+            <Failures m={m} />
+
             <AlertsPanel />
           </>
         )}
       </main>
     </>
+  );
+}
+
+const TYPE_COLOR: Record<string, string> = {
+  agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
+};
+function typeBadge(t: string): React.CSSProperties {
+  const c = TYPE_COLOR[t] || "var(--muted)";
+  return { fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
+    padding: "1px 6px", borderRadius: 4, color: c, border: `1px solid ${c}`, flexShrink: 0 };
+}
+function relTime(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return `${Math.floor(s)}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+// "What's failing" — span-types that error, the most common messages, and the latest
+// failing spans (each links straight to its trace). Only shown when there are failures.
+function Failures({ m }: { m: Metrics }) {
+  const byType = m.fail_by_type ?? [];
+  const errors = m.top_errors ?? [];
+  const recent = m.recent_failures ?? [];
+  if (!m.error_count) {
+    return (
+      <div style={{ ...panel, marginTop: 20, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ color: "var(--green)", fontSize: 15 }}>✓</span>
+        <span style={{ fontSize: 13.5 }}>No failures in this window.</span>
+      </div>
+    );
+  }
+  const maxType = Math.max(1, ...byType.map((r) => r.count));
+  return (
+    <div style={{ ...panel, marginTop: 20 }}>
+      <div style={{ ...label, marginBottom: 12, color: "var(--red)" }}>Failures · {m.error_count}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(200px, 1fr) minmax(220px, 1.4fr)", gap: 22, alignItems: "start" }} className="fail-grid">
+        {/* by span type */}
+        <div>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>By span type</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {byType.map((r) => (
+              <div key={r.type} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={typeBadge(r.type)}>{r.type}</span>
+                <span style={{ position: "relative", flex: 1, height: 8, background: "var(--bg-2)", borderRadius: 4 }}>
+                  <span style={{ position: "absolute", left: 0, top: 0, height: 8, borderRadius: 4,
+                    width: `${(r.count / maxType) * 100}%`, background: "var(--red)", opacity: 0.7 }} />
+                </span>
+                <span className="mono" style={{ fontSize: 11.5, width: 28, textAlign: "right" }}>{r.count}</span>
+              </div>
+            ))}
+          </div>
+          {errors.length > 0 && (
+            <>
+              <div className="muted" style={{ fontSize: 11, margin: "16px 0 8px" }}>Top errors</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {errors.map((e, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 7, fontSize: 12 }}>
+                    <span className="mono" style={{ color: "var(--red)", flexShrink: 0 }}>{e.count}×</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={e.error}>{e.error}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        {/* recent failing spans → deep-link to the trace */}
+        <div>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>Recent failures</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {recent.map((f, i) => (
+              <a key={i} href={`/traces?trace=${encodeURIComponent(f.trace_id)}`}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8,
+                  border: "1px solid var(--border)", textDecoration: "none", color: "inherit" }}
+                className="fail-row">
+                <span style={typeBadge(f.type)}>{f.type}</span>
+                <span style={{ fontSize: 12.5, minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {f.label || <span className="muted">span</span>}
+                  {f.error && <span className="muted" style={{ fontSize: 11 }}> — {f.error}</span>}
+                </span>
+                <span className="muted" style={{ fontSize: 10.5, flexShrink: 0 }}>{relTime(f.at)}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

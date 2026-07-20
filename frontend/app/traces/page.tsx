@@ -81,6 +81,9 @@ export default function TracesPage() {
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    // Deep-link: /traces?trace=<id> opens that trace directly (e.g. from a dashboard failure).
+    const deep = new URLSearchParams(window.location.search).get("trace");
+    if (deep) setSel(deep);
     load();
     const t = setInterval(load, 5000);   // live-ish: new traces stream in
     return () => clearInterval(t);

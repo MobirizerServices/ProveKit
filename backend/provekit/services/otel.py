@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 log = logging.getLogger("provekit.otel")
 
@@ -40,6 +41,46 @@ def _attr_value(v: dict):
 
 def flatten_attrs(attributes: list) -> dict:
     return {a["key"]: _attr_value(a.get("value") or {}) for a in attributes or []}
+
+
+_INDEXED_MSG_RE = re.compile(r"^llm\.(input|output)_messages\.(\d+)\.message\.(role|content|name)$")
+_INDEXED_TEXT_RE = re.compile(
+    r"^llm\.(input|output)_messages\.(\d+)\.message\.contents\.(\d+)\.message_content\.text$")
+
+
+def _reconstruct_indexed_messages(attrs: dict, direction: str) -> list[dict] | None:
+    """Rebuild a messages array from OpenInference's flattened per-message attributes
+    (`llm.input_messages.{i}.message.role`/`.content`, and multimodal `.message.contents.{j}.
+    message_content.text`), independently of whether `input.value`/`gen_ai.input.messages` is
+    also present. These travel as SEPARATE attribute sets in real instrumented spans (governed
+    by independent redaction config, and the OTel SDK's default 128-attribute-per-span cap can
+    evict one while the other survives) — so a literal key lookup for "llm.input_messages"
+    misses real production data whenever only the indexed form survives. Returns None if no
+    indexed attributes for this direction exist, so the caller can fall back to other dialects."""
+    by_index: dict[int, dict[str, str]] = {}
+    text_parts: dict[int, dict[int, str]] = {}
+    for key, value in attrs.items():
+        if not isinstance(key, str) or value is None:
+            continue
+        m = _INDEXED_MSG_RE.match(key)
+        if m and m.group(1) == direction:
+            by_index.setdefault(int(m.group(2)), {})[m.group(3)] = str(value)
+            continue
+        m = _INDEXED_TEXT_RE.match(key)
+        if m and m.group(1) == direction:
+            text_parts.setdefault(int(m.group(2)), {})[int(m.group(3))] = str(value)
+    if not by_index and not text_parts:
+        return None
+    indices = sorted(set(by_index) | set(text_parts))
+    out = []
+    for i in indices:
+        fields = by_index.get(i, {})
+        content = fields.get("content", "")
+        if i in text_parts:  # multimodal: join the text blocks (non-text blocks carry no text key)
+            joined = " ".join(text_parts[i][j] for j in sorted(text_parts[i]))
+            content = content or joined
+        out.append({"role": fields.get("role") or fields.get("name") or "user", "content": content})
+    return out
 
 
 def _first(attrs: dict, *keys):
@@ -71,10 +112,14 @@ def map_span(span: dict) -> dict:
     tool = _first(attrs, "gen_ai.tool.name")
     session = _first(attrs, "session.id", "gen_ai.conversation.id", "thread.id", "session_id")
 
-    prompt = _first(attrs, "gen_ai.input.messages", "gen_ai.prompt", "input.value",
-                    "llm.input_messages", "input")
-    completion = _first(attrs, "gen_ai.output.messages", "gen_ai.completion", "output.value",
-                        "llm.output_messages", "output")
+    # Reconstructed indexed OpenInference attributes take priority: they can be present when
+    # input.value/gen_ai.input.messages are absent (see _reconstruct_indexed_messages).
+    prompt = (_reconstruct_indexed_messages(attrs, "input")
+             or _first(attrs, "gen_ai.input.messages", "gen_ai.prompt", "input.value",
+                       "llm.input_messages", "input"))
+    completion = (_reconstruct_indexed_messages(attrs, "output")
+                 or _first(attrs, "gen_ai.output.messages", "gen_ai.completion", "output.value",
+                           "llm.output_messages", "output"))
     usage = {}
     it = _first(attrs, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.token_count.prompt")
     ot = _first(attrs, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.token_count.completion")

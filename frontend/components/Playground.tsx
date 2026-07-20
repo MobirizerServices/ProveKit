@@ -10,9 +10,16 @@ interface Msg { role: string; content: string }
 const ROLES = ["system", "user", "assistant"];
 
 // Seed an editable message list from a captured LLM span's input.
+// LangChain's own message serialization (HumanMessage.model_dump(), etc.) carries a "type"
+// field ("human"/"ai"/"system") rather than "role" — parseMessages already falls back to it for
+// display, but re-running against a real provider needs a valid chat-API role, and the
+// role <select> below only offers system/user/assistant — so normalize before editing.
+const ROLE_ALIASES: Record<string, string> = { human: "user", ai: "assistant", bot: "assistant" };
+function normRole(role: string): string { return ROLE_ALIASES[role.toLowerCase()] || role; }
+
 function seedMessages(span: TraceSpan): Msg[] {
   const parsed = parseMessages(span.request?.input);
-  if (parsed && parsed.length) return parsed.map((m) => ({ role: m.role, content: m.content }));
+  if (parsed && parsed.length) return parsed.map((m) => ({ role: normRole(m.role), content: m.content }));
   const raw = span.request?.input;
   const content = typeof raw === "string" ? raw : raw == null ? "" : JSON.stringify(raw, null, 2);
   return [{ role: "user", content }];

@@ -27,6 +27,17 @@ from .llm_client import LLMError, complete
 from .netguard import guard_url
 
 
+_ROLE_ALIASES = {"human": "user", "ai": "assistant", "bot": "assistant", "ai_message": "assistant",
+                 "human_message": "user", "system_message": "system"}
+
+
+def _norm_role(role: str) -> str:
+    """Normalize framework-specific role spellings (LangChain's message "type" field uses
+    human/ai/system, never role/user/assistant) to the standard chat-API roles a real provider
+    call expects — otherwise a re-run would send an invalid role and the provider would reject it."""
+    return _ROLE_ALIASES.get(role.lower(), role)
+
+
 def _content_text(content) -> str:
     """Flatten a message's content to plain text: a string as-is, or a list of multimodal
     content blocks (OpenAI/Anthropic-style {"type":"text","text":...} + non-text blocks) joined
@@ -76,8 +87,14 @@ def _messages(span_request: dict) -> list[dict]:
 
     out = []
     for m in arr or []:
-        if isinstance(m, dict) and m.get("role"):
-            out.append({"role": str(m["role"]), "content": _content_text(m.get("content", ""))})
+        if not isinstance(m, dict):
+            continue
+        # LangChain's own message serialization (HumanMessage.model_dump(), etc.) carries a
+        # "type" field ("human"/"ai"/"system"), never "role" — a real shape for any trace whose
+        # input.value came from the OpenInference LangChain instrumentor, not just an edge case.
+        role = m.get("role") or m.get("type") or m.get("name")
+        if role:
+            out.append({"role": _norm_role(str(role)), "content": _content_text(m.get("content", ""))})
     return out or [{"role": "user", "content": ""}]
 
 

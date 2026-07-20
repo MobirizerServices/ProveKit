@@ -351,6 +351,22 @@ def test_messages_extraction_is_framework_agnostic():
     assert msgs({"input": "plain unstructured text"}) == [{"role": "user", "content": "plain unstructured text"}]
 
 
+def test_messages_extraction_handles_langchain_type_field():
+    """LangChain's own message serialization (HumanMessage.model_dump(), etc. — confirmed against
+    the actual installed langchain-core package) uses a "type" field ("human"/"ai"/"system"),
+    never "role". A trace whose input.value came from the OpenInference LangChain instrumentor
+    would previously have every message silently dropped (no "role" key => empty prompt)."""
+    lc_input = json.dumps({"messages": [
+        {"content": "Be terse.", "type": "system", "name": None},
+        {"content": "Hi there", "type": "human", "name": None},
+    ]})
+    assert replay_mod._messages({"input": lc_input}) == [
+        {"role": "system", "content": "Be terse."}, {"role": "user", "content": "Hi there"}]
+    # the assistant reply shape too
+    ai_input = json.dumps([{"content": "Sure, here's the answer.", "type": "ai"}])
+    assert replay_mod._messages({"input": ai_input}) == [{"role": "assistant", "content": "Sure, here's the answer."}]
+
+
 def test_pricing_estimate():
     from provekit.services import pricing
     assert pricing.estimate("mock", 1000, 1000) == 0.0

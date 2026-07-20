@@ -100,6 +100,47 @@ def test_failed_span_status():
     assert r["status"] == "failed" and r["error"] == "boom"
 
 
+def test_indexed_openinference_messages_reconstructed_without_input_value():
+    """Real instrumented spans can carry ONLY the flattened llm.input_messages.{i}.message.role/
+    content attributes with no input.value at all — e.g. hide_inputs redaction, or the OTel SDK's
+    default 128-attribute-per-span cap evicting input.value from a long conversation while the
+    indexed message attributes (added later) survive. A literal key lookup for the bare
+    "llm.input_messages" string would previously miss this and store an empty prompt."""
+    span = _span({
+        "gen_ai.request.model": "gpt-4o",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "Be terse.",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.content": "Hi there",
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.output_messages.0.message.content": "Hello!",
+    })
+    r = otel.ingest(_otlp(span))[0]
+    import json
+    assert json.loads(r["request"]["input"]) == [
+        {"role": "system", "content": "Be terse."}, {"role": "user", "content": "Hi there"}]
+    assert r["result"]["text"] == json.dumps([{"role": "assistant", "content": "Hello!"}])
+
+
+def test_indexed_messages_multimodal_text_blocks():
+    span = _span({
+        "gen_ai.request.model": "gpt-4o",
+        "llm.input_messages.0.message.role": "user",
+        "llm.input_messages.0.message.contents.0.message_content.text": "Describe this image",
+    })
+    r = otel.ingest(_otlp(span))[0]
+    import json
+    assert json.loads(r["request"]["input"]) == [{"role": "user", "content": "Describe this image"}]
+
+
+def test_indexed_messages_absent_falls_back_to_input_value():
+    """When there are no indexed attributes at all, the existing input.value/gen_ai.* dialects
+    still work (no regression from adding the indexed-attribute priority path)."""
+    span = _span({"gen_ai.request.model": "gpt-4o", "input.value": '{"messages":[{"role":"user","content":"hi"}]}'})
+    r = otel.ingest(_otlp(span))[0]
+    assert r["request"]["input"] == '{"messages":[{"role":"user","content":"hi"}]}'
+
+
 def test_ingest_endpoint_persists_and_shows_in_history():
     with TestClient(app) as client:
         before = len(client.get("/api/runs?limit=100").json())

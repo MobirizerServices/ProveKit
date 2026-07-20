@@ -151,13 +151,23 @@ class _ProveKitExporter:
 def _auto_instrument(provider) -> None:
     """Enable whichever LLM and HTTP instrumentors are installed, routed to our provider so
     their spans nest under the decorated entrypoint. Best-effort; never raises."""
-    for module, cls in (*_INSTRUMENTORS, *_HTTP_INSTRUMENTORS):
-        try:
-            mod = __import__(module, fromlist=[cls])
-            getattr(mod, cls)().instrument(tracer_provider=provider)
-            log.debug("provekit: auto-instrumented %s", module)
-        except Exception:  # not installed / already instrumented / incompatible → skip
-            pass
+    # An instrumentor whose target library is absent (e.g. no `openai` installed in a
+    # mock-LLM demo) logs an ERROR-level "DependencyConflict" and skips itself. That's
+    # expected for us — we enable whatever's present — but it looks alarming to a first-time
+    # user, so quiet that logger while probing, then restore it.
+    inst_log = logging.getLogger("opentelemetry.instrumentation.instrumentor")
+    prev_level = inst_log.level
+    inst_log.setLevel(logging.CRITICAL)
+    try:
+        for module, cls in (*_INSTRUMENTORS, *_HTTP_INSTRUMENTORS):
+            try:
+                mod = __import__(module, fromlist=[cls])
+                getattr(mod, cls)().instrument(tracer_provider=provider)
+                log.debug("provekit: auto-instrumented %s", module)
+            except Exception:  # not installed / already instrumented / incompatible → skip
+                pass
+    finally:
+        inst_log.setLevel(prev_level)
 
 
 class _SpanLogHandler(logging.Handler):

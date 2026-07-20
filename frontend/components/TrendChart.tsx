@@ -14,14 +14,17 @@ export default function TrendChart({ data, lines, height = 170, fmtY }: {
   const W = 800, H = height, PAD = { l: 42, r: 10, t: 12, b: 22 };
   const iw = W - PAD.l - PAD.r, ih = H - PAD.t - PAD.b;
   const n = data.length;
-  const max = Math.max(1, ...data.flatMap((d) => lines.map((l) => d[l.key] || 0)));
+  // Don't floor the max at 1 — a cost series lives in fractions of a dollar and would
+  // otherwise flatten to the baseline. Fall back to 1 only to avoid divide-by-zero.
+  const rawMax = Math.max(0, ...data.flatMap((d) => lines.map((l) => d[l.key] || 0)));
+  const max = rawMax > 0 ? rawMax : 1;
   const x = (i: number) => PAD.l + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
   const y = (v: number) => PAD.t + ih - (v / max) * ih;
   const fy = fmtY || ((v: number) => `${v}`);
 
   const path = (key: string) =>
     data.map((d, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(d[key] || 0).toFixed(1)}`).join(" ");
-  const ticks = [0, Math.round(max / 2), max].filter((v, i, a) => a.indexOf(v) === i);
+  const ticks = Array.from(new Set([0, max / 2, max]));
   const fmtLabel = (t: string) => (t.includes("T") ? t.slice(11, 16) : t.slice(5));
 
   return (

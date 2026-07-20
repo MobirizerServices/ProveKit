@@ -17,7 +17,7 @@ const WINDOWS = [
 export default function DashboardPage() {
   const [m, setM] = useState<Metrics | null>(null);
   const [hours, setHours] = useState(24);
-  const [chart, setChart] = useState<"traffic" | "latency" | "tokens">("traffic");
+  const [chart, setChart] = useState<"traffic" | "latency" | "tokens" | "cost">("traffic");
   const load = useCallback(() => { api.metrics(hours).then(setM).catch(() => {}); }, [hours]);
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
 
@@ -62,9 +62,9 @@ export default function DashboardPage() {
             <div style={{ ...panel, marginBottom: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2 }}>
-                  {(["traffic", "latency", "tokens"] as const).map((c) => (
+                  {(["traffic", "latency", "tokens", "cost"] as const).map((c) => (
                     <button key={c} onClick={() => setChart(c)} style={toggle(chart === c)}>
-                      {c === "traffic" ? "Traffic" : c === "latency" ? "Latency" : "Tokens"}
+                      {c[0].toUpperCase() + c.slice(1)}
                     </button>
                   ))}
                 </div>
@@ -72,6 +72,7 @@ export default function DashboardPage() {
                   {chart === "traffic" && <><span><span style={legendDot("var(--blue)")} /> traces</span><span><span style={legendDot("var(--red)")} /> errors</span></>}
                   {chart === "latency" && <><span><span style={legendDot("var(--blue)")} /> p50</span><span><span style={legendDot("var(--amber)")} /> p95</span></>}
                   {chart === "tokens" && <span><span style={legendDot("var(--purple)")} /> tokens</span>}
+                  {chart === "cost" && <span><span style={legendDot("var(--green)")} /> est. cost</span>}
                   <span style={{ opacity: 0.7 }}>{hours <= 48 ? "hourly" : "daily"}</span>
                 </div>
               </div>
@@ -87,6 +88,10 @@ export default function DashboardPage() {
                   {chart === "tokens" && (
                     <TrendChart data={m.series} height={170} fmtY={fmtNum}
                       lines={[{ key: "tokens", color: "var(--purple)", label: "tokens" }]} />
+                  )}
+                  {chart === "cost" && (
+                    <TrendChart data={m.series.map(costOfBucket)} height={170} fmtY={fmtUsd}
+                      lines={[{ key: "cost", color: "var(--green)", label: "est. cost" }]} />
                   )}
                 </div>
               )}
@@ -137,6 +142,19 @@ function typeBadge(t: string): React.CSSProperties {
 }
 function fmtMs(v: number): string {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`;
+}
+// Price a series bucket from its per-model token split (same 50/50 in/out heuristic used
+// for the top-line cost), returning the bucket with a `cost` field for the trend chart.
+function costOfBucket(b: Metrics["series"][number]): Metrics["series"][number] & { cost: number } {
+  const models = b.by_model || {};
+  const cost = Object.entries(models).reduce(
+    (n, [model, tok]) => n + (estimateCost(model, Math.round(tok / 2), Math.round(tok / 2)) || 0), 0);
+  return { ...b, cost };
+}
+function fmtUsd(v: number): string {
+  if (v <= 0) return "$0";
+  if (v < 0.01) return "<$0.01";
+  return `$${v.toFixed(2)}`;
 }
 function fmtNum(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;

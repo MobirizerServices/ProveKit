@@ -39,6 +39,8 @@ def test_metrics_aggregate():
         assert {"t", "count", "errors", "p50", "p95", "tokens"} <= set(b)
         assert b["p95"] >= b["p50"] >= 0
         assert sum(x["tokens"] for x in m["series"]) >= 120
+        # per-bucket model breakdown lets the frontend price each bucket
+        assert any(x.get("by_model", {}).get("gpt-4o", 0) >= 120 for x in m["series"])
 
 
 def _failed_tool(trace, msg):

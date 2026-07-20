@@ -87,11 +87,16 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
     for result, request, created in spanq.limit(_SPAN_CAP):
         tok = _usage_tokens(result)
         total_tokens += tok
+        model = (request or {}).get("model") if isinstance(request, dict) else None
+        # per-bucket tokens, split by model so the frontend can price each bucket (pricing
+        # lives on the frontend — the single source of truth for cost estimates).
         if tok and created is not None:
             b = series.get(_bucket_key(created))
             if b is not None:
                 b["tokens"] += tok
-        model = (request or {}).get("model") if isinstance(request, dict) else None
+                if model:
+                    b.setdefault("by_model", {})
+                    b["by_model"][model] = b["by_model"].get(model, 0) + tok
         if model:
             m = by_model.setdefault(model, {"model": model, "calls": 0, "tokens": 0})
             m["calls"] += 1

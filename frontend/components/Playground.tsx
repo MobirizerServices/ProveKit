@@ -38,6 +38,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const [conn, setConn] = useState<string>("mock"); // "mock" or a connection id (string)
   const [vars, setVars] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<PlaygroundResult[]>([]);   // newest first — A/B history
+  const [compareModels, setCompareModels] = useState("");     // comma-separated models to A/B
   const [replayMode, setReplayMode] = useState<"reconstructed" | "webhook">("reconstructed");
   const [saved, setSaved] = useState<SavedPrompt[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -81,6 +82,17 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     try {
       const r = await api.playgroundRun(payload());
       setRuns((rs) => [r, ...rs]);   // keep prior runs as comparison columns
+    } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
+  };
+
+  // Run the same prompt across several models at once and stack them as columns.
+  const compare = async () => {
+    const models = compareModels.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!models.length) return;
+    setErr(""); setBusy(true);
+    try {
+      const results = await Promise.all(models.map((m) => api.playgroundRun({ ...payload(), model: m })));
+      setRuns((rs) => [...results.reverse(), ...rs]);
     } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
   };
 
@@ -232,6 +244,13 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
               </>
             )}
           </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input value={compareModels} onChange={(e) => setCompareModels(e.target.value)}
+              placeholder="gpt-4o, gpt-4o-mini, claude-sonnet-5" style={{ ...input, flex: 1, minWidth: 200, padding: "6px 9px", fontSize: 12 }} />
+            <button className="btn btn-sm" onClick={compare} disabled={busy || !compareModels.trim()}
+              title="Run this prompt against each model and stack the outputs to compare">⊞ Compare models</button>
+          </div>
+
           <div className="muted" style={{ fontSize: 11 }}>
             <b>Run</b> re-runs just this call (each run is kept to compare). <b>Replay flow</b> forks the
             trace here — <i>reconstructed</i> threads the new output through downstream calls;
@@ -277,7 +296,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
           {runs.map((r, i) => {
             const c = fmtCost(estimateCost(r.model, r.usage.input_tokens, r.usage.output_tokens));
             return (
-              <Panel key={i} title={`Run ${runs.length - i}`} accent={i === 0}
+              <Panel key={i} title={`Run ${runs.length - i} · ${r.model}`} accent={i === 0}
                 meta={`${r.usage.input_tokens}→${r.usage.output_tokens} tok${c ? ` · ${c}` : ""} · ${r.latency_ms}ms · ${r.provider}`}>
                 <DiffText from={origOut} to={r.output} />
               </Panel>

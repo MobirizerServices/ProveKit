@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from provekit.database import SessionLocal
 from provekit.main import app
-from provekit.models import ProviderConnection, Run, Workspace
+from provekit.models import Dataset, DatasetItem, ProviderConnection, Run, Workspace
 from provekit.services import llm_client
 from provekit.services import replay as replay_mod
 from provekit.services.sealing import seal, unseal
@@ -249,6 +249,36 @@ def test_replay_webhook_unconfigured_404():
         r = c.post("/api/replay", json={"origin_trace_id": "o", "fork_span_id": "f",
                    "model": "gpt-4o", "messages": [{"role": "user", "content": "x"}], "mode": "webhook"})
         assert r.status_code == 404
+
+
+def test_playground_experiment_over_dataset():
+    with TestClient(app, base_url="https://testserver") as c:
+        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        db = SessionLocal()
+        ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
+        ds = Dataset(workspace_id=ws_id, name="golden")
+        db.add(ds); db.commit(); db.refresh(ds)
+        db.add_all([
+            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="ping", expected="[mock:gpt-4o] ping."),
+            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="hello", expected="wrong"),
+        ])
+        db.commit(); dsid = ds.id; db.close()
+
+        r = c.post("/api/playground/experiment", json={
+            "dataset_id": dsid, "provider": "mock", "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "{{input}}"}],
+            "scorers": ["exact_match", "contains"]})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["result_count"] == 2
+        # item 1's mock output equals its expected → exact_match hits; item 2 misses
+        assert d["scorer_means"]["exact_match"] == 0.5
+        assert d["mean_score"] is not None
+
+        # missing/empty dataset → 404
+        assert c.post("/api/playground/experiment", json={
+            "dataset_id": 999999, "provider": "mock", "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "{{input}}"}]}).status_code == 404
 
 
 def test_prompt_versioning():

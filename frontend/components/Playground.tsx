@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, PlaygroundResult, ProviderConnection, SavedPrompt, TraceSpan } from "@/lib/api";
+import { api, Dataset, ExperimentSummary, PlaygroundResult, ProviderConnection, SavedPrompt, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import { parseMessages } from "@/components/TraceDetail";
 
@@ -40,6 +40,9 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const [runs, setRuns] = useState<PlaygroundResult[]>([]);   // newest first — A/B history
   const [replayMode, setReplayMode] = useState<"reconstructed" | "webhook">("reconstructed");
   const [saved, setSaved] = useState<SavedPrompt[]>([]);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [dsId, setDsId] = useState("");
+  const [exp, setExp] = useState<ExperimentSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -50,6 +53,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
       if (real) setConn(String(real.id));
     }).catch(() => {});
     api.prompts().then(setSaved).catch(() => {});
+    api.datasets().then((ds) => { setDatasets(ds); if (ds[0]) setDsId(String(ds[0].id)); }).catch(() => {});
   }, []);
 
   const varNames = useMemo(() => findVars(msgs), [msgs]);
@@ -87,6 +91,15 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
       // open the new branch (deep-link handles selection); it renders with per-node replay badges
       window.location.href = `/traces?trace=${encodeURIComponent(r.new_trace_id)}`;
     } catch (e: any) { setErr(String(e.message || e)); setBusy(false); }
+  };
+
+  const runExperiment = async () => {
+    if (!dsId) return;
+    setErr(""); setBusy(true); setExp(null);
+    try {
+      setExp(await api.playgroundExperiment({ ...payload(), dataset_id: Number(dsId),
+        scorers: ["exact_match", "contains"] }));
+    } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
   };
 
   const saveVersion = async () => {
@@ -215,6 +228,26 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
             trace here — <i>reconstructed</i> threads the new output through downstream calls;
             <i> webhook</i> re-runs your real agent (Settings → Replay webhook).
           </div>
+
+          {datasets.length > 0 && (
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+              <div style={secLbl}>Evaluate over a dataset</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <select value={dsId} onChange={(e) => setDsId(e.target.value)} style={{ ...input, padding: "6px 9px", fontSize: 12.5 }}>
+                  {datasets.map((d) => <option key={d.id} value={String(d.id)}>{d.name} ({d.item_count})</option>)}
+                </select>
+                <button className="btn btn-sm" onClick={runExperiment} disabled={busy}>🧪 Run over dataset</button>
+                {exp && (
+                  <a href="/datasets" style={{ fontSize: 12.5, color: "var(--accent)" }}>
+                    scored {exp.result_count} · mean {exp.mean_score == null ? "—" : exp.mean_score.toFixed(2)} → view
+                  </a>
+                )}
+              </div>
+              <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
+                Runs this prompt over each item (use <span className="mono">{"{{input}}"}</span>), scores vs. expected, saves an experiment.
+              </div>
+            </div>
+          )}
           {err && <div style={errBox}>{err}</div>}
         </div>
 

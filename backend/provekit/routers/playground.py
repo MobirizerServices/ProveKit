@@ -11,13 +11,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Prompt, ProviderConnection, Workspace, _now, iso_utc
+from ..models import DatasetItem, Experiment, ExperimentResult, Prompt, ProviderConnection, Workspace, _now, iso_utc
+from ..scorers import run_scorers
 from ..services import limits
 from ..services.llm_client import LLMError, complete
 from ..services.replay import reconstruct
 from ..services.replay import webhook as replay_webhook
 from ..services.sealing import mask_key, seal, unseal
 from ..services.workspace import current_workspace
+from .experiments import _experiment_row
 
 router = APIRouter(prefix="/api", tags=["playground"])
 
@@ -210,3 +212,67 @@ def delete_prompt(pid: int, db: Session = Depends(get_db),
         raise HTTPException(404, "Prompt not found")
     db.delete(p); db.commit()
     return {"ok": True}
+
+
+# ---- run an edited prompt over a dataset → a scored experiment ----
+class _ExpIn(BaseModel):
+    dataset_id: int
+    name: str = ""
+    model: str
+    messages: list[_Msg]
+    params: dict = {}
+    connection_id: int | None = None
+    provider: str | None = None
+    scorers: list[str] = ["exact_match", "contains"]
+
+
+_EXP_ITEM_CAP = 100   # bound cost: score at most N items per run
+
+
+def _fill(messages: list[dict], item_input: str, item_expected: str) -> list[dict]:
+    """Substitute {{input}} / {{expected}} in the prompt for a dataset item. If the prompt
+    references neither, append the item input as a trailing user message so it still runs."""
+    out, has_input = [], False
+    for m in messages:
+        c = m["content"]
+        if "{{input}}" in c:
+            has_input = True
+        c = c.replace("{{input}}", item_input).replace("{{expected}}", item_expected)
+        out.append({"role": m["role"], "content": c})
+    if not has_input:
+        out.append({"role": "user", "content": item_input})
+    return out
+
+
+@router.post("/playground/experiment")
+async def playground_experiment(data: _ExpIn, db: Session = Depends(get_db),
+                                ws: Workspace = Depends(current_workspace)):
+    limits.check_playground_rate(ws.id)
+    items = (db.query(DatasetItem)
+             .filter(DatasetItem.workspace_id == ws.id, DatasetItem.dataset_id == data.dataset_id)
+             .order_by(DatasetItem.id.asc()).limit(_EXP_ITEM_CAP).all())
+    if not items:
+        raise HTTPException(404, "dataset is empty or not found")
+    params = dict(data.params or {})
+    if params.get("max_tokens"):
+        params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
+    provider, api_key, base_url = _resolve(db, ws, _RunIn(
+        model=data.model, messages=data.messages, params=params,
+        connection_id=data.connection_id, provider=data.provider))
+    base_msgs = [{"role": m.role, "content": m.content} for m in data.messages]
+
+    exp = Experiment(workspace_id=ws.id, name=(data.name or f"Playground · {data.model}")[:160],
+                     dataset_id=data.dataset_id)
+    db.add(exp); db.commit(); db.refresh(exp)
+    try:
+        for it in items:
+            msgs = _fill(base_msgs, it.input, it.expected)
+            r = await complete(provider, data.model, msgs, params, api_key=api_key, base_url=base_url)
+            scores = run_scorers(data.scorers, r["output"], it.expected)
+            db.add(ExperimentResult(workspace_id=ws.id, experiment_id=exp.id, item_id=it.id,
+                                    input=it.input, output=r["output"], expected=it.expected, scores=scores))
+        db.commit()
+    except LLMError as e:
+        db.commit()   # keep whatever scored before the failure
+        raise HTTPException(502, str(e))
+    return _experiment_row(db, exp)

@@ -74,6 +74,11 @@ export interface SavedPrompt {
   id: number; name: string; version: number; model: string;
   messages: PlaygroundMessage[]; params: Record<string, any>; created_at: string;
 }
+export interface ExperimentSummary {
+  id: number; name: string; dataset_id: number | null; created_at: string;
+  result_count: number; scorer_means: Record<string, number>; mean_score: number | null;
+}
+export interface PlaygroundExperimentIn extends PlaygroundIn { dataset_id: number; name?: string; scorers?: string[]; }
 export interface ReplayResult {
   new_trace_id: string; replay_run_id: number; fork_output: string;
   live_count: number; span_count: number;
@@ -174,6 +179,7 @@ export const api = {
   savePrompt: (p: { name: string; model?: string; messages?: PlaygroundMessage[]; params?: Record<string, any> }) =>
     j<SavedPrompt>("/api/prompts", { method: "POST", body: JSON.stringify(p) }),
   deletePrompt: (id: number) => j(`/api/prompts/${id}`, { method: "DELETE" }),
+  playgroundExperiment: (p: PlaygroundExperimentIn) => j<ExperimentSummary>("/api/playground/experiment", { method: "POST", body: JSON.stringify(p) }),
   // datasets
   datasets: () => j<Dataset[]>("/api/datasets"),
   dataset: (id: number) => j<DatasetDetail>(`/api/datasets/${id}`),

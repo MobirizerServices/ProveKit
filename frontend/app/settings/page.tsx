@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, getProjectId, Member, Project, setProjectId } from "@/lib/api";
 import TopNav from "@/components/TopNav";
+import ModelConnections from "@/components/ModelConnections";
 
 export default function SettingsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -126,6 +127,10 @@ export default function SettingsPage() {
                       {isOwner && <button className="btn btn-sm btn-ghost" onClick={() => removeMember(m.user_id)}>Remove</button>}
                     </div>
                   ))}
+                </div>
+
+                <div style={{ marginBottom: 22 }}>
+                  <ModelConnections />
                 </div>
 
                 {isOwner && (

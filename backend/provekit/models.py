@@ -173,6 +173,37 @@ class Alert(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class ProviderConnection(Base):
+    """A per-project model-provider credential used to *re-run* captured LLM calls in the
+    playground / replay harness. The key is stored sealed (Fernet); only a masked hint is ever
+    returned to the client. `base_url` supports OpenAI-compatible gateways (Azure/OpenRouter/local)."""
+    __tablename__ = "provider_connections"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    provider: Mapped[str] = mapped_column(String(24))          # openai | anthropic | openai_compatible | mock
+    label: Mapped[str] = mapped_column(String(120), default="")
+    key_sealed: Mapped[str] = mapped_column(Text, default="")  # Fernet-encrypted; never returned
+    key_hint: Mapped[str] = mapped_column(String(24), default="")   # e.g. "…a1b2" for display
+    base_url: Mapped[str] = mapped_column(String(300), default="")  # for openai_compatible
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class ReplayRun(Base):
+    """Provenance for a replay: which trace/span it forked from, the overrides applied, and the
+    new trace branch it produced (stored as normal Run rows tagged meta.replay_of)."""
+    __tablename__ = "replay_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    origin_trace_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    fork_span_id: Mapped[str] = mapped_column(String(16), default="")
+    overrides: Mapped[dict] = mapped_column(JSON, default=dict)
+    mode: Mapped[str] = mapped_column(String(16), default="reconstructed")  # reconstructed | webhook
+    new_trace_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="completed")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Feedback(Base):
     """A score or annotation attached to a whole trace — a human thumbs-up, an LLM-judge
     score, or an offline-eval result. Many per trace; the portal shows them on the run."""

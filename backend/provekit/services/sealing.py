@@ -47,3 +47,19 @@ def _fernet() -> Fernet:
         pass
     log.info("generated local key at %s", kf)
     return Fernet(key)
+
+
+def seal(plaintext: str) -> str:
+    """Encrypt a secret (e.g. a provider API key) for storage at rest. Reversible by `unseal`."""
+    return _fernet().encrypt(plaintext.encode()).decode()
+
+
+def unseal(token: str) -> str:
+    """Decrypt a value sealed by `seal`. Raises cryptography.fernet.InvalidToken if tampered."""
+    return _fernet().decrypt(token.encode()).decode()
+
+
+def mask_key(plaintext: str) -> str:
+    """A display-safe hint for a secret: last 4 chars, e.g. 'sk-…a1b2'. Never the full value."""
+    tail = plaintext[-4:] if len(plaintext) >= 4 else plaintext
+    return f"…{tail}"

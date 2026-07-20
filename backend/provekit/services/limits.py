@@ -60,6 +60,15 @@ def check_login_rate(ident: str) -> None:
                             headers={"Retry-After": str(60 - (_now() % 60))})
 
 
+def check_playground_rate(ws_id: int) -> None:
+    """Throttle interactive re-runs (playground/replay) per project — these make live, billable
+    provider calls, so bound them harder than ingest. Per-worker without REDIS_URL (see below)."""
+    key = f"playground:{ws_id}:{_now() // 60}"
+    if _window().hit(key, 60) > 30:
+        raise HTTPException(429, "Too many playground runs — wait a minute.",
+                            headers={"Retry-After": str(60 - (_now() % 60))})
+
+
 def check_ingest_rate(ws_id: int) -> None:
     """Throttle trace-ingest requests per project to bound abuse/cost on a public instance.
     Note: without REDIS_URL the window is per-worker, so the effective cap scales with the

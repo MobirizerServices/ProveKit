@@ -55,6 +55,21 @@ export interface Metrics {
   generated_at: string;
 }
 
+export interface ProviderConnection {
+  id: number; provider: string; label: string; key_hint: string; base_url: string;
+  last_used_at: string | null; created_at: string;
+}
+export interface ConnectionIn { provider: string; label?: string; key?: string; base_url?: string; }
+export interface PlaygroundMessage { role: string; content: string; }
+export interface PlaygroundIn {
+  model: string; messages: PlaygroundMessage[]; params?: Record<string, any>;
+  connection_id?: number | null; provider?: string; from_span_id?: string;
+}
+export interface PlaygroundResult {
+  output: string; usage: { input_tokens: number; output_tokens: number };
+  latency_ms: number; finish_reason: string; provider: string; model: string;
+}
+
 export interface Dataset { id: number; name: string; description: string; item_count: number; created_at: string; }
 export interface DatasetItem { id: number; dataset_id: number; input: string; expected: string; meta: any; created_at: string; }
 export interface DatasetDetail extends Dataset { items: DatasetItem[]; }
@@ -139,6 +154,12 @@ export const api = {
   toggleAlert: (id: number, enabled: boolean) => j<Alert>(`/api/alerts/${id}`, { method: "PATCH", body: JSON.stringify({ enabled }) }),
   deleteAlert: (id: number) => j(`/api/alerts/${id}`, { method: "DELETE" }),
   checkAlerts: () => j<{ fired: any[] }>("/api/alerts/check", { method: "POST" }),
+
+  // model connections + playground (interactive debugging)
+  connections: () => j<ProviderConnection[]>("/api/connections"),
+  createConnection: (c: ConnectionIn) => j<ProviderConnection>("/api/connections", { method: "POST", body: JSON.stringify(c) }),
+  deleteConnection: (id: number) => j(`/api/connections/${id}`, { method: "DELETE" }),
+  playgroundRun: (p: PlaygroundIn) => j<PlaygroundResult>("/api/playground/run", { method: "POST", body: JSON.stringify(p) }),
   // datasets
   datasets: () => j<Dataset[]>("/api/datasets"),
   dataset: (id: number) => j<DatasetDetail>(`/api/datasets/${id}`),

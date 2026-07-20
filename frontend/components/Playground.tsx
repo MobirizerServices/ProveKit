@@ -96,9 +96,16 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const runExperiment = async () => {
     if (!dsId) return;
     setErr(""); setBusy(true); setExp(null);
+    const params: Record<string, any> = { max_tokens: Number(maxTokens) || 512 };
+    if (temperature !== "") params.temperature = Number(temperature);
+    // Substitute fixed variables, but LEAVE {{input}}/{{expected}} for the backend to fill per item.
+    const keep = (t: string) => t.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (m, k) => (k === "input" || k === "expected" ? m : (vars[k] ?? m)));
+    const messages = msgs.map((m) => ({ role: m.role, content: keep(m.content) }));
     try {
-      setExp(await api.playgroundExperiment({ ...payload(), dataset_id: Number(dsId),
-        scorers: ["exact_match", "contains"] }));
+      setExp(await api.playgroundExperiment({
+        model, messages, params, dataset_id: Number(dsId), scorers: ["exact_match", "contains"],
+        ...(conn === "mock" ? { provider: "mock" } : { connection_id: Number(conn) }),
+      }));
     } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
   };
 

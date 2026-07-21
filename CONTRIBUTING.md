@@ -30,13 +30,19 @@ Docker images, so a Dockerfile break fails the build too.
 ## Layout
 
 - `backend/` — FastAPI, package `provekit`.
-  - `provekit/trace.py` — the tracing SDK (`@pk.trace`, `pk.span`, auto-instrumentation).
-  - `provekit/routers/` — `auth`, `apikeys`, `traces` (ingest + trace/run read APIs).
-  - `provekit/services/` — `otel` (span→run mapping), `auth`, `workspace`, `apikey`, `netguard`, `sealing`.
-  - `provekit/models.py` — 5 tables; `provekit/migrations/` — one Alembic baseline, run on boot.
-- `frontend/` — Next.js (app router): `app/traces` (the flow view), `app/api-keys`, auth pages.
-- `docs/` — the [tracing guide](docs/TRACING.md), [deployment](docs/DEPLOY.md),
-  [publishing](docs/PUBLISHING.md).
+  - `provekit/trace.py` — the tracing SDK (`@pk.trace`, `pk.span`, `pk.score`); `auto.py` is the
+    one-import activation. `eval.py` + `scorers.py` are the evaluation client.
+  - `provekit/routers/` — `traces` (ingest + read APIs), `auth`, `apikeys`, `projects`,
+    `datasets`, `experiments`, `metrics`, `alerts`, `playground`, `admin`.
+  - `provekit/services/` — `otel` (span→run mapping), `auth`, `workspace`, `apikey`, `netguard`,
+    `sealing`, `redact`, `limits`, `pricing`, `replay`, `share`, `llm_client`, `email`.
+  - `provekit/models.py` — 15 tables; `provekit/migrations/` — Alembic, run on boot.
+- `frontend/` — Next.js (app router): `app/traces` (the flow view), `app/dashboard`,
+  `app/datasets`, `app/prompts`, `app/settings`, `app/admin`, auth pages, and the marketing
+  surface (landing, `app/blog`). Shared UI in `components/`.
+- `docs/` — start at [docs/README.md](docs/README.md); the [tracing guide](docs/TRACING.md),
+  [debugging](docs/DEBUGGING.md), [evaluation](docs/EVALUATION.md),
+  [deployment](docs/DEPLOY.md), [publishing](docs/PUBLISHING.md).
 
 ## Notes
 

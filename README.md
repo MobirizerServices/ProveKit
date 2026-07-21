@@ -73,12 +73,20 @@ the current context, so everything that runs inside nests underneath it:
 Fail-open by design: if the key/endpoint are unset or the portal is unreachable, your app
 runs completely unaffected.
 
-## What it is (and isn't)
+## What it is
 
-ProveKit does **one thing**: capture and review your agent's flow. It's not a prompt-eval
-platform or a dataset manager — it's the tracer you reach for when you just want to *see what
-your agent did*. Open source (MIT), self-hostable, and OpenTelemetry-native so you're never
-locked in.
+The **trace is the front door** — that's the part you have to get right, and it's why the
+integration is one import. Everything else builds on the captured run rather than asking you to
+maintain a second source of truth:
+
+- **Debug it** — open any LLM call, edit the prompt with real data, and re-run it; or fork the
+  whole trace at a step and replay it. See [docs/DEBUGGING.md](docs/DEBUGGING.md).
+- **Evaluate it** — promote interesting traces into a dataset, score a version against it with
+  `pk.evaluate()`, and gate CI on the result. See [docs/EVALUATION.md](docs/EVALUATION.md).
+- **Watch it** — dashboards over volume, error rate, latency, tokens, and cost, with threshold
+  alerts.
+
+Open source (MIT), self-hostable, and OpenTelemetry-native so you're never locked in.
 
 - **Framework/provider-agnostic** — any Python agent; any OTLP exporter can also POST to
   `/v1/traces` directly (other languages included).
@@ -88,5 +96,8 @@ locked in.
 
 - [Features](FEATURES.md) — the full inventory of what's built
 - [Tracing guide](docs/TRACING.md) — the decorator, `pk.span()`, configuration, what's captured
+- [Debugging guide](docs/DEBUGGING.md) — edit & re-run a captured call, replay a flow
+- [Evaluation guide](docs/EVALUATION.md) — datasets, scorers, `pk.evaluate()`, CI gates
+- [MCP debug channel](docs/MCP.md) — reason over your traces from Claude Desktop / Cursor
 - [Deployment](docs/DEPLOY.md) — local vs hosted · [Publishing](docs/PUBLISHING.md) — release to PyPI
-- [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [All docs](docs/README.md)

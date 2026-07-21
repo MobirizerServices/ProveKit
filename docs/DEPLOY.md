@@ -91,3 +91,23 @@ users then set `PROVEKIT_ENDPOINT=https://$DOMAIN` and a project key, and add `@
   `docker compose -f compose.prod.yml exec backend alembic upgrade head`.
 - Tunables (env): `INGEST_RATE_PER_MIN` (default 600), `RUNS_RETENTION` (default 10000 spans
   per project).
+
+### Account quotas (opening an instance to other people)
+
+Rate limits bound *bursts*; they don't bound totals. 600 requests/minute sustained is still
+unbounded storage, and per-project retention doesn't help when one account can create projects
+without limit. If anyone can sign up on your instance, set per-account ceilings:
+
+| Env | Default | Effect |
+|---|---|---|
+| `MONTHLY_SPAN_QUOTA` | `0` (unlimited) | Spans an account may ingest per calendar month. Over quota, ingest returns `402` until the month rolls over. |
+| `MAX_PROJECTS_PER_ACCOUNT` | `0` (unlimited) | Projects one account may own — without it, a per-project cap is escaped by making another project. |
+| `PLAYGROUND_MONTHLY_USD_CAP` | `25.0` | Per-project ceiling on billable playground/replay spend. |
+
+Both quota defaults are **off**, so upgrading a single-tenant install never starts refusing your
+own data.
+
+> **Set `REDIS_URL` if you rely on these.** Quota counters share the rate-limiter's window, so
+> without Redis they are per-worker and reset on restart — a deterrent, not a ceiling.
+> `GET /api/projects/usage` reports `approximate: true` when that's the case, and the portal
+> repeats it, so nobody mistakes a soft limit for a hard one.

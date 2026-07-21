@@ -4,6 +4,18 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **Account quotas, so an instance can safely take sign-ups.** Rate limits bounded bursts but
+  nothing bounded totals: 600 requests/minute forever is still unbounded storage, and a
+  per-project cap is escaped by making another project. `MONTHLY_SPAN_QUOTA` and
+  `MAX_PROJECTS_PER_ACCOUNT` add per-*account* ceilings, enforced before the write so an
+  over-quota account stops consuming storage rather than being told afterwards. Over quota
+  returns `402`, not `429` — the condition clears next month, not in a moment, so telling a
+  client to retry shortly would be a lie. A retried (deduped) batch isn't charged twice. Both
+  default to **off**, so a self-hosted upgrade never starts refusing its owner's own data. Usage
+  is visible — `GET /api/projects/usage` plus meters in Settings — because a quota you can't see
+  is indistinguishable from a bug, and it reports `approximate: true` without Redis rather than
+  presenting a per-worker counter as a hard ceiling.
+
 - **TypeScript provider auto-instrumentation.** `pk.observeOpenAI(client)` and
   `pk.observeAnthropic(client)` make every completion an LLM span — model, messages, tokens,
   finish reason, cost — which is what turns the TS SDK from "wrap your own calls" into the

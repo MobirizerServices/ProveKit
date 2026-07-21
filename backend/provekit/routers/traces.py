@@ -41,7 +41,10 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     """Accept an OTLP ExportTraceServiceRequest (JSON) and persist gen_ai spans as runs.
     Returns the OTLP success shape so standard exporters are satisfied."""
     ws = _resolve_ingest_ws(db, request, authorization)
-    limits.check_ingest_rate(ws.id)   # bound abuse/cost per project (429 when exceeded)
+    limits.check_ingest_rate(ws.id)   # bound bursts per project (429 when exceeded)
+    # Bound the total per account. Checked before the write so an over-quota account stops
+    # consuming storage, rather than being told about it afterwards.
+    limits.check_span_quota(ws.owner_user_id)
     try:
         payload = await request.json()
     except Exception:
@@ -49,7 +52,11 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     rows = otel.ingest(payload)
     if ws.redact_pii or get_settings().redact_pii:   # per-project toggle, or the global default
         rows = [redact.scrub_run(kw) for kw in rows]
-    if _persist_spans(db, ws, rows):
+    stored = _persist_spans(db, ws, rows)
+    if stored:
+        # Count what actually landed, not what was sent: a retried batch is deduped (#184) and
+        # charging for the retry would make the quota depend on network luck.
+        limits.record_spans(ws.owner_user_id, stored)
         _prune_runs(db, ws)           # enforce retention so the table doesn't grow forever
     return {"partialSuccess": {}}
 

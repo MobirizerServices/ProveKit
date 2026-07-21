@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, getProjectId, Member, Project, setProjectId } from "@/lib/api";
+import { api, getProjectId, Member, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
 import TopNav from "@/components/TopNav";
 import ModelConnections from "@/components/ModelConnections";
 
@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [rename, setRename] = useState("");
   const [invite, setInvite] = useState("");
   const [retention, setRetention] = useState(0);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [redact, setRedact] = useState(false);
   const [replayUrl, setReplayUrl] = useState("");
   const [err, setErr] = useState("");
@@ -30,6 +31,7 @@ export default function SettingsPage() {
     const p = projects.find((x) => x.id === sel);
     setRename(p?.name || "");
     setRetention(p?.retention ?? 0);
+    api.usage().then(setUsage).catch(() => {});
     setRedact(p?.redact_pii ?? false);
     setReplayUrl(p?.replay_url ?? "");
   }, [sel, projects]);
@@ -97,6 +99,21 @@ export default function SettingsPage() {
                   <button className="btn btn-sm" onClick={doRename} disabled={!isOwner}>Rename</button>
                 </div>
 
+                {/* A quota you can't see is indistinguishable from a bug — a throttled
+                    project just looks broken. Only rendered when limits actually exist. */}
+                {usage && (usage.spans.limit || usage.projects.limit) && (
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={label}>Usage · {usage.period}</div>
+                    <Meter label="Spans this month" line={usage.spans} />
+                    <Meter label="Projects" line={usage.projects} />
+                    {usage.approximate && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                        Approximate: counters are per-process without Redis configured.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div style={label}>Data settings</div>
                 <div style={{ display: "flex", gap: 16, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
                   <div>
@@ -163,6 +180,24 @@ export default function SettingsPage() {
 }
 
 const panel: React.CSSProperties = { background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 };
+function Meter({ label: text, line }: { label: string; line: QuotaLine }) {
+  if (line.limit == null) return null;          // unlimited — nothing meaningful to meter
+  const pct = Math.min(100, line.pct ?? 0);
+  // Amber before the wall, not at it: the useful moment to know is while you can still act.
+  const color = pct >= 100 ? "var(--err)" : pct >= 80 ? "var(--amber)" : "var(--green)";
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 3 }}>
+        <span>{text}</span>
+        <span className="muted">{line.used.toLocaleString()} / {line.limit.toLocaleString()}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 999, background: "var(--panel-2)", overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color }} />
+      </div>
+    </div>
+  );
+}
+
 const label: React.CSSProperties = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", marginBottom: 6 };
 const input: React.CSSProperties = { background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 };
 const errBox: React.CSSProperties = { background: "color-mix(in srgb, var(--red) 12%, transparent)", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 16 };

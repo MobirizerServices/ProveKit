@@ -40,6 +40,12 @@ export interface Feedback {
 export interface TraceQuery { status?: string; window_hours?: number; limit?: number; q?: string; cursor?: number; }
 
 export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; replay_url?: string; created_at: string; }
+export interface QuotaLine { used: number; limit: number | null; pct: number | null; }
+// `limit: null` means unlimited — render that, not a meter pinned at 100%.
+export interface Usage {
+  period: string; spans: QuotaLine; projects: QuotaLine;
+  playground_usd: { limit: number | null }; approximate: boolean;
+}
 export interface Member { user_id: number; email: string; name: string; role: string; }
 export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
 export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; is_bootstrap: boolean; project_count: number; created_at: string; }
@@ -245,6 +251,7 @@ export const api = {
   compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),
   // projects (workspaces)
   projects: () => j<Project[]>("/api/projects"),
+  usage: () => j<Usage>("/api/projects/usage"),
   createProject: (name: string) => j<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),
   renameProject: (id: number, name: string) => j<{ id: number; name: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   updateProject: (id: number, patch: { name?: string; retention?: number; redact_pii?: boolean; replay_url?: string }) => j<{ id: number; name: string; retention: number; redact_pii: boolean; replay_url: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),

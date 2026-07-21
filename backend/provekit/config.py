@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     login_attempts_per_min: int = 10   # login attempts per email+IP per minute
     playground_monthly_usd_cap: float = 25.0   # per-project cap on playground/replay spend; 0 = off
     runs_retention: int = 10000        # keep last N spans per project (older ones pruned)
+    # Per-account ceilings for a hosted tier. 0 = unlimited, which is the default so that a
+    # self-hosted instance never starts refusing its owner's own data after an upgrade.
+    monthly_span_quota: int = 0        # spans an account may ingest per calendar month
+    max_projects_per_account: int = 0  # projects one account may own
     max_body_bytes: int = 2_000_000    # reject request bodies larger than this
 
     @property

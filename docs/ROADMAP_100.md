@@ -63,7 +63,7 @@ Everything here is fine on a demo instance and breaks on a real one.
 
 The single strongest lever on adoption. ProveKit's pitch is "one import" — the surrounding path should be equally short.
 
-27. **Hosted free tier.** Self-host is the only path to a key today; most people evaluate before they deploy. Signup → project key in under 60 seconds. 🔴 L ◑
+27. **Hosted free tier.** Signup → key already works on a hosted instance, and the quota work (#79/#80) makes opening one up safe. What's left is the offer itself: plan tiers, and the billing hook to move off free. 🔴 L ◑
 28. **`provekit doctor`.** ~~Every misconfiguration looked identical to "working".~~ `provekit-doctor` checks config, packages, instrumentation coverage, reachability and auth, naming the fix for each; non-zero exit on real failure. 🔴 S ✅
 29. **Framework quickstarts.** Copy-paste starting points for LangGraph, CrewAI, and LlamaIndex, each verified end to end. The examples exist; the docs don't route people to them by framework. 🔴 S ◑
 30. **Instrumentation coverage report.** ~~No way to see which installed libraries aren't instrumented.~~ Reported by `provekit-doctor`; not yet surfaced in the portal. 🟡 S ◑
@@ -135,8 +135,8 @@ What running ProveKit *for other people* requires. The [admin console](ADMIN.md)
 76. **Admin pagination & search.** ~~Both endpoints returned every row.~~ `limit`/`offset`/`q` with page-scoped aggregates and a console pager. 🔴 S ✅
 77. **SSO — OIDC / SAML.** Email+password only. The hard gate on any company adopting a self-hosted tool. 🔴 L ✖
 78. **SCIM provisioning.** Deprovisioning a departed employee is manual today. 🟡 L ✖
-79. **Visible quotas.** Per-project ingest limits and spend caps exist but aren't surfaced — a throttled project looks broken rather than capped. 🔴 M ◑
-80. **Usage metering.** Per-tenant span/token/cost accounting as a first-class, queryable record — the prerequisite for any billing model. 🔴 M ◑
+79. **Visible quotas.** ~~Limits existed but were invisible.~~ `GET /api/projects/usage` plus meters in Settings, with an explicit `approximate` flag when counters are per-worker. 🔴 M ✅
+80. **Usage metering.** ~~No per-account accounting.~~ Monthly spans and project count are metered per account and enforced as quotas. Token/cost metering and a durable (non-counter) record for billing are still open. 🔴 M ◑
 81. **Support impersonation.** Read-only "view as tenant", fully audited. The difference between a support request taking 5 minutes and a day. 🟡 M ✖
 82. **Tenant lifecycle.** Suspend, export, and hard-delete a tenant, with GDPR-grade deletion that actually removes spans. 🔴 M ◑
 83. **Backup automation & restore drill.** A documented recipe exists; nothing automates it and nothing has ever tested a restore. 🔴 S ◑

@@ -148,6 +148,9 @@ on a dashboard. This is the full feature inventory.
   against membership server-side.
 - **Members & roles** — invite by email, owner/member, remove (with last-owner protection).
 - **Per-project data settings** — span retention and PII masking overrides.
+- **Account quotas** — optional per-account monthly span quota and project cap
+  (`MONTHLY_SPAN_QUOTA` / `MAX_PROJECTS_PER_ACCOUNT`, both off by default) for opening an
+  instance to sign-ups, with usage meters in Settings and `GET /api/projects/usage`.
 - **Project keys** — create, list, revoke; shown once, stored hashed; last-used tracking.
 - **Admin console** (`/admin`) — a platform-superadmin view of every user and project, gated by a
   superuser flag or a bootstrap `SUPERUSER_EMAILS` entry. Paged and searchable, with an

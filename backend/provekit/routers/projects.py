@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import (Alert, ApiKey, Dataset, DatasetItem, Experiment, ExperimentResult,
                       Feedback, Run, User, Workspace, WorkspaceMember, iso_utc)
-from ..services import audit
+from ..services import audit, limits
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
 
@@ -44,6 +44,18 @@ def _require_owner(db: Session, workspace_id: int, user: User) -> Workspace:
     return ws
 
 
+@router.get("/usage")
+def project_usage(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """What this account has used this month against its limits.
+
+    A quota you can't see is indistinguishable from a bug: a throttled project just looks
+    broken. Limits of 0 come back as null so a client renders "unlimited" rather than a meter
+    pinned at 100% on a self-hosted instance with no quotas configured.
+    """
+    owned = db.query(Workspace).filter(Workspace.owner_user_id == user.id).count()
+    return limits.usage_summary(user.id, owned)
+
+
 @router.get("")
 def list_projects(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     default = get_or_create_default_workspace(db, user)
@@ -62,6 +74,8 @@ def list_projects(user: User = Depends(get_current_user), db: Session = Depends(
 @router.post("")
 def create_project(data: _ProjectIn, user: User = Depends(get_current_user),
                    db: Session = Depends(get_db)):
+    owned = db.query(Workspace).filter(Workspace.owner_user_id == user.id).count()
+    limits.check_project_quota(owned)
     ws = Workspace(name=(data.name or "New project")[:160], owner_user_id=user.id)
     db.add(ws)
     db.commit()

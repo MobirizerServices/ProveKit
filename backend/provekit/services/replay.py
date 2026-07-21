@@ -225,7 +225,7 @@ async def webhook(db: Session, ws: Workspace, origin_trace_id: str, fork_span_id
     guard_url(ws.replay_url)   # block internal/metadata addresses in hosted mode
     payload = {"origin_trace_id": origin_trace_id, "fork_span_id": fork_span_id, "overrides": overrides}
     try:
-        async with httpx.AsyncClient(timeout=90.0) as c:
+        async with httpx.AsyncClient(timeout=90.0, follow_redirects=False) as c:
             r = await c.post(ws.replay_url, json=payload)
     except httpx.HTTPError as e:
         raise LLMError(f"replay webhook error: {e}") from e
@@ -238,11 +238,17 @@ async def webhook(db: Session, ws: Workspace, origin_trace_id: str, fork_span_id
     if not rows:
         raise ValueError("replay webhook returned no spans")
 
-    new_tid = rows[0].get("trace_id") or secrets.token_hex(16)
+    # Always mint OUR OWN fresh trace id for the branch — never trust whatever trace_id the
+    # customer's response carries. We literally send them `origin_trace_id` in the request
+    # payload; if their harness naively echoes it back in the OTLP it exports (a plausible bug,
+    # not a hypothetical), reusing it here would insert the new spans INTO the original trace's
+    # row set, corrupting it. Every row is remapped to the same fresh id regardless of what it
+    # already had, so this also can't collide with any other existing trace in the workspace.
+    new_tid = secrets.token_hex(16)
     new_rows = []
     for kw in rows:
         kw = dict(kw)
-        kw["trace_id"] = kw.get("trace_id") or new_tid
+        kw["trace_id"] = new_tid
         res = dict(kw.get("result") or {})
         meta = dict(res.get("meta") or {})
         meta["replay_of"] = origin_trace_id

@@ -278,6 +278,45 @@ def test_replay_webhook(monkeypatch):
         assert (run.result.get("meta") or {}).get("replay_of") == "orig123"
 
 
+def test_replay_webhook_never_reuses_customer_supplied_trace_id(monkeypatch):
+    """We literally send the customer's replay endpoint our `origin_trace_id` in the request
+    payload — if their harness naively echoes it back as the trace_id in the OTLP it exports
+    (a plausible integration bug, not a hypothetical), the new branch must NOT be inserted under
+    that id, or it would merge into and corrupt the original trace's span set."""
+    with TestClient(app, base_url="https://testserver") as c:
+        conn = c.post("/api/connections", json={"provider": "mock", "label": "m3"}).json()
+        db = SessionLocal()
+        ws = db.get(Workspace, db.get(ProviderConnection, conn["id"]).workspace_id)
+        ws_id = ws.id
+        ws.replay_url = "https://hook.example/replay"; db.commit(); db.close()
+
+        origin_tid = "origin-real-trace-do-not-corrupt"
+        # seed a real pre-existing trace under that id, so we can prove it's untouched after
+        db = SessionLocal()
+        db.add(Run(workspace_id=ws_id, type="agent", label="original", trace_id=origin_tid,
+                   span_id="orig-root", parent_span_id="", request={}, result={"text": "pre-existing"}))
+        db.commit(); db.close()
+
+        echo_otlp = {"resourceSpans": [{"scopeSpans": [{"spans": [
+            {"name": "chat", "traceId": origin_tid, "spanId": "s1", "parentSpanId": "",
+             "startTimeUnixNano": "1000000000", "endTimeUnixNano": "1200000000", "status": {"code": 1},
+             "attributes": [{"key": "gen_ai.request.model", "value": {"stringValue": "gpt-4o"}}]}]}]}]}
+        monkeypatch.setattr(replay_mod, "guard_url", lambda u: None)
+        monkeypatch.setattr(replay_mod.httpx, "AsyncClient", _FakeClient)
+        _FakeClient.resp = _FakeResp(200, echo_otlp)
+
+        r = c.post("/api/replay", json={"origin_trace_id": origin_tid, "fork_span_id": "f",
+                   "model": "gpt-4o", "messages": [{"role": "user", "content": "x"}], "mode": "webhook"})
+        assert r.status_code == 200, r.text
+        new_tid = r.json()["new_trace_id"]
+
+        assert new_tid != origin_tid   # got its own fresh id, not the echoed one
+        db = SessionLocal()
+        original_spans = db.query(Run).filter(Run.trace_id == origin_tid).all()
+        db.close()
+        assert len(original_spans) == 1 and original_spans[0].label == "original"   # untouched
+
+
 def test_replay_webhook_unconfigured_404():
     with TestClient(app, base_url="https://testserver") as c:
         c.get("/api/connections")  # ensure the default workspace exists

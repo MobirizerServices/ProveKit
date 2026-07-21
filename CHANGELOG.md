@@ -4,6 +4,14 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **The trace list pages back through history.** `limit` was capped at 200 with no cursor, so
+  the 201st-oldest trace was simply unreachable — the failure arriving exactly when a project
+  starts producing real volume. `/api/traces` and `/v1/traces` now take `cursor=<id of the last
+  row you got>`. Paging is keyset rather than offset because traces land continuously and an
+  offset would repeat or skip rows as the window shifts; the response stays a plain list, so
+  the documented key-authed API that MCP and scripts consume is unchanged. The portal gets a
+  **Load 50 more** button whose pages survive the 5s live refresh.
+
 - **The admin tables are paged and searchable.** `GET /api/admin/users` and `/projects` returned
   every row in one response. Both now take `limit` (default 50, capped at 200), `offset`, and a
   `q` substring search — users by email/name, projects by name or owner email — returning

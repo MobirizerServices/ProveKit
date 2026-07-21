@@ -1,5 +1,7 @@
 """Nested traces: a decorated entrypoint + its child spans ingest as one trace, list as a
 single root, and come back as a tree the portal can render."""
+import uuid
+
 from fastapi.testclient import TestClient
 
 from provekit.main import app
@@ -65,3 +67,49 @@ def test_agent_trace_lists_as_one_root_and_returns_a_tree():
 def test_unknown_trace_is_404():
     with TestClient(app) as c:
         assert c.get("/api/traces/does-not-exist").status_code == 404
+
+
+def test_trace_list_pages_by_cursor():
+    """Without a cursor the list stopped at `limit` (max 200) and older traces were simply
+    unreachable — the failure mode arrives exactly when someone is succeeding with the tool."""
+    c = TestClient(app)
+    tag = uuid.uuid4().hex[:8]
+    for i in range(5):
+        c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+            _span("r", "", {}, f"root-{tag}-{i}", trace=f"cur-{tag}-{i}")]}]}]})
+
+    page1 = c.get("/api/traces?limit=2").json()
+    assert len(page1) == 2
+    page2 = c.get(f"/api/traces?limit=2&cursor={page1[-1]['id']}").json()
+    assert len(page2) == 2
+    assert {t["id"] for t in page1}.isdisjoint({t["id"] for t in page2})
+    # strictly descending across the page boundary
+    assert page1[-1]["id"] > page2[0]["id"]
+
+    # walking to the end terminates rather than looping
+    seen, cursor = [], None
+    for _ in range(20):
+        url = "/api/traces?limit=2" + (f"&cursor={cursor}" if cursor else "")
+        batch = c.get(url).json()
+        if not batch:
+            break
+        seen += batch
+        cursor = batch[-1]["id"]
+    assert len({t["id"] for t in seen}) == len(seen)      # no repeats
+    assert sum(1 for t in seen if tag in (t["label"] or "")) == 5
+
+
+def test_cursor_is_honoured_on_the_key_authed_api():
+    c = TestClient(app)
+    key = c.post("/api/workspace/ingest-key").json()["ingest_key"]
+    tag = uuid.uuid4().hex[:8]
+    for i in range(3):
+        c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+            _span("r", "", {}, f"kroot-{tag}-{i}", trace=f"k-{tag}-{i}")]}]}]})
+    bare = TestClient(app)
+    bare.cookies.clear()
+    h = {"Authorization": f"Bearer {key}"}
+    first = bare.get("/v1/traces?limit=1", headers=h).json()
+    assert isinstance(first, list) and len(first) == 1      # still a bare list, not an envelope
+    nxt = bare.get(f"/v1/traces?limit=1&cursor={first[0]['id']}", headers=h).json()
+    assert nxt[0]["id"] < first[0]["id"]

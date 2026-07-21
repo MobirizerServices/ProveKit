@@ -53,7 +53,8 @@ on a dashboard. This is the full feature inventory.
 ## Trace review (portal)
 
 - **Traces list** — one row per trace (root span, span count, duration, status, tokens, cost),
-  sortable, with model filter, status filter, time-window selector, and full-text search.
+  sortable, with model filter, status filter, time-window selector, full-text search, and
+  **cursor paging** (`cursor=<last id>`) so history past the first page stays reachable.
 - **Nested flow tree** — the agent's full flow, indented by hierarchy, with node status glyphs.
 - **Time-proportional waterfall** — bars positioned by start-offset and sized by duration.
 - **Type-colored badges** and **expandable per-span input / output / error**; failed-span errors
@@ -154,7 +155,7 @@ on a dashboard. This is the full feature inventory.
 
 ## Not yet
 
-Trace-list **pagination** (a `limit` cap today, no cursor/offset) · **streaming** trace updates
+**Streaming** trace updates
 (the portal polls every 5s rather than pushing) · **per-seat billing**. Email verification and
 password reset are wired — they just need SMTP configured to actually send.
 

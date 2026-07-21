@@ -6,6 +6,8 @@ send), or a session cookie for interactive/local use. Mint the key from
 POST /api/workspace/ingest-key."""
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
+import logging
+
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -142,14 +144,32 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
             "error": r.error, "created_at": iso_utc(r.created_at)}
 
 
+# Full-text search prefilters to this many candidate traces before the page is cut. Raising it
+# without an index (see docs/ROADMAP_100.md #17) just makes the LIKE scan more expensive.
+_SEARCH_MATCH_CAP = 500
+
+log = logging.getLogger(__name__)
+
+
 # ---- traces (spans grouped into a nested tree) ----
 # The listing/detail logic is shared by two auth paths: the cookie-authed /api/* routes the
 # portal UI calls, and the key-authed /v1/* routes an MCP server or script calls with the
 # project key. Same data, two doors — so "debug via MCP" needs no new client code.
 def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
-                 window_hours: int | None = None, search: str | None = None):
+                 window_hours: int | None = None, search: str | None = None,
+                 cursor: int | None = None):
+    """One page of traces, newest first.
+
+    Paging is keyset, not offset: `cursor` is the `id` of the last row you were given and the
+    next page is everything below it. Traces arrive continuously, so an offset would skip or
+    repeat rows as new ones land above the window. The caller knows there's more when it gets
+    a full `limit` back, which keeps the response a plain list — `/v1/traces` is a documented
+    key-authed API that MCP and scripts already consume, and an envelope would break them.
+    """
     limit = max(1, min(limit, 200))
     q = (db.query(Run).filter(Run.workspace_id == ws.id, Run.parent_span_id == ""))
+    if cursor is not None and cursor > 0:
+        q = q.filter(Run.id < cursor)
     if status:
         q = q.filter(Run.status == status)
     if window_hours and window_hours > 0:
@@ -165,7 +185,12 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
         match_tids = [t for (t,) in db.query(Run.trace_id).filter(
             Run.workspace_id == ws.id,
             or_(Run.label.ilike(term), cast(Run.request, String).ilike(term),
-                cast(Run.result, String).ilike(term))).distinct().limit(500).all()]
+                cast(Run.result, String).ilike(term))).distinct().limit(_SEARCH_MATCH_CAP).all()]
+        if len(match_tids) >= _SEARCH_MATCH_CAP:
+            # The candidate set is capped, so paging past it would end early and silently look
+            # like "no more results". Say so rather than let the UI imply the search was total.
+            log.info("search %r hit the %d-trace candidate cap in project %s",
+                     search.strip(), _SEARCH_MATCH_CAP, ws.id)
         if not match_tids:
             return []
         q = q.filter(Run.trace_id.in_(match_tids))
@@ -345,13 +370,14 @@ def read_shared_trace(token: str, db: Session = Depends(get_db)):
 
 @runs_router.get("/traces")
 def list_traces(limit: int = 50, status: str | None = None, window_hours: int | None = None,
-                q: str | None = None,
+                q: str | None = None, cursor: int | None = None,
                 db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
     """One row per trace: its root span (the decorated entrypoint), with a span count and
     total token usage (so the list is scannable at a glance). `status=failed` filters to
     failures; `window_hours=N` limits to the last N hours; `q=text` full-text-searches span
-    labels and input/output content."""
-    return _list_traces(db, ws, limit, status, window_hours, search=q)
+    labels and input/output content; `cursor=<id of the last row you got>` returns the next
+    page (a full `limit` back means there is more)."""
+    return _list_traces(db, ws, limit, status, window_hours, search=q, cursor=cursor)
 
 
 @runs_router.get("/traces/{trace_id}")
@@ -365,13 +391,14 @@ def get_trace(trace_id: str, db: Session = Depends(get_db),
 # ---- key-authed read API (for the MCP server / scripts; same key as ingest) ----
 @router.get("/traces")
 def list_traces_by_key(request: Request, limit: int = 50, status: str | None = None,
-                       window_hours: int | None = None, db: Session = Depends(get_db),
+                       window_hours: int | None = None, q: str | None = None,
+                       cursor: int | None = None, db: Session = Depends(get_db),
                        authorization: str | None = Header(default=None)):
     """List traces using the project key (Bearer). Backs the ProveKit MCP server so an
     agent can pull recent runs — `status=failed` surfaces just the failures to debug,
-    `window_hours=N` limits to the last N hours."""
+    `window_hours=N` limits to the last N hours, and `cursor=<last id>` pages further back."""
     ws = _resolve_ingest_ws(db, request, authorization)
-    return _list_traces(db, ws, limit, status, window_hours)
+    return _list_traces(db, ws, limit, status, window_hours, search=q, cursor=cursor)
 
 
 @router.get("/traces/{trace_id}")

@@ -56,6 +56,8 @@ function relTime(iso?: string): string {
   return `${Math.round(d / 86400)}d ago`;
 }
 
+const PAGE = 50;
+
 const WINDOWS: { label: string; hours: number }[] = [
   { label: "All time", hours: 0 }, { label: "Last hour", hours: 1 },
   { label: "Last 24h", hours: 24 }, { label: "Last 7 days", hours: 168 },
@@ -75,12 +77,44 @@ export default function TracesPage() {
   const [sort, setSort] = useState<"recent" | "slowest" | "tokens">("recent");
   const [groupBySession, setGroupBySession] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [more, setMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [listOpen, setListOpen] = useState(true);
 
+  const filters = { status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined, q: dq || undefined };
+  const filterKey = JSON.stringify(filters);
+
+  // The 5s poll refreshes the newest page. Merge rather than replace, or every refresh would
+  // throw away the older pages the user paged in.
   const load = useCallback(() => {
-    api.traces({ status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined, q: dq || undefined })
-      .then((t) => { setTraces(t); setLoaded(true); }).catch(() => setLoaded(true));
-  }, [failuresOnly, windowHours, dq]);
+    api.traces({ ...JSON.parse(filterKey), limit: PAGE })
+      .then((t) => {
+        setTraces((prev) => {
+          const oldest = t.length ? t[t.length - 1].id : Infinity;
+          const fresh = new Set(t.map((x) => x.id));
+          return [...t, ...prev.filter((x) => x.id < oldest && !fresh.has(x.id))];
+        });
+        setMore(t.length >= PAGE);
+        setLoaded(true);
+      }).catch(() => setLoaded(true));
+  }, [filterKey]);
+
+  const loadMore = useCallback(() => {
+    const last = traces[traces.length - 1];
+    if (!last || loadingMore) return;
+    setLoadingMore(true);
+    api.traces({ ...JSON.parse(filterKey), limit: PAGE, cursor: last.id })
+      .then((t) => {
+        setTraces((prev) => {
+          const have = new Set(prev.map((x) => x.id));
+          return [...prev, ...t.filter((x) => !have.has(x.id))];
+        });
+        setMore(t.length >= PAGE);
+      }).catch(() => {}).finally(() => setLoadingMore(false));
+  }, [traces, filterKey, loadingMore]);
+
+  // A filter change is a different result set — drop the pages loaded under the old one.
+  useEffect(() => { setTraces([]); setMore(false); }, [filterKey]);
 
   // Debounce the search box → server (searches span content, not just the loaded labels).
   useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 300); return () => clearTimeout(t); }, [q]);
@@ -191,6 +225,15 @@ export default function TracesPage() {
               ) : shown.map((t) => (
                 <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => { setSel(t.trace_id); setVs(null); }} fmt={fmt} />
               ))}
+              {/* Client-side filters (model, sort) narrow what's loaded, so keep paging offered
+                  whenever the server has more — otherwise a model filter can look empty when
+                  the matching traces are simply on a later page. */}
+              {more && (
+                <button className="btn btn-sm" onClick={loadMore} disabled={loadingMore}
+                  style={{ width: "100%", marginTop: 8 }}>
+                  {loadingMore ? "Loading…" : `Load ${PAGE} more`}
+                </button>
+              )}
               </div>
             </div>
 

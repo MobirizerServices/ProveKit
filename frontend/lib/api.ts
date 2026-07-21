@@ -31,7 +31,9 @@ export interface Feedback {
   comment: string; source: string; created_at: string;
 }
 
-export interface TraceQuery { status?: string; window_hours?: number; limit?: number; q?: string; }
+// `cursor` is the id of the last row you were given; keyset paging, so a trace landing mid-scroll
+// can't shift the window and make a row repeat or vanish the way an offset would.
+export interface TraceQuery { status?: string; window_hours?: number; limit?: number; q?: string; cursor?: number; }
 
 export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; replay_url?: string; created_at: string; }
 export interface Member { user_id: number; email: string; name: string; role: string; }
@@ -166,6 +168,7 @@ export const api = {
     if (query?.window_hours) p.set("window_hours", String(query.window_hours));
     if (query?.limit) p.set("limit", String(query.limit));
     if (query?.q) p.set("q", query.q);
+    if (query?.cursor) p.set("cursor", String(query.cursor));
     const qs = p.toString();
     return j<TraceSummary[]>(`/api/traces${qs ? `?${qs}` : ""}`);
   },

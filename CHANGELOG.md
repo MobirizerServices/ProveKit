@@ -4,6 +4,14 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **`provekit-doctor` — a diagnostic for the silence.** The SDK is fail-open by design, which
+  is right in production and brutal on first run: a wrong key, an unset endpoint, a missing
+  `[trace]` extra, an endpoint that already includes `/v1/traces`, and a firewalled portal all
+  degrade to the same silent no-op. The doctor walks the same path the SDK takes and reports
+  the first thing that would stop a span, with the fix — including which installed libraries
+  have no instrumentor, so "why is my LangChain call missing?" has an answer. `--send` posts a
+  probe span; the exit code is non-zero only on a real failure, so CI can gate on it.
+
 - **fix: a run that crashed mid-flight was invisible.** Spans are exported when they *end*, so
   a process killed by an OOM, a timeout, or a `SIGKILL` never emits its root span — and the
   trace list, which selected only root spans, dropped the whole trace. The run that crashed was

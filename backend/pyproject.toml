@@ -36,6 +36,8 @@ dependencies = [
 provekit-mcp = "provekit.mcp:main"
 # A zero-setup smoke test: `provekit-demo` sends a gallery of traces to your portal.
 provekit-demo = "provekit.demo:main"
+# Says why no traces are arriving — the one thing fail-open can't tell you itself.
+provekit-doctor = "provekit.doctor:main"
 
 [project.urls]
 Homepage = "https://github.com/MobirizerServices/ProveKit"

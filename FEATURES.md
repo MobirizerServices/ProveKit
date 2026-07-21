@@ -29,6 +29,10 @@ on a dashboard. This is the full feature inventory.
 - Captures input, output, status, timing, and token usage.
 - **`provekit-demo`** — a console command that ships a gallery of traces to your portal to
   verify a fresh key end-to-end in ~10 seconds. No LLM key needed.
+- **`provekit-doctor`** — says *why* no traces are arriving. Fail-open means a wrong key, an
+  unset endpoint, a missing extra, and a firewalled portal all look identical to "working";
+  this checks each in turn and names the fix. `--send` posts one probe span; exits non-zero on
+  a real failure so setup scripts and CI can gate on it.
 
 ## Ingest
 
@@ -146,7 +150,7 @@ on a dashboard. This is the full feature inventory.
 - pip package **`provekit`** with a tiny core (httpx only). Extras: `[trace]` (OTel + OpenAI /
   Anthropic instrumentors), `[trace-all]` (the full provider/framework set + HTTP), `[http]`,
   `[mcp]` (the debug server), `[server]` (the web app / ingest server).
-- Console entry points: `provekit-demo`, `provekit-mcp`.
+- Console entry points: `provekit-demo`, `provekit-doctor`, `provekit-mcp`.
 - Trusted-publishing workflow (tag → PyPI, no token).
 
 ## Testing & CI

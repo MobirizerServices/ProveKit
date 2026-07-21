@@ -37,6 +37,17 @@ export interface Project { id: number; name: string; role: string; is_default: b
 export interface Member { user_id: number; email: string; name: string; role: string; }
 export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
 export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; is_bootstrap: boolean; project_count: number; created_at: string; }
+export interface AdminQuery { limit?: number; offset?: number; q?: string; }
+// The admin tables are paged, so the row array arrives under a named key beside the totals.
+export type Paged<K extends string, T> = { total: number; limit: number; offset: number } & { [P in K]: T[] };
+function adminQs(p?: AdminQuery): string {
+  const qs = new URLSearchParams();
+  if (p?.limit != null) qs.set("limit", String(p.limit));
+  if (p?.offset != null) qs.set("offset", String(p.offset));
+  if (p?.q) qs.set("q", p.q);
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
 export interface AdminProject { id: number; name: string; owner: string; member_count: number; span_count: number; retention: number; redact_pii: boolean; created_at: string; }
 export interface Alert {
   id: number; name: string; metric: string; comparator: string; threshold: number;
@@ -210,8 +221,8 @@ export const api = {
   removeMember: (id: number, userId: number) => j(`/api/projects/${id}/members/${userId}`, { method: "DELETE" }),
   // platform superadmin
   adminStats: () => j<AdminStats>("/api/admin/stats"),
-  adminUsers: () => j<AdminUser[]>("/api/admin/users"),
-  adminProjects: () => j<AdminProject[]>("/api/admin/projects"),
+  adminUsers: (p?: AdminQuery) => j<Paged<"users", AdminUser>>(`/api/admin/users${adminQs(p)}`),
+  adminProjects: (p?: AdminQuery) => j<Paged<"projects", AdminProject>>(`/api/admin/projects${adminQs(p)}`),
   setSuperuser: (uid: number, is_superuser: boolean) => j<{ id: number; is_superuser: boolean; is_bootstrap: boolean }>(`/api/admin/users/${uid}`, { method: "PATCH", body: JSON.stringify({ is_superuser }) }),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {

@@ -4,6 +4,12 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **The admin tables are paged and searchable.** `GET /api/admin/users` and `/projects` returned
+  every row in one response. Both now take `limit` (default 50, capped at 200), `offset`, and a
+  `q` substring search — users by email/name, projects by name or owner email — returning
+  `{total, limit, offset, …}` so the console can page. Per-page member and span counts are
+  scoped to the rows on the page rather than grouping over the whole table on every request.
+
 - **Alerts reach Slack and Discord, not just email.** A breach can now POST to an incoming
   webhook alongside the email. The URL is SSRF-guarded and validated when you save the rule —
   discovering a typo at 3am via a breach that notified nobody is the failure this fixes. The

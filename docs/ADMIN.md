@@ -87,12 +87,24 @@ All four require a superuser session cookie.
 | Endpoint | Returns |
 |---|---|
 | `GET /api/admin/stats` | the seven deployment-wide counters |
-| `GET /api/admin/users` | every user, with `project_count` and effective `is_superuser` |
-| `GET /api/admin/projects` | every project, with owner, member/span counts, retention, `redact_pii` |
+| `GET /api/admin/users` | one page of users, with `project_count` and effective `is_superuser` |
+| `GET /api/admin/projects` | one page of projects, with owner, member/span counts, retention, `redact_pii` |
 | `PATCH /api/admin/users/{id}` | `{"is_superuser": true｜false}` — grant or revoke the DB flag; `409` if the target is granted by `SUPERUSER_EMAILS`, `400` on self-revoke |
 
 `GET /api/admin/users` returns both `is_superuser` (the effective answer, flag **or** config) and
 `is_bootstrap` (true when config is the source) so a client can tell the two apart.
+
+Both list endpoints are **paged and searchable**, and return the rows beside the totals:
+
+```jsonc
+// GET /api/admin/users?limit=50&offset=0&q=acme
+{ "total": 128, "limit": 50, "offset": 0, "users": [ /* … */ ] }
+```
+
+`limit` defaults to 50 and is capped at 200; `offset` pages through. `q` matches email or name
+for users, and project name or owner email for projects — `total` is the size of the whole
+match, not of the page, so it drives the pager. The console hides its pager entirely when
+everything fits on one page.
 
 ## Revoking
 
@@ -122,8 +134,8 @@ requires a *second* operator — or direct database access.
   the way you'd grant production database access.
 - **There is no audit trail.** Grants and revocations aren't recorded — no log of who promoted
   whom or when. If you need that, capture it outside ProveKit for now.
-- **The tables are unpaginated.** `/users` and `/projects` return every row in one response,
-  which is fine for a small deployment and will get slow on a large one.
+- **Search is a substring match, not an index.** `q` runs a `LIKE` over email/name, which is
+  fine at thousands of rows and will need an index well before millions.
 - **`SUPERUSER_EMAILS` grants on email match alone.** On a deployment where anyone can sign up,
   a listed address is a standing claim on operator access — combine it with
   `REQUIRE_EMAIL_VERIFICATION=true` so an unverified signup can't claim a listed address.

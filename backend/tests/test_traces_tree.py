@@ -145,3 +145,124 @@ def test_a_complete_trace_is_not_marked_incomplete():
         _span("r", "", {}, "agent", trace=tid), _child(tid, "c1", "r", "chat")]}]}]})
     row = next(t for t in c.get("/api/traces?limit=200").json() if t["trace_id"] == tid)
     assert row["incomplete"] is False
+
+
+def test_trace_stream_announces_new_traces(monkeypatch):
+    """Drive the watcher directly: TestClient runs the app on one event loop, so issuing a
+    request from inside a streaming read is not a faithful stand-in for a second client."""
+    import asyncio
+
+    from provekit.database import SessionLocal
+    from provekit.models import Run, Workspace
+    from provekit.routers import traces as tr
+
+    monkeypatch.setattr(tr, "_STREAM_POLL_SECONDS", 0.01)
+
+    db = SessionLocal()
+    try:
+        ws = db.query(Workspace).first()
+        assert ws is not None
+        ws_id = ws.id
+    finally:
+        db.close()
+
+    class _Connected:
+        async def is_disconnected(self):
+            return False
+
+    async def drive():
+        gen = tr._watch_traces(ws_id, _Connected())
+        first = await gen.__anext__()                 # baseline, not an announcement
+        assert '"type": "ready"' in first
+
+        # A new root span lands while the stream is open.
+        db = SessionLocal()
+        try:
+            db.add(Run(workspace_id=ws_id, type="agent", label="streamed",
+                       trace_id=f"sse-{uuid.uuid4().hex[:8]}", span_id="",
+                       parent_span_id="", status="completed"))
+            db.commit()
+        finally:
+            db.close()
+
+        for _ in range(50):                           # keepalives may precede the announcement
+            frame = await gen.__anext__()
+            if '"type": "traces"' in frame:
+                await gen.aclose()
+                return True
+        await gen.aclose()
+        return False
+
+    assert asyncio.run(drive()), "a trace landing mid-stream should be announced"
+
+
+def test_stream_does_not_replay_history_on_connect(monkeypatch):
+    """Announcing the backlog would make every page load look like fresh activity."""
+    import asyncio
+
+    from provekit.database import SessionLocal
+    from provekit.models import Workspace
+    from provekit.routers import traces as tr
+
+    monkeypatch.setattr(tr, "_STREAM_POLL_SECONDS", 0.01)
+    db = SessionLocal()
+    try:
+        ws_id = db.query(Workspace).first().id
+    finally:
+        db.close()
+
+    class _Connected:
+        async def is_disconnected(self):
+            return False
+
+    async def drive():
+        gen = tr._watch_traces(ws_id, _Connected())
+        await gen.__anext__()                         # ready
+        frames = [await gen.__anext__() for _ in range(5)]
+        await gen.aclose()
+        return frames
+
+    assert all('"type": "traces"' not in f for f in asyncio.run(drive()))
+
+
+def test_stream_stops_when_the_client_goes_away(monkeypatch):
+    """Otherwise a closed tab leaves a generator polling the database forever."""
+    import asyncio
+
+    from provekit.routers import traces as tr
+
+    monkeypatch.setattr(tr, "_STREAM_POLL_SECONDS", 0.01)
+
+    class _Gone:
+        async def is_disconnected(self):
+            return True
+
+    async def drive():
+        return [f async for f in tr._watch_traces(1, _Gone())]
+
+    assert asyncio.run(drive()) == []
+
+
+def test_stream_response_contract(monkeypatch):
+    from provekit.routers import traces as tr
+    # Without bounding both, the server-side generator keeps polling for the full lifetime
+    # after the client detaches — TestClient never reports the disconnect.
+    monkeypatch.setattr(tr, "_STREAM_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(tr, "_STREAM_MAX_SECONDS", 1.0)
+    c = TestClient(app)
+    with c.stream("GET", "/api/traces/stream") as resp:
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        # nginx and friends buffer by default, which turns a stream into one delayed blob.
+        assert resp.headers.get("x-accel-buffering") == "no"
+        assert resp.headers.get("cache-control") == "no-cache"
+        for line in resp.iter_lines():
+            if line.startswith("data:"):
+                assert '"type": "ready"' in line
+                break
+
+
+def test_stream_route_is_not_shadowed_by_the_trace_id_route():
+    """/traces/{trace_id} would happily match 'stream' if declared first."""
+    routes = [r.path for r in app.routes if getattr(r, "path", "").startswith("/api/traces")]
+    assert routes.index("/api/traces/stream") < routes.index("/api/traces/{trace_id}")

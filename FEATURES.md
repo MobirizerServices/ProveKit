@@ -74,7 +74,9 @@ on a dashboard. This is the full feature inventory.
 - **Shareable trace links** — signed, read-only `/shared/{token}` links with expiry, viewable
   without an account.
 - **Trace compare** — two runs side by side.
-- **Live refresh** (5s poll) and loading skeletons.
+- **Live updates over SSE** — `GET /api/traces/stream` announces new traces as they land and
+  the list refetches; a slow 30s poll remains as a fallback if the stream is unavailable.
+- Loading skeletons.
 - **Onboarding empty state** — "listening for your first trace…" with a copy-paste snippet
   pre-filled with this instance's endpoint.
 
@@ -170,8 +172,7 @@ on a dashboard. This is the full feature inventory.
 
 ## Not yet
 
-**Streaming** trace updates
-(the portal polls every 5s rather than pushing) · **per-seat billing**. Email verification and
+**Per-seat billing**. Email verification and
 password reset are wired — they just need SMTP configured to actually send.
 
 See the [launch checklist](docs/launch/LAUNCH.md) and [publishing guide](docs/PUBLISHING.md).

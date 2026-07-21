@@ -5,8 +5,13 @@ Auth: a workspace ingest key via `Authorization: Bearer <key>` (what real export
 send), or a session cookie for interactive/local use. Mint the key from
 POST /api/workspace/ingest-key."""
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+import asyncio
+import json
 import logging
+import time
 
 from sqlalchemy import String, case, cast, func, or_
 from sqlalchemy.exc import IntegrityError
@@ -411,6 +416,85 @@ def list_traces(limit: int = 50, status: str | None = None, window_hours: int | 
     labels and input/output content; `cursor=<id of the last row you got>` returns the next
     page (a full `limit` back means there is more)."""
     return _list_traces(db, ws, limit, status, window_hours, search=q, cursor=cursor)
+
+
+# Poll cadence for the change-watcher, and a lifetime bound so a generator that somehow
+# outlives its client can't leak — EventSource reconnects on its own.
+_STREAM_POLL_SECONDS = 2.0
+_STREAM_MAX_SECONDS = 300.0
+
+
+def _latest_root_id(ws_id: int) -> int | None:
+    """MAX(id) of this project's root spans — an indexed primary-key lookup."""
+    from ..database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return (db.query(func.max(Run.id))
+                .filter(Run.workspace_id == ws_id, Run.parent_span_id == "").scalar())
+    finally:
+        db.close()
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+async def _watch_traces(ws_id: int, request: Request):
+    """Announce new traces as they land.
+
+    This is a *notification* channel, not a data channel: it sends the newest root-span id and
+    the client refetches through its normal path. One serialization instead of two, and the
+    paging and merge logic on the client keeps working untouched.
+
+    It watches by polling MAX(id) — an indexed primary-key lookup — rather than being pushed
+    from the ingest path. An in-process signal would only reach clients served by the same
+    worker, and a Redis channel would make an optional dependency load-bearing for the portal.
+    The win is real regardless: one cheap query per viewer every 2s replaces every viewer
+    refetching the whole trace list every 5s, and updates land sooner.
+    """
+    last: int | None = None
+    started = time.monotonic()
+    while time.monotonic() - started < _STREAM_MAX_SECONDS:
+        if await request.is_disconnected():
+            return
+        try:
+            # In a threadpool, not inline: the DB driver is synchronous, and calling it
+            # directly from this async generator would block the event loop for every other
+            # request on the worker each time any connected client ticks.
+            latest = await run_in_threadpool(_latest_root_id, ws_id)
+        except Exception as exc:            # a DB blip shouldn't kill the client's connection
+            log.debug("trace stream query failed: %s", exc)
+            latest = last
+
+        if last is None:
+            # The first tick sets a baseline. Announcing here would make every connect look
+            # like new activity and trigger a pointless refetch.
+            last = latest or 0
+            yield _sse({"type": "ready", "latest_id": last})
+        elif latest is not None and latest > last:
+            last = latest
+            yield _sse({"type": "traces", "latest_id": latest})
+        else:
+            # Comment frame: keeps proxies and load balancers from dropping an idle stream.
+            yield ": keepalive\n\n"
+        await asyncio.sleep(_STREAM_POLL_SECONDS)
+
+
+@runs_router.get("/traces/stream")
+async def stream_traces(request: Request, ws: Workspace = Depends(current_workspace)):
+    """Server-sent events announcing new traces in this project."""
+    return StreamingResponse(
+        _watch_traces(ws.id, request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # nginx and several proxies buffer responses by default, which turns a stream into
+            # one long-delayed blob. This is the documented opt-out.
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @runs_router.get("/traces/{trace_id}")

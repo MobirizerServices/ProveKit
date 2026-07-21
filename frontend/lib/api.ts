@@ -2,6 +2,8 @@
 // dev, the reverse proxy in prod), so one frontend build works everywhere and session
 // cookies are first-party. Set NEXT_PUBLIC_API_BASE only for a split-domain setup.
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+// Exported for EventSource, which can't go through the fetch wrapper.
+export const API_BASE = BASE;
 
 export interface Me { id: number; email: string; name: string; auth_provider: string; is_superuser?: boolean; }
 export interface ApiKey { id: number; name: string; prefix: string; revoked: boolean; last_used_at: string | null; created_at?: string; }

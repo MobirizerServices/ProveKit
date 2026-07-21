@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { api, TraceSpan, TraceSummary } from "@/lib/api";
+import { api, API_BASE, TraceSpan, TraceSummary } from "@/lib/api";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 import TraceDetail from "@/components/TraceDetail";
@@ -126,9 +126,25 @@ export default function TracesPage() {
     // Deep-link: /traces?trace=<id> opens that trace directly (e.g. from a dashboard failure).
     const deep = new URLSearchParams(window.location.search).get("trace");
     if (deep) setSel(deep);
+  }, []);
+
+  // Live updates. The server announces new traces over SSE and we refetch through the normal
+  // path, so paging and merging stay in one place. The interval is a fallback, not the primary
+  // channel: it's slow (30s) because SSE covers the common case, but it keeps the page live if
+  // EventSource is unavailable or a proxy eats the stream.
+  useEffect(() => {
     load();
-    const t = setInterval(load, 5000);   // live-ish: new traces stream in
-    return () => clearInterval(t);
+    let stream: EventSource | null = null;
+    try {
+      stream = new EventSource(`${API_BASE}/api/traces/stream`, { withCredentials: true });
+      stream.onmessage = (ev) => {
+        try { if (JSON.parse(ev.data)?.type === "traces") load(); } catch { /* keepalive */ }
+      };
+      // Don't tear down on error: EventSource reconnects on its own, and the poll below
+      // covers the gap. Closing here would turn one blip into a permanently stale page.
+    } catch { /* no EventSource (very old browser) — the interval still covers it */ }
+    const t = setInterval(load, 30000);
+    return () => { stream?.close(); clearInterval(t); };
   }, [load]);
   useEffect(() => {
     if (!sel) { setSpans(null); return; }

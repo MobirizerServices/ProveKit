@@ -4,6 +4,15 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **The trace list updates over SSE instead of polling.** Every viewer refetched the entire
+  trace list every 5 seconds, so the cost scaled with viewers and a live run still felt laggy.
+  `GET /api/traces/stream` now announces new traces. It's a *notification* channel — it sends
+  the newest root-span id and the client refetches through its normal path, so paging and
+  merging stay in one place rather than being reimplemented over the wire. The watcher runs its
+  query in a threadpool (a synchronous driver called inline from an async generator would block
+  the event loop for every other request on the worker), doesn't replay history on connect, and
+  keeps a 30s poll as a fallback for when a proxy eats the stream.
+
 - **Experiment comparisons say whether a difference is real.** Two means and no uncertainty
   invites shipping on noise — 0.82 vs 0.79 is nothing over 20 examples and may be decisive over
   2,000, and the numbers alone don't say which you have. Every scorer now reports n, standard

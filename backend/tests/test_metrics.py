@@ -39,8 +39,10 @@ def test_metrics_aggregate():
         assert {"t", "count", "errors", "p50", "p95", "tokens"} <= set(b)
         assert b["p95"] >= b["p50"] >= 0
         assert sum(x["tokens"] for x in m["series"]) >= 120
-        # per-bucket model breakdown lets the frontend price each bucket
-        assert any(x.get("by_model", {}).get("gpt-4o", 0) >= 120 for x in m["series"])
+        # per-bucket model breakdown lets the frontend price each bucket — split by
+        # direction, because input and output are priced 3-5x apart
+        split = next(x["by_model"]["gpt-4o"] for x in m["series"] if "gpt-4o" in (x.get("by_model") or {}))
+        assert split["input_tokens"] + split["output_tokens"] >= 120
 
 
 def _failed_tool(trace, msg):
@@ -72,3 +74,39 @@ def test_metrics_empty_window_is_safe():
         m = c.get("/api/metrics", params={"window_hours": 1}).json()
         assert "trace_count" in m and m["error_rate"] in (0.0,) or m["trace_count"] >= 0
         assert m["latency_p50_ms"] >= 0
+
+
+def test_token_split_and_usage_coverage_are_reported():
+    """Cost is estimated from tokens, and input/output are priced 3-5x apart — so the split
+    has to reach the client instead of being guessed there. Coverage says how much of the
+    estimate rests on reported data rather than on silence."""
+    with TestClient(app) as c:
+        c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+            _root("cov-1"), _llm("cov-1", "gpt-4o", 900, 30)]}]}]})
+        m = c.get("/api/metrics?window_hours=24").json()
+
+        row = next(r for r in m["by_model"] if r["model"] == "gpt-4o")
+        assert row["input_tokens"] >= 900 and row["output_tokens"] >= 30
+        assert row["input_tokens"] + row["output_tokens"] == row["tokens"]
+        # an input-heavy call must not look 50/50 — that was the old fabrication
+        assert row["input_tokens"] > row["output_tokens"] * 5
+
+        cov = m["usage_coverage"]
+        assert cov["model_calls"] >= 1 and cov["reported"] >= 1
+        assert cov["reported"] <= cov["model_calls"]
+
+
+def test_a_model_call_with_no_usage_counts_against_coverage():
+    """'Reported zero' and 'reported nothing' must not look alike — otherwise a cost built on
+    silence is indistinguishable from one built on measurement."""
+    with TestClient(app) as c:
+        before = c.get("/api/metrics?window_hours=24").json()["usage_coverage"]
+        silent = {"name": "chat", "traceId": "cov-2", "spanId": "c", "parentSpanId": "",
+                  "startTimeUnixNano": "1000000000", "endTimeUnixNano": "1200000000",
+                  "status": {"code": 1},
+                  "attributes": [{"key": "gen_ai.request.model", "value": {"stringValue": "gpt-4o"}},
+                                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}}]}
+        c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [silent]}]}]})
+        after = c.get("/api/metrics?window_hours=24").json()["usage_coverage"]
+        assert after["model_calls"] == before["model_calls"] + 1
+        assert after["reported"] == before["reported"]      # the silent call didn't count

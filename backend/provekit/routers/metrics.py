@@ -27,11 +27,21 @@ def _pct(sorted_vals: list[int], p: float) -> int:
     return round(sorted_vals[f] * (c - k) + sorted_vals[c] * (k - f))
 
 
-def _usage_tokens(result) -> int:
+def _usage_pair(result) -> tuple[int, int, bool]:
+    """(input, output, did the provider actually report usage).
+
+    Input and output are priced 3–5x apart, so the split has to survive to the client. It used
+    to be flattened to a total and the dashboard guessed 50/50 — which is wrong by a wide
+    margin on anything input-heavy like RAG, while rendering exactly like a measured number.
+
+    The third value separates "reported zero" from "reported nothing", so a cost built from
+    partial data can be labelled instead of quietly under-reporting.
+    """
     if not isinstance(result, dict):
-        return 0
+        return 0, 0, False
     u = (result.get("meta") or {}).get("usage") or {}
-    return (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
+    it, ot = u.get("input_tokens"), u.get("output_tokens")
+    return (it or 0), (ot or 0), (it is not None or ot is not None)
 
 
 @router.get("")
@@ -84,23 +94,36 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
         spanq = spanq.filter(Run.created_at >= cutoff)
     total_tokens = 0
     by_model: dict[str, dict] = {}
+    model_calls = 0          # spans that named a model — the denominator for usage coverage
+    usage_spans = 0          # of those, how many actually reported token usage
     for result, request, created in spanq.limit(_SPAN_CAP):
-        tok = _usage_tokens(result)
+        in_tok, out_tok, reported = _usage_pair(result)
+        tok = in_tok + out_tok
         total_tokens += tok
         model = (request or {}).get("model") if isinstance(request, dict) else None
-        # per-bucket tokens, split by model so the frontend can price each bucket (pricing
-        # lives on the frontend — the single source of truth for cost estimates).
+        # per-bucket tokens, split by model *and* direction so the frontend can price each
+        # bucket properly (pricing lives on the frontend — one source of truth for estimates).
         if tok and created is not None:
             b = series.get(_bucket_key(created))
             if b is not None:
                 b["tokens"] += tok
                 if model:
                     b.setdefault("by_model", {})
-                    b["by_model"][model] = b["by_model"].get(model, 0) + tok
+                    prev = b["by_model"].get(model) or {"input_tokens": 0, "output_tokens": 0}
+                    prev["input_tokens"] += in_tok
+                    prev["output_tokens"] += out_tok
+                    b["by_model"][model] = prev
         if model:
-            m = by_model.setdefault(model, {"model": model, "calls": 0, "tokens": 0})
+            model_calls += 1
+            usage_spans += 1 if reported else 0
+            m = by_model.setdefault(model, {"model": model, "calls": 0, "tokens": 0,
+                                            "input_tokens": 0, "output_tokens": 0,
+                                            "usage_spans": 0})
             m["calls"] += 1
             m["tokens"] += tok
+            m["input_tokens"] += in_tok
+            m["output_tokens"] += out_tok
+            m["usage_spans"] += 1 if reported else 0
 
     # Failure breakdown: which span types fail, the most common error messages, and the
     # latest failing spans — so the dashboard answers "what's broken?", not just "how often".
@@ -134,6 +157,10 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
         "latency_p50_ms": _pct(durations, 50),
         "latency_p95_ms": _pct(durations, 95),
         "total_tokens": total_tokens,
+        # How much of the cost estimate rests on real data: model calls that reported usage
+        # vs. all model calls. A figure derived from 40% coverage should not be shown as though
+        # it were the bill.
+        "usage_coverage": {"reported": usage_spans, "model_calls": model_calls},
         "series": sorted(series.values(), key=lambda b: b["t"]),
         "by_model": sorted(by_model.values(), key=lambda m: m["tokens"], reverse=True)[:10],
         "fail_by_type": fail_by_type,

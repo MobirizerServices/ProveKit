@@ -57,11 +57,14 @@ export interface Alert {
 }
 export interface AlertIn { name?: string; metric: string; comparator?: string; threshold?: number; window_hours?: number; email?: string; webhook_url?: string; enabled?: boolean; }
 
+export interface TokenSplit { input_tokens: number; output_tokens: number; }
 export interface Metrics {
   window_hours: number; trace_count: number; error_count: number; error_rate: number;
   latency_p50_ms: number; latency_p95_ms: number; total_tokens: number;
-  series: { t: string; count: number; errors: number; p50?: number; p95?: number; tokens?: number; by_model?: Record<string, number> }[];
-  by_model: { model: string; calls: number; tokens: number }[];
+  series: { t: string; count: number; errors: number; p50?: number; p95?: number; tokens?: number; by_model?: Record<string, TokenSplit> }[];
+  by_model: ({ model: string; calls: number; tokens: number; usage_spans: number } & TokenSplit)[];
+  // How much of the cost estimate rests on reported usage rather than on silence.
+  usage_coverage: { reported: number; model_calls: number };
   fail_by_type?: { type: string; count: number }[];
   top_errors?: { error: string; type: string; count: number }[];
   recent_failures?: { label: string; type: string; error: string; trace_id: string; at: string }[];

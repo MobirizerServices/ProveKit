@@ -4,6 +4,15 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **fix: cost was priced from a fabricated 50/50 token split.** The dashboard only received a
+  *total* token count per model, so it assumed half input and half output — but output tokens
+  cost 3–5x more, which makes the estimate badly wrong on anything input-heavy like RAG, and it
+  rendered exactly like a measured number. `/api/metrics` now reports `input_tokens` and
+  `output_tokens` separately (per model and per time bucket) and the three places that guessed
+  now price the real split. It also reports `usage_coverage`, and the cost tile says *"N% of
+  calls reported usage"* when some didn't — a total built partly from silence is a floor, not
+  an estimate.
+
 - **The trace list pages back through history.** `limit` was capped at 200 with no cursor, so
   the 201st-oldest trace was simply unreachable — the failure arriving exactly when a project
   starts producing real volume. `/api/traces` and `/v1/traces` now take `cursor=<id of the last

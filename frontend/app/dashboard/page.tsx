@@ -21,10 +21,16 @@ export default function DashboardPage() {
   const load = useCallback(() => { api.metrics(hours).then(setM).catch(() => {}); }, [hours]);
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
 
-  const cost = m ? fmtCost(m.by_model.reduce((n, r) => {
-    // approximate: split tokens 50/50 in/out for the estimate
-    return n + (estimateCost(r.model, Math.round(r.tokens / 2), Math.round(r.tokens / 2)) || 0);
-  }, 0) || null) : null;
+  // Priced from the real input/output split the API now reports. This used to assume 50/50,
+  // which is wrong by a wide margin on anything input-heavy (RAG especially) since output
+  // tokens cost 3-5x more — and it rendered exactly like a measured figure.
+  const cost = m ? fmtCost(m.by_model.reduce(
+    (n, r) => n + (estimateCost(r.model, r.input_tokens, r.output_tokens) || 0), 0) || null) : null;
+
+  // A cost derived from calls that mostly didn't report usage is a floor, not an estimate.
+  const cov = m?.usage_coverage;
+  const partial = !!cov && cov.model_calls > 0 && cov.reported < cov.model_calls;
+  const covPct = cov && cov.model_calls ? Math.round((cov.reported / cov.model_calls) * 100) : 100;
 
   return (
     <>
@@ -56,7 +62,8 @@ export default function DashboardPage() {
               <Stat label="Latency p50" value={`${m.latency_p50_ms} ms`} />
               <Stat label="Latency p95" value={`${m.latency_p95_ms} ms`} />
               <Stat label="Tokens" value={m.total_tokens.toLocaleString()} />
-              <Stat label="Est. cost" value={cost || "—"} />
+              <Stat label="Est. cost" value={cost || "—"}
+                note={partial ? `${covPct}% of calls reported usage` : undefined} />
             </div>
 
             <div style={{ ...panel, marginBottom: 20 }}>
@@ -114,7 +121,7 @@ export default function DashboardPage() {
                         <td style={{ ...td, fontFamily: "var(--font-mono)" }}>{r.model}</td>
                         <td style={td}>{r.calls.toLocaleString()}</td>
                         <td style={td}>{r.tokens.toLocaleString()}</td>
-                        <td style={td}>{fmtCost(estimateCost(r.model, Math.round(r.tokens / 2), Math.round(r.tokens / 2))) || "—"}</td>
+                        <td style={td}>{fmtCost(estimateCost(r.model, r.input_tokens, r.output_tokens)) || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -143,12 +150,12 @@ function typeBadge(t: string): React.CSSProperties {
 function fmtMs(v: number): string {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`;
 }
-// Price a series bucket from its per-model token split (same 50/50 in/out heuristic used
-// for the top-line cost), returning the bucket with a `cost` field for the trend chart.
+// Price a series bucket from its per-model input/output token split, returning the bucket
+// with a `cost` field for the trend chart.
 function costOfBucket(b: Metrics["series"][number]): Metrics["series"][number] & { cost: number } {
   const models = b.by_model || {};
   const cost = Object.entries(models).reduce(
-    (n, [model, tok]) => n + (estimateCost(model, Math.round(tok / 2), Math.round(tok / 2)) || 0), 0);
+    (n, [model, t]) => n + (estimateCost(model, t.input_tokens, t.output_tokens) || 0), 0);
   return { ...b, cost };
 }
 function fmtUsd(v: number): string {
@@ -244,11 +251,13 @@ function Failures({ m }: { m: Metrics }) {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function Stat({ label, value, accent, note }: { label: string; value: string; accent?: string; note?: string }) {
   return (
     <div style={panel}>
       <div className="muted" style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: accent }}>{value}</div>
+      {/* Qualifies the number in place — a caveat somewhere else gets read as decoration. */}
+      {note && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{note}</div>}
     </div>
   );
 }

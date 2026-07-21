@@ -21,9 +21,11 @@ function TraceRow({ t, active, onClick, fmt, indent }: {
         <span style={{ fontWeight: 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {t.label || `run ${t.id}`}
         </span>
-        {t.status === "failed"
-          ? <span style={failBadge}>failed</span>
-          : <span style={{ ...dot, background: "var(--green)" }} />}
+        {t.incomplete
+          ? <span style={partialBadge} title="No root span arrived — the run ended before it could report finishing (crash, OOM, or timeout). What was captured before it stopped is shown below.">partial</span>
+          : t.status === "failed"
+            ? <span style={failBadge}>failed</span>
+            : <span style={{ ...dot, background: "var(--green)" }} />}
       </div>
       <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
         {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {relTime(t.created_at)}
@@ -341,6 +343,12 @@ const pre: React.CSSProperties = {
   wordBreak: "break-word", maxHeight: 240, overflowY: "auto",
 };
 const dot: React.CSSProperties = { width: 8, height: 8, borderRadius: 999, flexShrink: 0, marginTop: 4 };
+// Distinct from `failed`: the run didn't report an error, it stopped reporting at all.
+const partialBadge: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase",
+  color: "var(--amber)", border: "1px solid var(--amber)", borderRadius: 999,
+  padding: "1px 6px", flexShrink: 0,
+};
 const failBadge: React.CSSProperties = {
   flexShrink: 0, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
   color: "var(--red)", border: "1px solid var(--red)", borderRadius: 5, padding: "1px 6px",

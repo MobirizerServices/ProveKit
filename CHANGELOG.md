@@ -4,6 +4,13 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **fix: a run that crashed mid-flight was invisible.** Spans are exported when they *end*, so
+  a process killed by an OOM, a timeout, or a `SIGKILL` never emits its root span — and the
+  trace list, which selected only root spans, dropped the whole trace. The run that crashed was
+  precisely the one you couldn't see. Rootless traces are now listed by promoting their earliest
+  span to stand in, flagged `incomplete` in the API and badged **partial** in the portal —
+  distinct from **failed**, because the run didn't report an error, it stopped reporting at all.
+
 - **fix: cost was priced from a fabricated 50/50 token split.** The dashboard only received a
   *total* token count per model, so it assumed half input and half output — but output tokens
   cost 3–5x more, which makes the estimate badly wrong on anything input-heavy like RAG, and it

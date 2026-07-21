@@ -113,3 +113,35 @@ def test_cursor_is_honoured_on_the_key_authed_api():
     assert isinstance(first, list) and len(first) == 1      # still a bare list, not an envelope
     nxt = bare.get(f"/v1/traces?limit=1&cursor={first[0]['id']}", headers=h).json()
     assert nxt[0]["id"] < first[0]["id"]
+
+
+def _child(tid, sid, parent, name):
+    return _span(sid, parent, {"gen_ai.request.model": "gpt-4o"}, name, trace=tid)
+
+
+def test_a_trace_whose_root_never_arrived_is_still_listed():
+    """A root span is only exported when it *ends*, so a process that dies mid-run never sends
+    one. The trace used to vanish from the list entirely — the run that crashed being exactly
+    the one you most need to see."""
+    c = TestClient(app)
+    tid = f"orphan-{uuid.uuid4().hex[:8]}"
+    c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+        _child(tid, "c1", "neverarrived", "retrieve"),
+        _child(tid, "c2", "neverarrived", "chat")]}]}]})
+
+    rows = c.get("/api/traces?limit=200").json()
+    row = next((t for t in rows if t["trace_id"] == tid), None)
+    assert row is not None, "a trace with no root span must still be listed"
+    assert row["incomplete"] is True
+    assert row["span_count"] == 2
+    # and its spans are still reachable
+    assert len(c.get(f"/api/traces/{tid}").json()) == 2
+
+
+def test_a_complete_trace_is_not_marked_incomplete():
+    c = TestClient(app)
+    tid = f"whole-{uuid.uuid4().hex[:8]}"
+    c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [
+        _span("r", "", {}, "agent", trace=tid), _child(tid, "c1", "r", "chat")]}]}]})
+    row = next(t for t in c.get("/api/traces?limit=200").json() if t["trace_id"] == tid)
+    assert row["incomplete"] is False

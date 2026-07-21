@@ -19,6 +19,8 @@ export interface RunDetail {
 export interface TraceSummary {
   id: number; trace_id: string; label: string; type: string; status: string;
   duration_ms: number; span_count: number; tokens?: number; session_id?: string;
+  // True when no root span ever arrived — the run ended before it could report finishing.
+  incomplete?: boolean;
   model?: string | null; created_at: string;
 }
 export interface TraceSpan extends RunDetail {

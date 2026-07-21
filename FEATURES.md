@@ -55,6 +55,8 @@ on a dashboard. This is the full feature inventory.
 - **Traces list** — one row per trace (root span, span count, duration, status, tokens, cost),
   sortable, with model filter, status filter, time-window selector, full-text search, and
   **cursor paging** (`cursor=<last id>`) so history past the first page stays reachable.
+- **Incomplete-run detection** — a trace whose root span never arrived (the process died
+  mid-run) is still listed, badged **partial** rather than silently dropped.
 - **Nested flow tree** — the agent's full flow, indented by hierarchy, with node status glyphs.
 - **Time-proportional waterfall** — bars positioned by start-offset and sized by duration.
 - **Type-colored badges** and **expandable per-span input / output / error**; failed-span errors

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 import logging
 
-from sqlalchemy import func
+from sqlalchemy import String, case, cast, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -151,6 +151,27 @@ _SEARCH_MATCH_CAP = 500
 log = logging.getLogger(__name__)
 
 
+# Bounds the rootless-trace scan. Well above any healthy deployment's crash rate, so hitting
+# it means something is badly wrong — which is itself worth seeing.
+_ORPHAN_CAP = 200
+
+
+def _rootless_trace_heads(db: Session, ws: Workspace, cutoff) -> set[int]:
+    """Ids of the earliest span of each trace that has spans but no root span.
+
+    Spans are exported when they end, so a run killed mid-flight (OOM, timeout, SIGKILL)
+    never emits its root. Listing only `parent_span_id == ''` therefore hid exactly the
+    traces worth looking at.
+    """
+    q = (db.query(func.min(Run.id))
+         .filter(Run.workspace_id == ws.id, Run.trace_id != "")
+         .group_by(Run.trace_id)
+         .having(func.sum(case((Run.parent_span_id == "", 1), else_=0)) == 0))
+    if cutoff is not None:
+        q = q.filter(Run.created_at >= cutoff)
+    return {mid for (mid,) in q.limit(_ORPHAN_CAP).all()}
+
+
 # ---- traces (spans grouped into a nested tree) ----
 # The listing/detail logic is shared by two auth paths: the cookie-authed /api/* routes the
 # portal UI calls, and the key-authed /v1/* routes an MCP server or script calls with the
@@ -167,20 +188,29 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
     key-authed API that MCP and scripts already consume, and an envelope would break them.
     """
     limit = max(1, min(limit, 200))
-    q = (db.query(Run).filter(Run.workspace_id == ws.id, Run.parent_span_id == ""))
-    if cursor is not None and cursor > 0:
-        q = q.filter(Run.id < cursor)
-    if status:
-        q = q.filter(Run.status == status)
+    cutoff = None
     if window_hours and window_hours > 0:
         from datetime import timedelta
 
         from ..models import _now
-        q = q.filter(Run.created_at >= _now() - timedelta(hours=window_hours))
+        cutoff = _now() - timedelta(hours=window_hours)
+
+    # A trace with no root span is one whose process died before the root ended (spans are
+    # only exported on end). Promote its earliest span to stand in, or the run that crashed —
+    # usually the one you most need — is missing from the list entirely.
+    stand_ins = _rootless_trace_heads(db, ws, cutoff)
+    q = db.query(Run).filter(Run.workspace_id == ws.id)
+    q = q.filter(or_(Run.parent_span_id == "", Run.id.in_(stand_ins)) if stand_ins
+                 else Run.parent_span_id == "")
+    if cursor is not None and cursor > 0:
+        q = q.filter(Run.id < cursor)
+    if status:
+        q = q.filter(Run.status == status)
+    if cutoff is not None:
+        q = q.filter(Run.created_at >= cutoff)
     if search and search.strip():
         # Full-text-ish: match a trace if ANY of its spans contains the term in its label or its
         # (JSON) request/result — so you can find a run by something it said, not just the label.
-        from sqlalchemy import String, cast, or_
         term = f"%{search.strip()}%"
         match_tids = [t for (t,) in db.query(Run.trace_id).filter(
             Run.workspace_id == ws.id,
@@ -216,6 +246,9 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
              "span_count": counts.get(r.trace_id, 1) if r.trace_id else 1,
              "tokens": tokens.get(r.trace_id, 0), "session_id": r.session_id,
              "model": models.get(r.trace_id),
+             # True when this row is standing in for a root that never arrived, so the client
+             # can say "ended unexpectedly" rather than present a partial run as a whole one.
+             "incomplete": r.id in stand_ins,
              "created_at": iso_utc(r.created_at)} for r in roots]
 
 

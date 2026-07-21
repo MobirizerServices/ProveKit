@@ -140,8 +140,16 @@ async def reconstruct(db: Session, ws: Workspace, origin_trace_id: str, fork_spa
     new_tid = secrets.token_hex(16)
     id_map: dict[str, str] = {}
     subs: dict[str, str] = {}          # old output text → new output text, threaded forward
+    # Outputs we can no longer stand behind. A tool whose input changed would not have returned
+    # its recorded result, so that result — and everything derived from it — is fiction. Unlike
+    # `subs` there is no replacement value: ProveKit doesn't own the tool and cannot re-run it.
+    tainted: set[str] = set()
+    diverged_ids: set[str] = set()
     new_rows: list[Run] = []
     fork_output = ""
+
+    def _tainted_ref(text: str) -> bool:
+        return any(t and t in text for t in tainted)
 
     for i, s in enumerate(spans):
         new_sid = secrets.token_hex(8)
@@ -167,6 +175,16 @@ async def reconstruct(db: Session, ws: Workspace, origin_trace_id: str, fork_spa
             res = {"text": fork_output, "meta": {**meta, "usage": r["usage"], "model": model,
                                                  "params": params}}
             state = "live"
+        elif s.parent_span_id in diverged_ids or _tainted_ref(json.dumps(req.get("input") or "")):
+            # Depends on a value the replay invalidated and cannot correct. Re-running the model
+            # here would spend the user's money to produce a confident answer built on inputs
+            # that no longer hold — the exact failure this feature exists to expose. Keep the
+            # recorded output, badge it, and taint what it produces.
+            state = "diverged"
+            diverged_ids.add(s.span_id)
+            out = _text_of(res)
+            if out:
+                tainted.add(out)
         elif s.type == "llm" and subs:
             msgs = _messages(req)
             new_msgs, any_changed = [], False
@@ -194,6 +212,13 @@ async def reconstruct(db: Session, ws: Workspace, origin_trace_id: str, fork_spa
             inp = json.dumps(req.get("input") or "")
             _, ref_changed = _apply(subs, inp)
             state = "diverged" if ref_changed else "recorded"
+            if ref_changed:
+                # The substituted input means this step ran on different arguments than
+                # recorded, so its recorded output is no longer evidence of anything.
+                diverged_ids.add(s.span_id)
+                out = _text_of(res)
+                if out:
+                    tainted.add(out)
 
         meta_out = dict(res.get("meta") or {})
         meta_out["replay_of"] = origin_trace_id
@@ -211,8 +236,22 @@ async def reconstruct(db: Session, ws: Workspace, origin_trace_id: str, fork_spa
     db.add(rr)
     db.commit(); db.refresh(rr)
 
-    live = sum(1 for r in new_rows if (r.result.get("meta") or {}).get("replay_state") == "live")
+    def _count(state: str) -> int:
+        return sum(1 for r in new_rows if (r.result.get("meta") or {}).get("replay_state") == state)
+
+    live = _count("live")
+    diverged = _count("diverged")
+    warning = ""
+    if diverged:
+        warning = (
+            f"{diverged} span(s) diverged: their inputs changed, so their recorded outputs — and "
+            "anything downstream of them — are not what this run would actually have produced. "
+            "ProveKit can't re-run your tools; use webhook replay for an exact re-run.")
     return {"new_trace_id": new_tid, "replay_run_id": rr.id, "fork_output": fork_output,
+            "fidelity": {"live": live, "diverged": diverged, "recorded": _count("recorded"),
+                         "unchanged": _count("unchanged")},
+            # A replay with any diverged span is a hypothesis, not a reproduction.
+            "reliable": diverged == 0, "fidelity_warning": warning,
             "live_count": live, "span_count": len(new_rows), "mode": "reconstructed"}
 
 

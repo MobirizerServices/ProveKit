@@ -99,9 +99,29 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
   const totalCost = fmtCost(spans.reduce((n, s) => n + (estimateCost(s.request?.model, s.result?.meta?.usage?.input_tokens, s.result?.meta?.usage?.output_tokens) || 0), 0) || null);
   const sel = spans.find((s) => s.span_id === picked) || root;
+  // A replayed branch containing diverged spans is a hypothesis, not a reproduction: something
+  // upstream changed the inputs to a step ProveKit can't re-run, so its recorded output — and
+  // everything derived from it — is no longer what this run would have produced. Said once at
+  // the top, because the per-node badges are easy to read past.
+  const divergedCount = spans.filter((s) => (s.result?.meta as any)?.replay_state === "diverged").length;
 
   return (
     <div>
+      {divergedCount > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5,
+                      border: "1px solid var(--amber)", borderRadius: 10, padding: "9px 11px",
+                      marginBottom: 10, color: "var(--amber)" }}>
+          <span aria-hidden>⚠</span>
+          <span>
+            <strong>{divergedCount} span{divergedCount === 1 ? "" : "s"} diverged.</strong>{" "}
+            <span className="muted">
+              Their inputs changed, so their recorded outputs — and anything downstream — aren&apos;t
+              what this run would actually have produced. ProveKit can&apos;t re-run your tools;
+              use webhook replay for an exact re-run.
+            </span>
+          </span>
+        </div>
+      )}
       {/* Header: name + status-chip bar + view toggle */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>

@@ -109,6 +109,9 @@ export interface SpanNote { id: number; trace_id: string; span_id: string; autho
 export interface ReplayResult {
   new_trace_id: string; replay_run_id: number; fork_output: string;
   live_count: number; span_count: number;
+  // `reliable` is false when any span diverged — the replay is a hypothesis, not a reproduction.
+  fidelity?: { live: number; diverged: number; recorded: number; unchanged: number };
+  reliable?: boolean; fidelity_warning?: string;
 }
 
 export interface Dataset { id: number; name: string; description: string; item_count: number; created_at: string; }

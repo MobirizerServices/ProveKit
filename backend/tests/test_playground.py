@@ -513,3 +513,63 @@ def test_prompt_versioning():
         assert any(p["name"] == "greeter" and p["version"] == 2 for p in rows)
         assert c.delete(f"/api/prompts/{v2['id']}").json()["ok"] is True
         assert c.post("/api/prompts", json={"name": ""}).status_code == 422
+
+
+def _seed_tool_chain(ws_id: int) -> str:
+    """fork LLM → tool that uses its output → LLM that uses the tool's output.
+
+    The shape of any real agent: the model decides something, a tool acts on that decision,
+    and a later call reasons over what the tool returned.
+    """
+    tid = "reptool" + "0" * 25
+    db = SessionLocal()
+    db.add_all([
+        Run(workspace_id=ws_id, type="agent", label="root", trace_id=tid, span_id="r",
+            parent_span_id="", request={}, result={}),
+        Run(workspace_id=ws_id, type="llm", label="pick_city", trace_id=tid, span_id="f",
+            parent_span_id="r", request={"model": "gpt-4o", "input": "which city?"},
+            result={"text": "PARIS", "meta": {}}),
+        # the tool's input embeds the fork's answer
+        Run(workspace_id=ws_id, type="tool", label="get_weather", trace_id=tid, span_id="t",
+            parent_span_id="r", request={"input": '{"city": "PARIS"}'},
+            result={"text": "12C and raining", "meta": {}}),
+        # the final call reasons over the TOOL's output, not the fork's
+        Run(workspace_id=ws_id, type="llm", label="advise", trace_id=tid, span_id="d",
+            parent_span_id="r", request={"model": "gpt-4o", "input": "weather is 12C and raining"},
+            result={"text": "bring an umbrella", "meta": {}}),
+    ])
+    db.commit()
+    db.close()
+    return tid
+
+
+def test_divergence_propagates_past_a_tool():
+    """A tool whose input changed cannot be trusted to have returned its recorded output — and
+    neither can anything reading that output. Badging those spans 'recorded' presents a
+    confidently wrong run as a faithful one."""
+    with TestClient(app, base_url="https://testserver") as c:
+        conn = c.post("/api/connections", json={"provider": "mock", "label": "tool-fidelity"}).json()
+        db = SessionLocal()
+        ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
+        db.close()
+        tid = _seed_tool_chain(ws_id)
+
+        r = c.post("/api/replay", json={
+            "origin_trace_id": tid, "fork_span_id": "f", "provider": "mock", "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "which city? answer TOKYO"}]})
+        assert r.status_code == 200, r.text
+        d = r.json()
+
+        db = SessionLocal()
+        rows = {s.label: s for s in db.query(Run).filter(Run.trace_id == d["new_trace_id"]).all()}
+        db.close()
+        state = {k: (v.result.get("meta") or {}).get("replay_state") for k, v in rows.items()}
+
+        assert state["pick_city"] == "live"
+        # the tool ran on PARIS but the run now says TOKYO
+        assert state["get_weather"] == "diverged", state
+        # and the advice reads weather the tool would no longer have returned
+        assert state["advise"] == "diverged", (
+            f"a span consuming a diverged tool's output must not be badged {state['advise']!r}")
+        assert d.get("reliable") is False
+        assert "diverged" in (d.get("fidelity_warning") or "").lower()

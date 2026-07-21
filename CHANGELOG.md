@@ -4,6 +4,15 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **fix: reconstructed replay presented a wrong run as a faithful one.** Divergence was
+  detected but not propagated: a tool whose input changed was correctly badged **DIVERGED**, yet
+  the next LLM call — reading that tool's now-impossible output — was badged **RECORDED**, and
+  everything after it inherited the same false confidence. Change the city and you'd get the old
+  city's weather advice, presented as what the agent would do. Divergence now cascades through
+  outputs and child spans, a diverged LLM call is no longer re-run (answering from inputs that
+  no longer hold spends your budget to produce a confidently wrong result), and the replay
+  reports `reliable: false` with a `fidelity` breakdown plus a banner on the trace.
+
 - **The trace list updates over SSE instead of polling.** Every viewer refetched the entire
   trace list every 5 seconds, so the cost scaled with viewers and a live run still felt laggy.
   `GET /api/traces/stream` now announces new traces. It's a *notification* channel — it sends

@@ -52,7 +52,14 @@ compare against the original. Two modes:
   - **LIVE** — re-executed with your edit
   - **SAME** — unchanged (before the fork)
   - **RECORDED** — replayed from the original (nothing upstream changed for it)
-  - **DIVERGED** — its input referenced a value that changed (would need a live re-run)
+  - **DIVERGED** — its input referenced a value that changed, so its recorded output is no
+    longer evidence of anything. Divergence **propagates**: any span reading a diverged span's
+    output is diverged too, and a diverged LLM call is *not* re-run, because answering from
+    inputs that no longer hold would spend your budget to produce a confidently wrong result.
+
+A replay containing any diverged span is a **hypothesis, not a reproduction** — the response
+carries `reliable: false` with a `fidelity` breakdown, and the trace view says so at the top.
+ProveKit cannot re-run your tools (it doesn't own them); **webhook** mode is the exact re-run.
 - **Webhook** (exact) — ProveKit POSTs the fork override to your project's **replay endpoint** and
   ingests the real re-run your agent returns. Set the URL in **Settings → Replay webhook**.
 

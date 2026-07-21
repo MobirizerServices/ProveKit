@@ -99,8 +99,18 @@ def _messages(span_request: dict) -> list[dict]:
 
 
 def _text_of(span_result: dict) -> str:
+    """Extract the clean output text a downstream span would actually have consumed. A captured
+    completion can itself be message-shaped JSON (e.g. a reconstructed single-item
+    [{"role":"assistant","content":"..."}] from indexed OpenInference output_messages) — using
+    the raw JSON string as the substitution key would never match its plain-text substring in a
+    downstream input, silently breaking the threading this function's result feeds into."""
     r = span_result or {}
-    return r.get("text") or (r.get("output") if isinstance(r.get("output"), str) else "") or ""
+    raw = r.get("text") or (r.get("output") if isinstance(r.get("output"), str) else "") or ""
+    if isinstance(raw, str) and raw.strip().startswith(("[", "{")):
+        msgs = _messages({"input": raw})
+        if msgs and any(m["content"] for m in msgs):
+            return "\n".join(m["content"] for m in msgs if m["content"])
+    return raw
 
 
 def _apply(subs: dict[str, str], text: str) -> tuple[str, bool]:

@@ -205,6 +205,45 @@ def test_replay_reconstructed_threads_downstream():
         assert "ANALYSIS_ONE" not in decide.request["input"]   # threaded away
 
 
+def test_replay_threading_survives_message_shaped_output():
+    """The fork's captured output can itself be message-shaped JSON (e.g. a reconstructed single
+    [{"role":...,"content":...}] from indexed OpenInference attributes, or any dialect whose
+    completion attribute is naturally an array) — the threading substitution must use the CLEAN
+    text as its key, not the raw JSON blob, or it will never match the plain-text substring a
+    downstream span's input actually contains."""
+    with TestClient(app, base_url="https://testserver") as c:
+        conn = c.post("/api/connections", json={"provider": "mock", "label": "m2"}).json()
+        db = SessionLocal()
+        ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
+        tid = "repmsg" + "0" * 26
+        db.add_all([
+            Run(workspace_id=ws_id, type="agent", label="root", trace_id=tid, span_id="r",
+                parent_span_id="", request={}, result={"text": "final"}),
+            Run(workspace_id=ws_id, type="llm", label="analyze", trace_id=tid, span_id="f",
+                parent_span_id="r", request={"model": "gpt-4o", "input": json.dumps([{"role": "user", "content": "Analyze."}])},
+                # message-shaped output, as otel.py's indexed-attribute reconstruction produces
+                result={"text": json.dumps([{"role": "assistant", "content": "ANALYSIS_ONE"}]),
+                        "meta": {"usage": {"input_tokens": 10, "output_tokens": 3}}}),
+            Run(workspace_id=ws_id, type="llm", label="decide", trace_id=tid, span_id="d",
+                parent_span_id="r", request={"model": "gpt-4o", "input": json.dumps([{"role": "user", "content": "Given ANALYSIS_ONE, decide."}])},
+                result={"text": "DECISION_X", "meta": {"usage": {"input_tokens": 8, "output_tokens": 2}}}),
+        ])
+        db.commit(); db.close()
+
+        r = c.post("/api/replay", json={
+            "origin_trace_id": tid, "fork_span_id": "f", "provider": "mock", "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "Analyze MORE carefully."}]})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        db = SessionLocal()
+        states = {s.label: (s.result.get("meta") or {}).get("replay_state")
+                  for s in db.query(Run).filter(Run.trace_id == d["new_trace_id"]).all()}
+        db.close()
+        # "decide" must be threaded to LIVE, not left as "recorded" — confirms the substitution
+        # key was the clean text, not the raw JSON wrapper.
+        assert states == {"root": "unchanged", "analyze": "live", "decide": "live"}
+
+
 def test_replay_missing_trace_404():
     with TestClient(app, base_url="https://testserver") as c:
         r = c.post("/api/replay", json={"origin_trace_id": "nope", "fork_span_id": "x",

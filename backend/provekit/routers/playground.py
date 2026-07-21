@@ -235,15 +235,18 @@ _EXP_ITEM_CAP = 100   # bound cost: score at most N items per run
 
 def _fill(messages: list[dict], item_input: str, item_expected: str) -> list[dict]:
     """Substitute {{input}} / {{expected}} in the prompt for a dataset item. If the prompt
-    references neither, append the item input as a trailing user message so it still runs."""
-    out, has_input = [], False
+    references NEITHER placeholder (a plain, non-templated prompt), append the item input as a
+    trailing user message so it still runs against real data. A prompt that references only
+    {{expected}} (e.g. a grading-style template) is left as-is — it doesn't need item_input
+    appended too, which would otherwise silently add an unrequested extra message."""
+    out, referenced = [], False
     for m in messages:
         c = m["content"]
-        if "{{input}}" in c:
-            has_input = True
+        if "{{input}}" in c or "{{expected}}" in c:
+            referenced = True
         c = c.replace("{{input}}", item_input).replace("{{expected}}", item_expected)
         out.append({"role": m["role"], "content": c})
-    if not has_input:
+    if not referenced:
         out.append({"role": "user", "content": item_input})
     return out
 

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from provekit.database import SessionLocal
 from provekit.main import app
 from provekit.models import Dataset, DatasetItem, ProviderConnection, Run, Workspace
+from provekit.routers.playground import _fill
 from provekit.services import llm_client
 from provekit.services import replay as replay_mod
 from provekit.services.sealing import seal, unseal
@@ -327,6 +328,30 @@ def test_replay_webhook_unconfigured_404():
         r = c.post("/api/replay", json={"origin_trace_id": "o", "fork_span_id": "f",
                    "model": "gpt-4o", "messages": [{"role": "user", "content": "x"}], "mode": "webhook"})
         assert r.status_code == 404
+
+
+def test_fill_expected_only_prompt_does_not_append_extra_message():
+    """A prompt that references only {{expected}} (e.g. a grading-style template) must be left
+    as-is — it doesn't need item_input appended too, which would silently add an unrequested
+    extra user message and change what's actually sent to the model."""
+    r = _fill([{"role": "user", "content": "Grade this: {{expected}}"}], "real input", "right answer")
+    assert r == [{"role": "user", "content": "Grade this: right answer"}]
+
+
+def test_fill_input_only_prompt_unchanged():
+    r = _fill([{"role": "user", "content": "Answer: {{input}}"}], "real input", "right answer")
+    assert r == [{"role": "user", "content": "Answer: real input"}]
+
+
+def test_fill_plain_prompt_appends_input_as_fallback():
+    r = _fill([{"role": "system", "content": "You are a bot."}, {"role": "user", "content": "Hello."}],
+              "real input", "right answer")
+    assert r[-1] == {"role": "user", "content": "real input"} and len(r) == 3
+
+
+def test_fill_both_placeholders():
+    r = _fill([{"role": "user", "content": "Q: {{input}} Expected: {{expected}}"}], "real input", "right answer")
+    assert r == [{"role": "user", "content": "Q: real input Expected: right answer"}]
 
 
 def test_playground_experiment_over_dataset():

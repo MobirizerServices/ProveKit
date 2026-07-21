@@ -27,7 +27,7 @@ Status: ✅ present · ◑ partial · ✖ missing.
 The category ProveKit is *judged* on. An observability tool that silently drops or duplicates
 data is worse than none — it produces confident wrong answers.
 
-1. **Idempotent ingest.** `Run.span_id` has no unique constraint ([models.py:105](../backend/provekit/models.py)), and OTLP exporters retry on 5xx — a retried batch silently duplicates every span in it, inflating counts, tokens and cost. Dedupe on `(trace_id, span_id)`. 🔴 S ✖
+1. **Idempotent ingest.** ~~A retried OTLP batch duplicated every span in it, inflating counts, tokens and cost.~~ Deduped on `(workspace, trace_id, span_id)` behind a partial unique index; keyed by trace because OTel scopes span-id uniqueness to a trace. 🔴 S ✅
 2. **Durable accept.** Ingest writes straight through to the DB; a write failure loses the batch with no retry path. Accept → queue → persist, so a DB blip doesn't destroy data. 🔴 M ✖
 3. **Orphan & late-span handling.** A child whose parent hasn't landed yet (or never will, if the process died) should render as a rooted partial tree with an explicit marker, not vanish from the flow. 🔴 M ◑
 4. **Incomplete-trace indicator.** A root span with no end time means the process died mid-run — today it's indistinguishable from a fast one. Badge it; it's often the most interesting trace in the list. 🔴 S ✖
@@ -46,7 +46,7 @@ data is worse than none — it produces confident wrong answers.
 
 Everything here is fine on a demo instance and breaks on a real one.
 
-15. **Cursor pagination on the trace list.** A hard `limit` capped at 200 ([traces.py:104](../backend/provekit/routers/traces.py)) with no offset or cursor — beyond 200 traces, older runs are simply unreachable in the UI. 🔴 M ✖
+15. **Cursor pagination on the trace list.** ~~Beyond 200 traces, older runs were unreachable.~~ `cursor=<last id>` on `/api/traces` and `/v1/traces`; keyset rather than offset so a continuously-filling list can't repeat or skip rows. 🔴 M ✅
 16. **Pre-aggregated metric rollups.** `/api/metrics` scans raw `Run` rows per request; a 90-day window on a busy project is a full table scan on every dashboard load. Roll up hourly. 🔴 L ✖
 17. **Indexed full-text search.** Search is `ILIKE '%term%'` over `Run.result` — unindexable, and it degrades linearly. Postgres `tsvector` + GIN. 🔴 M ◑
 18. **Index audit.** `span_id` is unindexed; several hot filters aren't covered. Capture query plans for the top 10 paths and fix what's sequential. 🔴 S ✖
@@ -117,7 +117,7 @@ The strongest differentiator ProveKit has — edit-and-re-run, reconstructed rep
 ProveKit is currently a single-player tool with multi-user auth.
 
 65. **Comment threads with @mentions.** Span notes exist but are flat and silent — no replies, no notification, no resolve. 🔴 M ◑
-66. **Slack / Discord alerting.** Alerts email only ([alerts.py:112](../backend/provekit/routers/alerts.py)); nobody runs incident response over email. 🔴 S ✖
+66. **Slack / Discord alerting.** ~~Alerts emailed only.~~ A rule can carry a webhook URL, SSRF-guarded and validated at save time, with the body shape chosen per host. 🔴 S ✅
 67. **PagerDuty / Opsgenie.** For anyone treating agent failures as on-call. 🟡 S ✖
 68. **Saved views.** Filter + time-window + search combinations are ephemeral; teams want "our failing checkout traces" as a shareable URL. 🔴 S ✖
 69. **Issue-tracker handoff.** One click from a trace to a GitHub issue with the shared link and context embedded. 🟡 S ✖
@@ -132,7 +132,7 @@ ProveKit is currently a single-player tool with multi-user auth.
 What running ProveKit *for other people* requires. The [admin console](ADMIN.md) is the seed of this; it's currently two tables and a toggle.
 
 75. **Audit log.** No record of who granted superuser, revoked a key, deleted a project, or viewed a trace. Called out in ADMIN.md as a known gap, and it blocks every compliance conversation. 🔴 M ✖
-76. **Admin pagination & search.** `/api/admin/users` and `/projects` return every row unpaginated — fine at 50 users, unusable at 5,000. 🔴 S ✖
+76. **Admin pagination & search.** ~~Both endpoints returned every row.~~ `limit`/`offset`/`q` with page-scoped aggregates and a console pager. 🔴 S ✅
 77. **SSO — OIDC / SAML.** Email+password only. The hard gate on any company adopting a self-hosted tool. 🔴 L ✖
 78. **SCIM provisioning.** Deprovisioning a departed employee is manual today. 🟡 L ✖
 79. **Visible quotas.** Per-project ingest limits and spend caps exist but aren't surfaced — a throttled project looks broken rather than capped. 🔴 M ◑
@@ -170,11 +170,11 @@ ProveKit is OTel-native, which is real leverage — but the surface a team build
 Ordered by credibility-per-unit-effort, weighted toward the things whose *absence* would end an
 evaluation:
 
-1. **Idempotent ingest** (#1) — a correctness bug that silently inflates every number in the product. One constraint plus an upsert. 🔴 S
-2. **Cursor pagination** (#15) — traces past the 200th are currently unreachable. Embarrassing at exactly the moment someone is succeeding with the tool. 🔴 M
+1. ~~**Idempotent ingest** (#1)~~ — **shipped.** A correctness bug that silently inflated every number in the product. 🔴 S
+2. ~~**Cursor pagination** (#15)~~ — **shipped.** Traces past the 200th were unreachable, exactly when someone starts succeeding with the tool. 🔴 M
 3. **`provekit doctor`** (#28) — fail-open is right for production and brutal for onboarding; silence is the #1 first-run failure. 🔴 S
 4. **Audit log** (#75) — the cheapest item that unblocks enterprise conversations, and already a documented gap. 🔴 M
-5. **Slack alerting** (#66) — alerts that email nobody reads aren't alerts. Genuinely a day of work. 🔴 S
+5. ~~**Slack alerting** (#66)~~ — **shipped.** Alerts that email nobody reads aren't alerts. 🔴 S
 6. **Streaming trace updates** (#21) — replaces the 5s poll and makes live runs feel live. 🔴 M
 7. **Tool re-execution / VCR replay** (#53–54) — closes the fidelity gap in ProveKit's best differentiator. 🔴 L
 8. **Statistical significance in experiments** (#41) — without it, the eval stack invites teams to ship on noise. 🔴 M

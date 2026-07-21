@@ -52,7 +52,7 @@ Everything here is fine on a demo instance and breaks on a real one.
 18. **Index audit.** `span_id` is unindexed; several hot filters aren't covered. Capture query plans for the top 10 paths and fix what's sequential. 🔴 S ✖
 19. **Time-partitioned span storage.** Spans grow without bound and dominate the schema. Partition by time so retention becomes a partition drop, not a delete storm. 🟡 L ✖
 20. **Payload offload.** Big inputs/outputs live inline in the row. Move them to object storage past a threshold and keep rows narrow. 🟡 L ✖
-21. **Streaming trace updates.** The portal polls every 5s; a live agent run feels laggy and the poll cost scales with viewers. SSE or WebSocket push. 🔴 M ✖
+21. **Streaming trace updates.** ~~Every viewer refetched the whole list every 5s.~~ `GET /api/traces/stream` (SSE) announces new traces and the client refetches through its normal path; a 30s poll remains as a fallback. 🔴 M ✅
 22. **Large-trace virtualization.** A 1000-span trace renders every node. Virtualize the tree and waterfall. 🔴 M ✖
 23. **Ingest backpressure.** No queue between accept and write — a traffic spike becomes DB pressure and 5xx (which, per #1, then duplicate). 🔴 M ✖
 24. **SDK-side durable buffer.** If the portal is unreachable the batch is dropped by design (fail-open). A bounded on-disk buffer would make brief outages lossless without ever blocking the app. 🟡 M ✖
@@ -82,7 +82,7 @@ Datasets, scorers, experiments and a CI gate all exist. What's missing is everyt
 
 39. **Online production evals.** Scoring only happens offline against a dataset. Sample live traces and score them async — the highest-value eval loop, and the one that needs no ground truth. 🔴 L ✖
 40. **Human annotation queues.** A review inbox with a labelling UI. Feedback capture exists (👍/👎 + comment); queue-based review doesn't. 🔴 M ◑
-41. **Statistical significance.** Experiment compare shows per-scorer means with no variance, CI, or sample-size guidance — inviting teams to ship on noise. 🔴 M ◑
+41. **Statistical significance.** ~~Per-scorer means with no variance, CI or sample-size guidance.~~ n / sd / 95% interval per scorer, plus a seeded permutation test paired on dataset item, with an explicit caution when the sample is too small to conclude anything. 🔴 M ✅
 42. **Trajectory scorers.** Agent quality is about *path* (right tools, right order, no loops), not just final output. ProveKit captures the tree — it's uniquely placed to score it. 🟡 L ✖
 43. **RAG scorers.** Faithfulness, context relevance, answer relevance over retrieved chunks. 🟡 M ✖
 44. **Multi-turn / session eval.** Datasets are single `{input, expected}` rows; sessions are captured but not evaluable as conversations. 🟡 L ✖
@@ -175,9 +175,9 @@ evaluation:
 3. ~~**`provekit doctor`** (#28)~~ — **shipped.** Fail-open is right for production and brutal for onboarding; silence was the #1 first-run failure. 🔴 S
 4. ~~**Audit log** (#75)~~ — **shipped** for changes (reads still open). The cheapest item that unblocks enterprise conversations. 🔴 M
 5. ~~**Slack alerting** (#66)~~ — **shipped.** Alerts that email nobody reads aren't alerts. 🔴 S
-6. **Streaming trace updates** (#21) — replaces the 5s poll and makes live runs feel live. 🔴 M
+6. ~~**Streaming trace updates** (#21)~~ — **shipped.** Replaces the 5s poll and makes live runs feel live. 🔴 M
 7. **Tool re-execution / VCR replay** (#53–54) — closes the fidelity gap in ProveKit's best differentiator. 🔴 L
-8. **Statistical significance in experiments** (#41) — without it, the eval stack invites teams to ship on noise. 🔴 M
+8. ~~**Statistical significance in experiments** (#41)~~ — **shipped.** Without it, the eval stack invited teams to ship on noise. 🔴 M
 9. **TypeScript SDK** (#87) — the largest single expansion in addressable users. 🔴 L
 10. **Metric rollups** (#16) — the dashboard is the most-loaded page and the first thing to fall over. 🔴 L
 

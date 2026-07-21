@@ -4,6 +4,16 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **A TypeScript SDK.** OTLP ingest always accepted any language, but there was no idiomatic
+  client — a large share of agent code is TypeScript, and "point your exporter at this URL" is
+  not an integration story. `clients/typescript` adds `pk.trace()` / `pk.span()` with context
+  carried across `await` by `AsyncLocalStorage`, plus `score()`, `flush()`/`shutdown()` for
+  serverless, and `diagnose()` as the counterpart of `provekit-doctor`. **Zero runtime
+  dependencies** and the same OTLP/JSON wire format as the Python SDK, so one ingest path and
+  one span mapper serve both. Delivery is deliberate about failure: a 5xx is retried because
+  ingest is idempotent, a 4xx is dropped because replaying it can only fail again, and the queue
+  is bounded so a portal outage can't become your process's memory problem.
+
 - **fix: reconstructed replay presented a wrong run as a faithful one.** Divergence was
   detected but not propagated: a tool whose input changed was correctly badged **DIVERGED**, yet
   the next LLM call — reading that tool's now-impossible output — was badged **RECORDED**, and

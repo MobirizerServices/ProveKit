@@ -34,6 +34,18 @@ on a dashboard. This is the full feature inventory.
   this checks each in turn and names the fix. `--send` posts one probe span; exits non-zero on
   a real failure so setup scripts and CI can gate on it.
 
+## TypeScript SDK (`provekit` on npm)
+
+- **`pk.trace(name, fn)` / `pk.span(name, fn)`** — one call is one trace; sub-steps nest beneath
+  it, with context carried across `await` via `AsyncLocalStorage`.
+- **`pk.score()`**, **`pk.currentTraceId()`**, **`pk.flush()` / `pk.shutdown()`** (call before a
+  serverless handler returns), and **`pk.diagnose()`** — the counterpart of `provekit-doctor`.
+- **Zero runtime dependencies** (Node 18+ `fetch`/`AsyncLocalStorage`), fail-open, and the same
+  OTLP/JSON wire format as the Python SDK, so one ingest path serves both.
+- Bounded queue with batch + interval flush; 5xx retried (ingest is idempotent), 4xx dropped.
+- See [clients/typescript](clients/typescript/README.md). Provider auto-instrumentation is not
+  wired yet — wrap calls with `pk.span()`.
+
 ## Ingest
 
 - **OTLP/HTTP JSON ingest** at `/v1/traces` — accepts any OpenTelemetry exporter, any language.

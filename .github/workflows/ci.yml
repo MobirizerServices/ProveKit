@@ -51,6 +51,25 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  sdk-js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # No lockfile to cache: the package has zero runtime dependencies, and `npm i` here only
+      # fetches the TypeScript compiler and Node types.
+      - name: Install build tooling
+        working-directory: clients/typescript
+        run: npm install --no-audit --no-fund
+      - name: Build
+        working-directory: clients/typescript
+        run: npx tsc -p tsconfig.json
+      - name: Test
+        working-directory: clients/typescript
+        run: npx tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js
+
   docker:
     runs-on: ubuntu-latest
     steps:

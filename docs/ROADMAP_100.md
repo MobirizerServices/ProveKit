@@ -148,7 +148,7 @@ What running ProveKit *for other people* requires. The [admin console](ADMIN.md)
 
 ProveKit is OTel-native, which is real leverage — but the surface a team builds *against* is still one Python package and a portal.
 
-87. **TypeScript SDK.** OTLP ingest accepts any language, but there's no idiomatic TS `pk.trace`. A large share of agent code is TypeScript; this is the single biggest reach expansion. 🔴 L ✖
+87. **TypeScript SDK.** ~~No idiomatic TS client.~~ `clients/typescript` ships `trace`/`span`/`score`/`flush`/`diagnose`, zero runtime dependencies, same wire format as Python. Provider auto-instrumentation still to come. 🔴 L ◑
 88. **Thin Go / Java guides.** No SDK needed — document the OTLP exporter config that produces correctly-classified spans. 🟡 S ✖
 89. **OTel convention conformance.** Track the evolving `gen_ai` semantic conventions and contribute the mapping upstream — cheap credibility for an OTel-native tool. 🟡 M ◑
 90. **OpenAPI spec + generated clients.** The read API is documented in prose; a spec makes it programmable and testable. 🔴 S ✖
@@ -178,7 +178,7 @@ evaluation:
 6. ~~**Streaming trace updates** (#21)~~ — **shipped.** Replaces the 5s poll and makes live runs feel live. 🔴 M
 7. **Tool re-execution / VCR replay** (#53–54) — closes the fidelity gap in ProveKit's best differentiator. 🔴 L
 8. ~~**Statistical significance in experiments** (#41)~~ — **shipped.** Without it, the eval stack invited teams to ship on noise. 🔴 M
-9. **TypeScript SDK** (#87) — the largest single expansion in addressable users. 🔴 L
+9. ~~**TypeScript SDK** (#87)~~ — **shipped** (auto-instrumentation still open). The largest single expansion in addressable users. 🔴 L
 10. **Metric rollups** (#16) — the dashboard is the most-loaded page and the first thing to fall over. 🔴 L
 
 **What I'd deliberately defer:** SCIM (#78), Terraform (#97), residency (#86), custom renderers

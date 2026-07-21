@@ -30,13 +30,13 @@ data is worse than none — it produces confident wrong answers.
 1. **Idempotent ingest.** ~~A retried OTLP batch duplicated every span in it, inflating counts, tokens and cost.~~ Deduped on `(workspace, trace_id, span_id)` behind a partial unique index; keyed by trace because OTel scopes span-id uniqueness to a trace. 🔴 S ✅
 2. **Durable accept.** Ingest writes straight through to the DB; a write failure loses the batch with no retry path. Accept → queue → persist, so a DB blip doesn't destroy data. 🔴 M ✖
 3. **Orphan & late-span handling.** A child whose parent hasn't landed yet (or never will, if the process died) should render as a rooted partial tree with an explicit marker, not vanish from the flow. 🔴 M ◑
-4. **Incomplete-trace indicator.** A root span with no end time means the process died mid-run — today it's indistinguishable from a fast one. Badge it; it's often the most interesting trace in the list. 🔴 S ✖
+4. **Incomplete-trace indicator.** ~~A run whose root never arrived was missing from the list entirely, not merely unbadged.~~ Rootless traces are listed via a stand-in span and badged **partial**, distinct from *failed*. 🔴 S ✅
 5. **Clock-skew defence.** The waterfall positions bars by client-supplied start offsets; a skewed client produces a nonsensical chart with no warning. Detect skew against server receipt time and flag it. 🟡 M ✖
 6. **Documented truncation policy.** Large payloads collapse in the UI, but what actually got *stored* vs. dropped is unstated. Truncate at a documented boundary, store a marker, never silently lose the tail. 🔴 S ◑
 7. **Redaction test corpus.** [redact.py](../backend/provekit/services/redact.py) is regex-based, so it has both false positives (mangling real output) and false negatives (leaked PII). Build a labelled corpus, measure both rates, publish them. 🔴 M ◑
 8. **Redaction provenance.** Show "redacted" on any span that was masked, so a confusing output is traceable to the masker rather than blamed on the model. 🟡 S ✖
 9. **Versioned price table.** [pricing.py](../backend/provekit/services/pricing.py) is hardcoded and drifts as vendors reprice. Version it, stamp each span with the version used, and make historical cost reproducible. 🔴 M ◑
-10. **Estimated-vs-reported tokens.** When a provider omits usage, ProveKit estimates — but the number renders identically to a reported one. Mark estimates; never let a guess masquerade as measurement. 🔴 S ◑
+10. **Estimated-vs-reported tokens.** ~~Cost was priced from a fabricated 50/50 input/output split, and a call reporting no usage looked like one reporting zero.~~ The real split now reaches the client, and `usage_coverage` labels a partial estimate. 🔴 S ✅
 11. **Dialect conformance suite.** ~20 instrumentors across 3 attribute dialects, one regression test. Capture golden OTLP payloads per instrumentor and assert the mapping — this is where genericness bugs keep coming from (see #177–#182). 🔴 M ◑
 12. **Migration integrity tests.** 9 migrations run automatically on boot against production data; nothing tests upgrade (or downgrade) on a *populated* database. 🔴 M ✖
 13. **Observable retention.** Pruning silently deletes at a cap. Report what was pruned and when, so "my trace is missing" has an answer. 🟡 S ◑
@@ -64,9 +64,9 @@ Everything here is fine on a demo instance and breaks on a real one.
 The single strongest lever on adoption. ProveKit's pitch is "one import" — the surrounding path should be equally short.
 
 27. **Hosted free tier.** Self-host is the only path to a key today; most people evaluate before they deploy. Signup → project key in under 60 seconds. 🔴 L ◑
-28. **`provekit doctor`.** The worst onboarding failure is silence — fail-open means a wrong key, unset endpoint, or missing extra all look identical to "working". A diagnostic that names the cause. 🔴 S ✖
+28. **`provekit doctor`.** ~~Every misconfiguration looked identical to "working".~~ `provekit-doctor` checks config, packages, instrumentation coverage, reachability and auth, naming the fix for each; non-zero exit on real failure. 🔴 S ✅
 29. **Framework quickstarts.** Copy-paste starting points for LangGraph, CrewAI, and LlamaIndex, each verified end to end. The examples exist; the docs don't route people to them by framework. 🔴 S ◑
-30. **Instrumentation coverage report.** Tell the user "LangChain is installed but its extra isn't" instead of leaving them to wonder why spans are missing. 🟡 S ✖
+30. **Instrumentation coverage report.** ~~No way to see which installed libraries aren't instrumented.~~ Reported by `provekit-doctor`; not yet surfaced in the portal. 🟡 S ◑
 31. **Diagnostic empty state.** The "listening for your first trace…" state is good; make it say *why* nothing has arrived (no key seen, key seen but no spans, spans rejected). 🔴 S ◑
 32. **Preloaded sample project.** A new account should have traces to click before it has an integration. `provekit-demo` does this from the CLI — do it server-side at signup. 🟡 S ◑
 33. **Versioned docs site.** Docs are markdown in the repo; there's no searchable, versioned site, which is table-stakes for evaluation. 🔴 M ✖
@@ -131,7 +131,7 @@ ProveKit is currently a single-player tool with multi-user auth.
 
 What running ProveKit *for other people* requires. The [admin console](ADMIN.md) is the seed of this; it's currently two tables and a toggle.
 
-75. **Audit log.** No record of who granted superuser, revoked a key, deleted a project, or viewed a trace. Called out in ADMIN.md as a known gap, and it blocks every compliance conversation. 🔴 M ✖
+75. **Audit log.** ~~No record of who granted superuser, revoked a key, or deleted a project.~~ `audit_logs` records actor/action/target/IP for privileged changes, snapshotted so a record outlives its subject. Read auditing still open. 🔴 M ◑
 76. **Admin pagination & search.** ~~Both endpoints returned every row.~~ `limit`/`offset`/`q` with page-scoped aggregates and a console pager. 🔴 S ✅
 77. **SSO — OIDC / SAML.** Email+password only. The hard gate on any company adopting a self-hosted tool. 🔴 L ✖
 78. **SCIM provisioning.** Deprovisioning a departed employee is manual today. 🟡 L ✖
@@ -172,8 +172,8 @@ evaluation:
 
 1. ~~**Idempotent ingest** (#1)~~ — **shipped.** A correctness bug that silently inflated every number in the product. 🔴 S
 2. ~~**Cursor pagination** (#15)~~ — **shipped.** Traces past the 200th were unreachable, exactly when someone starts succeeding with the tool. 🔴 M
-3. **`provekit doctor`** (#28) — fail-open is right for production and brutal for onboarding; silence is the #1 first-run failure. 🔴 S
-4. **Audit log** (#75) — the cheapest item that unblocks enterprise conversations, and already a documented gap. 🔴 M
+3. ~~**`provekit doctor`** (#28)~~ — **shipped.** Fail-open is right for production and brutal for onboarding; silence was the #1 first-run failure. 🔴 S
+4. ~~**Audit log** (#75)~~ — **shipped** for changes (reads still open). The cheapest item that unblocks enterprise conversations. 🔴 M
 5. ~~**Slack alerting** (#66)~~ — **shipped.** Alerts that email nobody reads aren't alerts. 🔴 S
 6. **Streaming trace updates** (#21) — replaces the 5s poll and makes live runs feel live. 🔴 M
 7. **Tool re-execution / VCR replay** (#53–54) — closes the fidelity gap in ProveKit's best differentiator. 🔴 L

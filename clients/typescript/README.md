@@ -34,12 +34,34 @@ That produces one trace with three nested spans, timings, inputs/outputs, and fa
 - **Same wire format as the Python SDK** (OTLP/JSON to `/v1/traces`), so one ingest path and one
   span mapper serve both, and a mixed-language team sees one consistent trace.
 
+## Provider auto-instrumentation
+
+Wrap your client once and every completion becomes an LLM span with model, messages, tokens,
+finish reason, and cost:
+
+```ts
+const openai = pk.observeOpenAI(new OpenAI());
+const anthropic = pk.observeAnthropic(new Anthropic());
+```
+
+Streaming is handled: the span stays open until you finish draining the iterator, accumulating
+the text and both token counts — and it closes even if you `break` early or the stream fails
+mid-flight, so a trace is never left hanging.
+
+This wraps rather than monkey-patching your imports. In ESM there is no interceptable `require`,
+and a loader hook has to be installed before everything else and breaks under bundlers. One
+visible line at the call site works identically in ESM, CJS, bundled and serverless — and when
+the alternative failure mode is a silently untraced app, visible is the right trade. The wrapper
+is a `Proxy`: your client isn't mutated, and methods we don't know about pass straight through.
+
 ## API
 
 | | |
 |---|---|
 | `init(options?)` | Configure; returns whether tracing is active. Reads env by default. |
 | `trace(name, fn, options?)` | Wrap an entrypoint — one call, one trace. |
+| `observeOpenAI(client)` / `observeAnthropic(client)` | Capture every completion as an LLM span. |
+| `startSpan(name, options?)` | A leaf span you end yourself (for work that outlives the call). |
 | `span(name, fn, options?)` | Capture a sub-step; nests under the active trace. |
 | `score(name, {score, value, comment})` | Attach feedback to the current trace. |
 | `currentTraceId()` | Correlate your own logs with the trace. |
@@ -82,9 +104,10 @@ There is no background flush you can rely on when the runtime freezes between in
 
 ## Not yet
 
-Auto-instrumentation of provider SDKs (`openai`, `@anthropic-ai/sdk`) and frameworks —
-today you wrap calls with `pk.span()` yourself. Browser support is out of scope while context
-propagation depends on `AsyncLocalStorage`.
+Framework-level instrumentation (LangChain.js, the Vercel AI SDK, Mastra) — the Python SDK
+auto-instruments around twenty libraries; here it's OpenAI and Anthropic, and everything else is
+`pk.span()`. Browser support is out of scope while context propagation depends on
+`AsyncLocalStorage`.
 
 ## Development
 

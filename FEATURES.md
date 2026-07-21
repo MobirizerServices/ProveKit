@@ -43,8 +43,12 @@ on a dashboard. This is the full feature inventory.
 - **Zero runtime dependencies** (Node 18+ `fetch`/`AsyncLocalStorage`), fail-open, and the same
   OTLP/JSON wire format as the Python SDK, so one ingest path serves both.
 - Bounded queue with batch + interval flush; 5xx retried (ingest is idempotent), 4xx dropped.
-- See [clients/typescript](clients/typescript/README.md). Provider auto-instrumentation is not
-  wired yet — wrap calls with `pk.span()`.
+- **Provider auto-instrumentation** — `pk.observeOpenAI(client)` / `pk.observeAnthropic(client)`
+  turn every completion into an LLM span with model, messages, tokens, finish reason and cost.
+  **Streaming supported**: the span closes when the iterator is drained, and still closes on an
+  early `break` or a mid-stream failure. A `Proxy`, so your client isn't mutated.
+- See [clients/typescript](clients/typescript/README.md). Framework-level instrumentation
+  (LangChain.js, Vercel AI SDK) is not wired yet — use `pk.span()`.
 
 ## Ingest
 

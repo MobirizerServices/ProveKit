@@ -4,6 +4,15 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **TypeScript provider auto-instrumentation.** `pk.observeOpenAI(client)` and
+  `pk.observeAnthropic(client)` make every completion an LLM span — model, messages, tokens,
+  finish reason, cost — which is what turns the TS SDK from "wrap your own calls" into the
+  one-line story the Python SDK has. Streaming is properly handled: the span stays open until
+  the caller drains the iterator, accumulating text and both token counts, and closes on an
+  early `break` or a mid-stream error so a trace is never left hanging. It wraps via `Proxy`
+  rather than patching imports — ESM has no interceptable `require`, and a visible line at the
+  call site beats a loader hook that silently stops working under a bundler.
+
 - **A TypeScript SDK.** OTLP ingest always accepted any language, but there was no idiomatic
   client — a large share of agent code is TypeScript, and "point your exporter at this URL" is
   not an integration story. `clients/typescript` adds `pk.trace()` / `pk.span()` with context

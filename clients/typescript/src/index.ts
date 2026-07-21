@@ -110,7 +110,7 @@ export function diagnose(): { active: boolean; problems: string[] } {
 
 // ---------------------------------------------------------------- span model
 
-type AttrValue = string | number | boolean | null | undefined;
+export type AttrValue = string | number | boolean | null | undefined;
 
 interface RawSpan {
   name: string;
@@ -271,6 +271,61 @@ export function span<T>(
   return record(name, options.operation ?? "step", fn, options);
 }
 
+/**
+ * A span you end yourself. Needed when the work outlives the call that started it — a streamed
+ * completion is only finished once the caller has drained the iterator.
+ *
+ * Leaf spans only: this deliberately does not establish async context, so anything traced
+ * inside would attach to the *parent*, not to this. Use `span()` for work with children.
+ */
+export interface OpenSpan {
+  setAttributes(attrs: Record<string, AttrValue>): void;
+  /** Close the span. Pass an error to mark it failed. */
+  end(error?: unknown): void;
+}
+
+/** Start a leaf span that the caller ends. Returns null when tracing is inactive. */
+export function startSpan(name: string, options: SpanOptions = {}): OpenSpan | null {
+  if (!cfg.active) return null;
+  const parent = store.getStore();
+  const ctx: Ctx = {
+    traceId: parent?.traceId ?? hex(16),
+    spanId: hex(8),
+    sessionId: options.sessionId ?? parent?.sessionId,
+  };
+  const start = nowNanos();
+  const attrs: { key: string; value: Record<string, unknown> }[] = [
+    { key: "gen_ai.operation.name", value: attr(options.operation ?? "step") },
+  ];
+  if (ctx.sessionId) attrs.push({ key: "session.id", value: attr(ctx.sessionId) });
+  for (const [k, v] of Object.entries(options.attributes ?? {})) {
+    attrs.push({ key: k, value: attr(v) });
+  }
+  let ended = false;
+  return {
+    setAttributes(more) {
+      for (const [k, v] of Object.entries(more)) attrs.push({ key: k, value: attr(v) });
+    },
+    end(error) {
+      if (ended) return;          // a stream can be closed twice (break + finally)
+      ended = true;
+      const message = error == null
+        ? undefined
+        : error instanceof Error ? error.message : String(error);
+      enqueue({
+        name,
+        traceId: ctx.traceId,
+        spanId: ctx.spanId,
+        parentSpanId: parent?.spanId ?? "",
+        startTimeUnixNano: start,
+        endTimeUnixNano: nowNanos(),
+        status: message ? { code: 2, message: message.slice(0, 500) } : { code: 1 },
+        attributes: attrs,
+      });
+    },
+  };
+}
+
 /** The active trace id, or null outside a trace — useful for correlating your own logs. */
 export function currentTraceId(): string | null {
   return store.getStore()?.traceId ?? null;
@@ -361,3 +416,5 @@ export function _reset(): void {
   queue.length = 0;
   dropped = 0;
 }
+
+export { observeAnthropic, observeOpenAI } from "./instrument.js";

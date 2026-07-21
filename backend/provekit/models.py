@@ -234,6 +234,30 @@ class Prompt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class AuditLog(Base):
+    """An append-only record of a privileged change: who did what, to what, when.
+
+    Deliberately denormalised. `actor_email` and `target_label` are snapshots taken at write
+    time rather than joins, because the point of an audit trail is to survive the thing it
+    describes — deleting a user or a project must not erase the evidence that it happened.
+
+    `workspace_id` is nullable: platform-level events (granting superuser) belong to no project.
+    """
+    __tablename__ = "audit_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspaces.id"), nullable=True, index=True)
+    actor_user_id: Mapped[int | None] = mapped_column(nullable=True)
+    actor_email: Mapped[str] = mapped_column(String(255), default="")
+    action: Mapped[str] = mapped_column(String(64), index=True)   # e.g. superuser.grant
+    target_type: Mapped[str] = mapped_column(String(32), default="")   # user | project | key
+    target_id: Mapped[str] = mapped_column(String(64), default="")
+    target_label: Mapped[str] = mapped_column(String(255), default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    ip: Mapped[str] = mapped_column(String(45), default="")            # 45 = max IPv6 literal
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
 class SpanNote(Base):
     """A teammate's note pinned to one span of a trace — inline collaboration on a specific step."""
     __tablename__ = "span_notes"

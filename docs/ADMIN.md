@@ -89,6 +89,7 @@ All four require a superuser session cookie.
 | `GET /api/admin/stats` | the seven deployment-wide counters |
 | `GET /api/admin/users` | one page of users, with `project_count` and effective `is_superuser` |
 | `GET /api/admin/projects` | one page of projects, with owner, member/span counts, retention, `redact_pii` |
+| `GET /api/admin/audit` | one page of audit entries; `action=` filters exactly, `q=` matches actor or target |
 | `PATCH /api/admin/users/{id}` | `{"is_superuser": true｜false}` — grant or revoke the DB flag; `409` if the target is granted by `SUPERUSER_EMAILS`, `400` on self-revoke |
 
 `GET /api/admin/users` returns both `is_superuser` (the effective answer, flag **or** config) and
@@ -132,8 +133,12 @@ requires a *second* operator — or direct database access.
 - **A superuser sees every user's email and every project on the deployment.** They don't get
   project data (traces, keys) through this console, but they can read the DB behind it. Grant it
   the way you'd grant production database access.
-- **There is no audit trail.** Grants and revocations aren't recorded — no log of who promoted
-  whom or when. If you need that, capture it outside ProveKit for now.
+- **The audit trail covers changes, not reads.** Grants, revocations, project deletion and
+  settings, membership, and key lifecycle are recorded with actor, target, IP and timestamp.
+  *Who viewed a trace* is not — that would write a row per page load and bury the privileged
+  events. Records are append-only from the app's side (there is no delete endpoint), but a
+  superuser with database access can still edit the table; ship logs off-box if you need
+  tamper-evidence.
 - **Search is a substring match, not an index.** `q` runs a `LIKE` over email/name, which is
   fine at thousands of rows and will need an index well before millions.
 - **`SUPERUSER_EMAILS` grants on email match alone.** On a deployment where anyone can sign up,

@@ -1,13 +1,15 @@
 """Platform superadmin — a global operator console across every user and project. Gated by
 the superuser flag (or a bootstrap email in config.superuser_emails). This is separate from
 per-project owner settings (see routers.projects)."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import (Dataset, Experiment, Run, User, Workspace, WorkspaceMember, iso_utc)
+from ..models import (AuditLog, Dataset, Experiment, Run, User, Workspace,
+                      WorkspaceMember, iso_utc)
+from ..services import audit
 from ..services.auth import get_current_user, is_bootstrap, is_operator
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -101,9 +103,32 @@ def list_all_projects(limit: int = 50, offset: int = 0, q: str = "",
          "created_at": iso_utc(w.created_at)} for w in rows]}
 
 
+@router.get("/audit")
+def list_audit(limit: int = 50, offset: int = 0, action: str = "", q: str = "",
+               _: User = Depends(require_superuser), db: Session = Depends(get_db)):
+    """The audit trail, newest first. `action` filters exactly (e.g. `superuser.grant`);
+    `q` matches the actor's email or the target's label."""
+    limit, offset = _page(limit, offset)
+    query = db.query(AuditLog)
+    if action.strip():
+        query = query.filter(AuditLog.action == action.strip())
+    if q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(or_(AuditLog.actor_email.ilike(term),
+                                 AuditLog.target_label.ilike(term)))
+    total = query.order_by(None).count()
+    rows = query.order_by(AuditLog.id.desc()).limit(limit).offset(offset).all()
+    return {"total": total, "limit": limit, "offset": offset, "entries": [
+        {"id": r.id, "action": r.action, "actor_email": r.actor_email,
+         "actor_user_id": r.actor_user_id, "workspace_id": r.workspace_id,
+         "target_type": r.target_type, "target_id": r.target_id,
+         "target_label": r.target_label, "detail": r.detail or {}, "ip": r.ip,
+         "created_at": iso_utc(r.created_at)} for r in rows]}
+
+
 @router.patch("/users/{uid}")
-def set_superuser(uid: int, data: _SuperIn, me: User = Depends(require_superuser),
-                  db: Session = Depends(get_db)):
+def set_superuser(uid: int, data: _SuperIn, request: Request,
+                  me: User = Depends(require_superuser), db: Session = Depends(get_db)):
     u = db.get(User, uid)
     if not u:
         raise HTTPException(404, "User not found")
@@ -120,5 +145,9 @@ def set_superuser(uid: int, data: _SuperIn, me: User = Depends(require_superuser
         )
     u.is_superuser = data.is_superuser
     db.commit()
+    # Operator access is the highest-privilege change in the product; if only one thing is
+    # ever audited, it is this.
+    audit.record(db, me, audit.SUPERUSER_GRANT if data.is_superuser else audit.SUPERUSER_REVOKE,
+                 target_type="user", target_id=u.id, target_label=u.email, request=request)
     return {"id": u.id, "is_superuser": u.is_superuser or is_bootstrap(u.email),
             "is_bootstrap": is_bootstrap(u.email)}

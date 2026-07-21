@@ -127,7 +127,11 @@ on a dashboard. This is the full feature inventory.
 - **Per-project data settings** — span retention and PII masking overrides.
 - **Project keys** — create, list, revoke; shown once, stored hashed; last-used tracking.
 - **Admin console** (`/admin`) — a platform-superadmin view of every user and project, gated by a
-  superuser flag or a bootstrap `SUPERUSER_EMAILS` entry. See [docs/ADMIN.md](docs/ADMIN.md).
+  superuser flag or a bootstrap `SUPERUSER_EMAILS` entry. Paged and searchable, with an
+  **audit log** of privileged changes. See [docs/ADMIN.md](docs/ADMIN.md).
+- **Audit trail** — superuser grants/revocations, project deletion and settings changes,
+  membership changes, and key create/revoke, each with actor, target, IP and timestamp. Actor
+  and target are snapshotted so a record outlives the user or project it describes.
 
 ## Marketing site
 

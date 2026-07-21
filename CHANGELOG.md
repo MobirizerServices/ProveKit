@@ -4,6 +4,15 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **An audit trail for privileged changes.** There was no record of who granted superuser,
+  deleted a project, changed retention or PII masking, added a member, or revoked a key — the
+  first thing any security review asks for. `audit_logs` now records actor, action, target, IP
+  and timestamp, readable at `GET /api/admin/audit` and in the console. Actor email and target
+  label are *snapshotted* rather than joined, so deleting a user or project can't erase the
+  evidence that it happened; key events store the display prefix and never the secret; and
+  `record()` never raises, because an audit write that can 500 a legitimate revoke would push
+  operators toward unaudited workarounds.
+
 - **`provekit-doctor` — a diagnostic for the silence.** The SDK is fail-open by design, which
   is right in production and brutal on first run: a wrong key, an unset endpoint, a missing
   `[trace]` extra, an endpoint that already includes `/v1/traces`, and a firewalled portal all

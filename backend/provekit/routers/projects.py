@@ -1,7 +1,7 @@
 """Projects (workspaces) — a user can own/belong to several, each an isolated tenant with
 its own keys, traces, datasets, experiments, and members. The active project is chosen by
 the client via the `X-Project-Id` header (see services.workspace.current_workspace)."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import (Alert, ApiKey, Dataset, DatasetItem, Experiment, ExperimentResult,
                       Feedback, Run, User, Workspace, WorkspaceMember, iso_utc)
+from ..services import audit
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
 
@@ -72,8 +73,8 @@ def create_project(data: _ProjectIn, user: User = Depends(get_current_user),
 
 
 @router.patch("/{pid}")
-def update_project(pid: int, data: _ProjectPatch, user: User = Depends(get_current_user),
-                   db: Session = Depends(get_db)):
+def update_project(pid: int, data: _ProjectPatch, request: Request,
+                   user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Owner-facing per-project settings: name, span retention, and PII masking on ingest."""
     ws = _require_owner(db, pid, user)
     if data.name is not None:
@@ -85,19 +86,32 @@ def update_project(pid: int, data: _ProjectPatch, user: User = Depends(get_curre
     if data.replay_url is not None:
         ws.replay_url = data.replay_url.strip()[:500]
     db.commit()
+    # Retention and PII masking decide what is kept and what is stored in the clear, so a
+    # change to either is exactly the kind of thing a review asks "who did that?" about.
+    changed = {k: v for k, v in
+               {"name": data.name, "retention": data.retention, "redact_pii": data.redact_pii,
+                "replay_url": data.replay_url}.items() if v is not None}
+    audit.record(db, user, audit.PROJECT_UPDATE, workspace_id=ws.id, target_type="project",
+                 target_id=ws.id, target_label=ws.name, detail=changed, request=request)
     return {"id": ws.id, "name": ws.name, "retention": ws.retention, "redact_pii": ws.redact_pii,
             "replay_url": ws.replay_url}
 
 
 @router.delete("/{pid}")
-def delete_project(pid: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_project(pid: int, request: Request, user: User = Depends(get_current_user),
+                   db: Session = Depends(get_db)):
     ws = _require_owner(db, pid, user)
+    name, span_count = ws.name, db.query(Run).filter(Run.workspace_id == ws.id).count()
     # Remove all tenant-scoped data before the project row (SQLite won't cascade for us).
     for model in (ExperimentResult, Experiment, DatasetItem, Dataset, Feedback, Alert, Run, ApiKey,
                   WorkspaceMember):
         db.query(model).filter(model.workspace_id == ws.id).delete(synchronize_session=False)
     db.delete(ws)
     db.commit()
+    # workspace_id is left null: the project it pointed at no longer exists, and an FK to a
+    # deleted row is exactly what would make this record disappear with its subject.
+    audit.record(db, user, audit.PROJECT_DELETE, target_type="project", target_id=pid,
+                 target_label=name, detail={"spans_deleted": span_count}, request=request)
     return {"ok": True}
 
 
@@ -114,8 +128,8 @@ def list_members(pid: int, user: User = Depends(get_current_user), db: Session =
 
 
 @router.post("/{pid}/members")
-def add_member(pid: int, data: _MemberIn, user: User = Depends(get_current_user),
-               db: Session = Depends(get_db)):
+def add_member(pid: int, data: _MemberIn, request: Request,
+               user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     _require_owner(db, pid, user)
     target = db.query(User).filter(func.lower(User.email) == data.email.strip().lower()).first()
     if not target:
@@ -125,12 +139,15 @@ def add_member(pid: int, data: _MemberIn, user: User = Depends(get_current_user)
     role = "owner" if data.role == "owner" else "member"
     db.add(WorkspaceMember(workspace_id=pid, user_id=target.id, role=role))
     db.commit()
+    audit.record(db, user, audit.MEMBER_ADD, workspace_id=pid, target_type="user",
+                 target_id=target.id, target_label=target.email, detail={"role": role},
+                 request=request)
     return {"user_id": target.id, "email": target.email, "name": target.name, "role": role}
 
 
 @router.delete("/{pid}/members/{uid}")
-def remove_member(pid: int, uid: int, user: User = Depends(get_current_user),
-                  db: Session = Depends(get_db)):
+def remove_member(pid: int, uid: int, request: Request,
+                  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     _require_owner(db, pid, user)
     m = is_member(db, pid, uid)
     if not m:
@@ -139,6 +156,11 @@ def remove_member(pid: int, uid: int, user: User = Depends(get_current_user),
                                               WorkspaceMember.role == "owner").count()
     if m.role == "owner" and owners <= 1:
         raise HTTPException(400, "Can't remove the last owner")
+    removed = db.get(User, uid)
+    role = m.role
     db.delete(m)
     db.commit()
+    audit.record(db, user, audit.MEMBER_REMOVE, workspace_id=pid, target_type="user",
+                 target_id=uid, target_label=getattr(removed, "email", str(uid)),
+                 detail={"role": role}, request=request)
     return {"ok": True}

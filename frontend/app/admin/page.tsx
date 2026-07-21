@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminProject, AdminStats, AdminUser, api } from "@/lib/api";
+import { AdminProject, AdminStats, AdminUser, AuditEntry, api } from "@/lib/api";
 import TopNav from "@/components/TopNav";
 
 export default function AdminPage() {
@@ -14,6 +14,8 @@ export default function AdminPage() {
   // deployment and unusable on a large one.
   const [uq, setUq] = useState(""); const [uOff, setUOff] = useState(0); const [uTotal, setUTotal] = useState(0);
   const [pq, setPq] = useState(""); const [pOff, setPOff] = useState(0); const [pTotal, setPTotal] = useState(0);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [aq, setAq] = useState(""); const [aOff, setAOff] = useState(0); const [aTotal, setATotal] = useState(0);
 
   const load = () => {
     api.adminStats().then(setStats).catch(() => setForbidden(true));
@@ -21,10 +23,12 @@ export default function AdminPage() {
       .then((r) => { setUsers(r.users); setUTotal(r.total); }).catch(() => {});
     api.adminProjects({ limit: PAGE, offset: pOff, q: pq })
       .then((r) => { setProjects(r.projects); setPTotal(r.total); }).catch(() => {});
+    api.adminAudit({ limit: PAGE, offset: aOff, q: aq })
+      .then((r) => { setAudit(r.entries); setATotal(r.total); }).catch(() => {});
   };
   // Re-query on paging; debounce the search so typing doesn't fire a request per keystroke.
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); },
-    [uq, uOff, pq, pOff]);
+    [uq, uOff, pq, pOff, aq, aOff]);
 
   const toggleSuper = async (u: AdminUser) => {
     setErr("");
@@ -124,6 +128,43 @@ export default function AdminPage() {
               </div>
               <Pager offset={pOff} total={pTotal} onPage={setPOff} />
             </div>
+
+            <div style={{ ...panel, marginTop: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={label}>Audit log ({aTotal.toLocaleString()})</div>
+                <input value={aq} onChange={(e) => { setAq(e.target.value); setAOff(0); }}
+                  placeholder="Search actor or target" style={search} />
+              </div>
+              {audit.length === 0 ? (
+                <div className="muted" style={{ fontSize: 13, padding: "6px 0" }}>
+                  No privileged changes recorded yet. Grants, revocations, project deletions
+                  and key lifecycle appear here.
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={table}>
+                    <thead><tr style={hrow}><th style={th}>When</th><th style={th}>Actor</th><th style={th}>Action</th><th style={th}>Target</th><th style={th}>IP</th></tr></thead>
+                    <tbody>
+                      {audit.map((e) => (
+                        <tr key={e.id} style={{ borderTop: "1px solid var(--border)" }}>
+                          <td style={{ ...td, whiteSpace: "nowrap", color: "var(--muted)" }}>
+                            {new Date(e.created_at).toLocaleString()}
+                          </td>
+                          <td style={td}>{e.actor_email || <span className="muted">system</span>}</td>
+                          <td style={td}><span style={actionTag(e.action)}>{e.action}</span></td>
+                          <td style={td}>
+                            {e.target_label || e.target_id}
+                            {e.target_type ? <span className="muted"> · {e.target_type}</span> : ""}
+                          </td>
+                          <td style={{ ...td, color: "var(--muted)", fontSize: 12 }}>{e.ip || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <Pager offset={aOff} total={aTotal} onPage={setAOff} />
+            </div>
           </>
         )}
       </main>
@@ -145,6 +186,14 @@ function Pager({ offset, total, onPage }: { offset: number; total: number; onPag
       <button className="btn btn-sm" disabled={to >= total} onClick={() => onPage(offset + PAGE)}>Next</button>
     </div>
   );
+}
+
+// Grants and deletions are the entries an operator scans for, so they get the weight.
+function actionTag(action: string): React.CSSProperties {
+  const color = action.endsWith(".grant") ? "var(--amber)"
+    : action.endsWith(".delete") || action.endsWith(".revoke") ? "var(--err)"
+      : "var(--muted)";
+  return { fontFamily: "var(--font-mono)", fontSize: 11.5, color, whiteSpace: "nowrap" };
 }
 
 const search: React.CSSProperties = { background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "inherit", fontSize: 12.5, padding: "5px 9px", width: 210, marginBottom: 8 };

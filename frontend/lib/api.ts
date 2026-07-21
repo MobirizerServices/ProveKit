@@ -41,6 +41,12 @@ export interface Project { id: number; name: string; role: string; is_default: b
 export interface Member { user_id: number; email: string; name: string; role: string; }
 export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
 export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; is_bootstrap: boolean; project_count: number; created_at: string; }
+export interface AuditEntry {
+  id: number; action: string; actor_email: string; actor_user_id: number | null;
+  workspace_id: number | null; target_type: string; target_id: string; target_label: string;
+  detail: Record<string, any>; ip: string; created_at: string;
+}
+export interface AuditQuery extends AdminQuery { action?: string; }
 export interface AdminQuery { limit?: number; offset?: number; q?: string; }
 // The admin tables are paged, so the row array arrives under a named key beside the totals.
 export type Paged<K extends string, T> = { total: number; limit: number; offset: number } & { [P in K]: T[] };
@@ -231,6 +237,12 @@ export const api = {
   adminStats: () => j<AdminStats>("/api/admin/stats"),
   adminUsers: (p?: AdminQuery) => j<Paged<"users", AdminUser>>(`/api/admin/users${adminQs(p)}`),
   adminProjects: (p?: AdminQuery) => j<Paged<"projects", AdminProject>>(`/api/admin/projects${adminQs(p)}`),
+  adminAudit: (p?: AuditQuery) => {
+    const base = adminQs(p);
+    const sep = base ? "&" : "?";
+    return j<Paged<"entries", AuditEntry>>(
+      `/api/admin/audit${base}${p?.action ? `${sep}action=${encodeURIComponent(p.action)}` : ""}`);
+  },
   setSuperuser: (uid: number, is_superuser: boolean) => j<{ id: number; is_superuser: boolean; is_bootstrap: boolean }>(`/api/admin/users/${uid}`, { method: "PATCH", body: JSON.stringify({ is_superuser }) }),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {

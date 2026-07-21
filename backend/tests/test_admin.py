@@ -1,4 +1,5 @@
 """Platform superadmin console + per-project settings (retention / PII)."""
+import json
 import uuid
 
 from fastapi.testclient import TestClient
@@ -168,5 +169,90 @@ def test_admin_projects_search_by_owner_email():
         # span_count must still be right when the page is a subset
         page = c.get("/api/admin/projects?limit=1").json()
         assert page["limit"] == 1 and len(page["projects"]) <= 1
+    finally:
+        s.superuser_emails = ""
+
+
+def test_superuser_changes_are_audited():
+    """'Who granted this person operator access?' had no answer before — the single most
+    important question a review asks about a platform."""
+    s = get_settings()
+    s.superuser_emails = "local@provekit"
+    try:
+        admin = _client()
+        other = _client()
+        email = f"aud{uuid.uuid4().hex[:8]}@ex.com"
+        other.post("/api/auth/register", json={"email": email, "password": "pw12345678"})
+        uid = next(u["id"] for u in admin.get("/api/admin/users").json()["users"]
+                   if u["email"] == email)
+
+        admin.patch(f"/api/admin/users/{uid}", json={"is_superuser": True})
+        admin.patch(f"/api/admin/users/{uid}", json={"is_superuser": False})
+
+        entries = admin.get(f"/api/admin/audit?q={email}").json()["entries"]
+        actions = [e["action"] for e in entries]
+        assert "superuser.grant" in actions and "superuser.revoke" in actions
+        grant = next(e for e in entries if e["action"] == "superuser.grant")
+        assert grant["target_label"] == email
+        assert grant["actor_email"] == "local@provekit"     # who did it, not just what happened
+        assert grant["created_at"]
+
+        # exact-action filtering
+        only = admin.get("/api/admin/audit?action=superuser.revoke").json()
+        assert all(e["action"] == "superuser.revoke" for e in only["entries"])
+    finally:
+        s.superuser_emails = ""
+
+
+def test_a_refused_revoke_is_not_recorded_as_one():
+    """The 409 path changes nothing, so auditing it would show a revoke that never happened."""
+    s = get_settings()
+    s.superuser_emails = "local@provekit"
+    try:
+        admin = _client()
+        other = _client()
+        email = f"boot{uuid.uuid4().hex[:8]}@ex.com"
+        other.post("/api/auth/register", json={"email": email, "password": "pw12345678"})
+        uid = next(u["id"] for u in admin.get("/api/admin/users").json()["users"]
+                   if u["email"] == email)
+        s.superuser_emails = f"local@provekit,{email}"
+
+        assert admin.patch(f"/api/admin/users/{uid}", json={"is_superuser": False}).status_code == 409
+        entries = admin.get(f"/api/admin/audit?q={email}").json()["entries"]
+        assert not any(e["action"] == "superuser.revoke" for e in entries)
+    finally:
+        s.superuser_emails = ""
+
+
+def test_audit_record_survives_the_project_it_describes():
+    """A trail that vanishes with its subject is not a trail. Deleting a project must leave
+    the record that someone deleted it."""
+    s = get_settings()
+    s.superuser_emails = "local@provekit"
+    try:
+        c = _client()
+        pid = c.post("/api/projects", json={"name": "doomed"}).json()["id"]
+        c.delete(f"/api/projects/{pid}")
+        entries = c.get("/api/admin/audit?action=project.delete").json()["entries"]
+        row = next(e for e in entries if e["target_id"] == str(pid))
+        assert row["target_label"] == "doomed"      # snapshotted, not joined
+        assert "spans_deleted" in row["detail"]
+    finally:
+        s.superuser_emails = ""
+
+
+def test_key_audit_records_the_prefix_never_the_secret():
+    s = get_settings()
+    s.superuser_emails = "local@provekit"
+    try:
+        c = _client()
+        made = c.post("/api/api-keys", json={"name": "ci"}).json()
+        secret = made["key"]
+        c.delete(f"/api/api-keys/{made['id']}")
+        entries = c.get("/api/admin/audit?q=ci").json()["entries"]
+        assert {"key.create", "key.revoke"} <= {e["action"] for e in entries}
+        blob = json.dumps(entries)
+        assert secret not in blob, "the audit trail must never store the plaintext key"
+        assert made["prefix"] in blob
     finally:
         s.superuser_emails = ""

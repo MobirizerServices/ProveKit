@@ -6,16 +6,15 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..config import get_settings
 from ..database import get_db
 from ..models import (Dataset, Experiment, Run, User, Workspace, WorkspaceMember, iso_utc)
-from ..services.auth import get_current_user
+from ..services.auth import get_current_user, is_bootstrap, is_operator
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 def require_superuser(user: User = Depends(get_current_user)) -> User:
-    if user.is_superuser or user.email.lower() in get_settings().superuser_email_list:
+    if is_operator(user):
         return user
     raise HTTPException(403, "Superuser only")
 
@@ -46,10 +45,12 @@ def stats(_: User = Depends(require_superuser), db: Session = Depends(get_db)):
 def list_users(_: User = Depends(require_superuser), db: Session = Depends(get_db)):
     proj_counts = dict(db.query(WorkspaceMember.user_id, func.count(WorkspaceMember.id))
                        .group_by(WorkspaceMember.user_id).all())
-    supers = set(get_settings().superuser_email_list)
     rows = db.query(User).order_by(User.id).all()
+    # `is_superuser` is the *effective* answer; `is_bootstrap` says it comes from config, so the
+    # UI can show that the grant isn't revocable here instead of offering a toggle that no-ops.
     return [{"id": u.id, "email": u.email, "name": u.name, "auth_provider": u.auth_provider,
-             "is_superuser": u.is_superuser or u.email.lower() in supers,
+             "is_superuser": u.is_superuser or is_bootstrap(u.email),
+             "is_bootstrap": is_bootstrap(u.email),
              "project_count": proj_counts.get(u.id, 0), "created_at": iso_utc(u.created_at)}
             for u in rows]
 
@@ -77,6 +78,16 @@ def set_superuser(uid: int, data: _SuperIn, me: User = Depends(require_superuser
         raise HTTPException(404, "User not found")
     if u.id == me.id and not data.is_superuser:
         raise HTTPException(400, "You can't remove your own superuser access")
+    if not data.is_superuser and is_bootstrap(u.email):
+        # Clearing the flag would leave config still granting access — a revoke that looks like
+        # it worked but didn't. Refuse loudly and say what actually revokes it.
+        raise HTTPException(
+            409,
+            f"{u.email} is a superuser via the SUPERUSER_EMAILS config, which overrides this "
+            "flag. Remove the address from SUPERUSER_EMAILS and restart the backend to revoke "
+            "it — clearing the flag here would have no effect.",
+        )
     u.is_superuser = data.is_superuser
     db.commit()
-    return {"id": u.id, "is_superuser": u.is_superuser}
+    return {"id": u.id, "is_superuser": u.is_superuser or is_bootstrap(u.email),
+            "is_bootstrap": is_bootstrap(u.email)}

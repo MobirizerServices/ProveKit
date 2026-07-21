@@ -53,6 +53,54 @@ def test_admin_can_grant_superuser():
         s.superuser_emails = ""
 
 
+def test_revoking_a_bootstrap_superuser_is_refused_not_silently_ignored():
+    """SUPERUSER_EMAILS overrides the DB flag, so clearing the flag can't revoke a listed
+    account. The API must say so rather than return 200 on a change that has no effect."""
+    s = get_settings()
+    s.superuser_emails = "local@provekit"
+    try:
+        admin = _client()
+        other = _client()
+        email = f"u{uuid.uuid4().hex[:8]}@ex.com"
+        other.post("/api/auth/register", json={"email": email, "password": "pw12345678"})
+        uid = next(u["id"] for u in admin.get("/api/admin/users").json() if u["email"] == email)
+
+        s.superuser_emails = f"local@provekit,{email}"
+        assert other.get("/api/admin/stats").status_code == 200      # in via config
+        row = next(u for u in admin.get("/api/admin/users").json() if u["id"] == uid)
+        assert row["is_superuser"] is True and row["is_bootstrap"] is True
+
+        r = admin.patch(f"/api/admin/users/{uid}", json={"is_superuser": False})
+        assert r.status_code == 409 and "SUPERUSER_EMAILS" in r.json()["detail"]
+        assert other.get("/api/admin/stats").status_code == 200      # still an operator
+
+        # Dropping the address from config is what actually revokes it.
+        s.superuser_emails = "local@provekit"
+        assert other.get("/api/admin/stats").status_code == 403
+    finally:
+        s.superuser_emails = ""
+
+
+def test_revoking_a_flag_granted_superuser_works():
+    s = get_settings()
+    s.superuser_emails = "local@provekit"
+    try:
+        admin = _client()
+        other = _client()
+        email = f"u{uuid.uuid4().hex[:8]}@ex.com"
+        other.post("/api/auth/register", json={"email": email, "password": "pw12345678"})
+        uid = next(u["id"] for u in admin.get("/api/admin/users").json() if u["email"] == email)
+
+        admin.patch(f"/api/admin/users/{uid}", json={"is_superuser": True})
+        assert other.get("/api/admin/stats").status_code == 200
+        r = admin.patch(f"/api/admin/users/{uid}", json={"is_superuser": False})
+        assert r.status_code == 200 and r.json()["is_superuser"] is False
+        assert r.json()["is_bootstrap"] is False
+        assert other.get("/api/admin/stats").status_code == 403     # revoke took effect
+    finally:
+        s.superuser_emails = ""
+
+
 def test_per_project_retention_and_pii():
     c = _client()
     p = c.post("/api/projects", json={"name": "Settings"}).json()

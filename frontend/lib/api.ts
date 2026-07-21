@@ -36,7 +36,7 @@ export interface TraceQuery { status?: string; window_hours?: number; limit?: nu
 export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; replay_url?: string; created_at: string; }
 export interface Member { user_id: number; email: string; name: string; role: string; }
 export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
-export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; project_count: number; created_at: string; }
+export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; is_bootstrap: boolean; project_count: number; created_at: string; }
 export interface AdminProject { id: number; name: string; owner: string; member_count: number; span_count: number; retention: number; redact_pii: boolean; created_at: string; }
 export interface Alert {
   id: number; name: string; metric: string; comparator: string; threshold: number;
@@ -121,7 +121,12 @@ async function j<T>(path: string, opts?: RequestInit & { noAuthRedirect?: boolea
       location.href = "/login?next=" + encodeURIComponent(location.pathname);
     }
     if (res.status === 429) throw new Error("Rate limit reached — wait a moment and try again.");
-    throw new Error(`${res.status}: ${(await res.text()).slice(0, 300)}`);
+    // Unwrap FastAPI's {"detail": "..."} so the UI can show the message rather than raw JSON.
+    // The status stays in the string — callers match on it (e.g. AuthForm's `includes("409")`).
+    const body = (await res.text()).slice(0, 300);
+    let detail = body;
+    try { const p = JSON.parse(body); if (typeof p?.detail === "string") detail = p.detail; } catch { /* not JSON */ }
+    throw new Error(`${res.status}: ${detail}`);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
@@ -207,7 +212,7 @@ export const api = {
   adminStats: () => j<AdminStats>("/api/admin/stats"),
   adminUsers: () => j<AdminUser[]>("/api/admin/users"),
   adminProjects: () => j<AdminProject[]>("/api/admin/projects"),
-  setSuperuser: (uid: number, is_superuser: boolean) => j<{ id: number; is_superuser: boolean }>(`/api/admin/users/${uid}`, { method: "PATCH", body: JSON.stringify({ is_superuser }) }),
+  setSuperuser: (uid: number, is_superuser: boolean) => j<{ id: number; is_superuser: boolean; is_bootstrap: boolean }>(`/api/admin/users/${uid}`, { method: "PATCH", body: JSON.stringify({ is_superuser }) }),
   // health (for the backend-down banner; never redirects/throws loudly)
   health: async (): Promise<boolean> => {
     try { const r = await fetch(`${BASE}/healthz`, { credentials: "include" }); return r.ok; } catch { return false; }

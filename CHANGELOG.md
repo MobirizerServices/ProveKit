@@ -4,6 +4,14 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **fix: revoking a superuser could silently do nothing.** `SUPERUSER_EMAILS` overrides the
+  database flag, so clearing the flag on a listed account left it a full operator — and the users
+  table, computing the same `or`, still rendered **✓ Superuser**, so the revoke looked like it had
+  worked. The API now refuses that revoke with a `409` naming the config, `GET /api/admin/users`
+  returns `is_bootstrap` alongside `is_superuser`, and the console shows config-granted accounts
+  as **✓ Superuser · config** instead of a toggle that can't fire. Admin errors are surfaced in
+  the UI rather than swallowed. New [operator guide](docs/ADMIN.md).
+
 - **Interactive debugging — edit a captured run and re-run it with real data.** Turns the trace
   view from a log viewer into a debugger ([design](docs/design/INTERACTIVE_DEBUGGING.md),
   [guide](docs/DEBUGGING.md)):

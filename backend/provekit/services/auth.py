@@ -118,6 +118,19 @@ def _local_user(db: Session) -> User:
     return u
 
 
+def is_bootstrap(email: str) -> bool:
+    """True when config grants this address operator access regardless of the DB flag.
+    `SUPERUSER_EMAILS` is a break-glass bootstrap, so it *overrides* the flag — which means a
+    listed account can only be revoked by editing config, never through the admin API."""
+    return email.lower() in get_settings().superuser_email_list
+
+
+def is_operator(user: User) -> bool:
+    """The effective superuser answer: the DB flag *or* a config bootstrap. Every gate and every
+    payload that reports superuser status goes through here so the two can't drift apart."""
+    return user.is_superuser or is_bootstrap(user.email)
+
+
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     token = request.cookies.get(COOKIE)
     claims = read_token(token) if token else None

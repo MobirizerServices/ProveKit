@@ -9,6 +9,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [forbidden, setForbidden] = useState(false);
+  const [err, setErr] = useState("");
 
   const load = () => {
     api.adminStats().then(setStats).catch(() => setForbidden(true));
@@ -18,7 +19,11 @@ export default function AdminPage() {
   useEffect(() => { load(); }, []);
 
   const toggleSuper = async (u: AdminUser) => {
-    try { await api.setSuperuser(u.id, !u.is_superuser); load(); } catch { /* ignore */ }
+    setErr("");
+    // Surface the refusal (e.g. revoking a SUPERUSER_EMAILS account) — swallowing it makes a
+    // rejected revoke look like it succeeded.
+    try { await api.setSuperuser(u.id, !u.is_superuser); load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Could not change superuser access."); }
   };
 
   return (
@@ -49,6 +54,9 @@ export default function AdminPage() {
 
             <div style={{ ...panel, marginBottom: 20 }}>
               <div style={label}>Users ({users.length})</div>
+              {err && (
+                <div style={{ fontSize: 12.5, color: "var(--err)", margin: "0 0 10px" }}>{err}</div>
+              )}
               <div style={{ overflowX: "auto" }}>
                 <table style={table}>
                   <thead><tr style={hrow}><th style={th}>Email</th><th style={th}>Auth</th><th style={th}>Projects</th><th style={th}>Superuser</th></tr></thead>
@@ -59,10 +67,17 @@ export default function AdminPage() {
                         <td style={{ ...td, color: "var(--muted)" }}>{u.auth_provider}</td>
                         <td style={td}>{u.project_count}</td>
                         <td style={td}>
-                          <button className="btn btn-sm" onClick={() => toggleSuper(u)}
-                            style={u.is_superuser ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
-                            {u.is_superuser ? "✓ Superuser" : "Grant"}
-                          </button>
+                          {u.is_bootstrap ? (
+                            <span className="muted" style={{ fontSize: 12 }}
+                              title="Granted by the SUPERUSER_EMAILS config, which overrides the database flag. Remove the address there and restart the backend to revoke.">
+                              ✓ Superuser · config
+                            </span>
+                          ) : (
+                            <button className="btn btn-sm" onClick={() => toggleSuper(u)}
+                              style={u.is_superuser ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
+                              {u.is_superuser ? "✓ Superuser" : "Grant"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -4,6 +4,15 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **Experiment comparisons say whether a difference is real.** Two means and no uncertainty
+  invites shipping on noise — 0.82 vs 0.79 is nothing over 20 examples and may be decisive over
+  2,000, and the numbers alone don't say which you have. Every scorer now reports n, standard
+  deviation and a 95% interval, and `GET /api/experiments/{a}/compare/{b}` runs a seeded
+  permutation test, **paired on dataset item** where both runs scored the same examples (which
+  removes item difficulty and detects far smaller real differences). Below 8 paired items it
+  refuses to call anything significant and says why, and a non-significant result is labelled
+  as *not distinguishable from chance* rather than as equivalence.
+
 - **An audit trail for privileged changes.** There was no record of who granted superuser,
   deleted a project, changed retention or PII masking, added a member, or revoked a key — the
   first thing any security review asks for. `audit_logs` now records actor, action, target, IP

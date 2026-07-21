@@ -49,3 +49,66 @@ def test_delete_and_unknown_experiment():
     e = c.post("/api/experiments", json={"name": "tmp"}).json()
     assert c.delete(f"/api/experiments/{e['id']}").json()["ok"] is True
     assert c.get(f"/api/experiments/{e['id']}").status_code == 404
+
+
+def _run_with(c, name, dataset_id, scores_by_item):
+    """An experiment scored over given dataset items."""
+    e = c.post("/api/experiments", json={"name": name, "dataset_id": dataset_id}).json()
+    for item_id, score in scores_by_item.items():
+        c.post(f"/api/experiments/{e['id']}/results",
+               json={"item_id": item_id, "input": "i", "output": "o", "scores": {"acc": score}})
+    return e
+
+
+def test_experiment_summary_reports_spread_not_just_a_mean():
+    c = _client()
+    d = c.post("/api/datasets", json={"name": "spread"}).json()
+    e = _run_with(c, "run", d["id"], {1: 1.0, 2: 0.0, 3: 1.0, 4: 0.0})
+    row = c.get(f"/api/experiments/{e['id']}").json()
+    st = row["scorer_stats"]["acc"]
+    assert st["n"] == 4 and abs(st["mean"] - 0.5) < 1e-9
+    assert st["stdev"] is not None and st["ci95_low"] < st["mean"] < st["ci95_high"]
+
+
+def test_compare_flags_a_consistent_improvement_as_significant():
+    c = _client()
+    d = c.post("/api/datasets", json={"name": "cmp-real"}).json()
+    items = {i: 0.0 for i in range(1, 26)}
+    better = {i: 1.0 for i in range(1, 26)}
+    a = _run_with(c, "before", d["id"], items)
+    b = _run_with(c, "after", d["id"], better)
+
+    r = c.get(f"/api/experiments/{a['id']}/compare/{b['id']}").json()
+    acc = r["scorers"]["acc"]
+    assert acc["paired"] is True and acc["paired_n"] == 25
+    assert acc["significant"] is True and acc["p_value"] < 0.05
+    assert abs(acc["delta"] - 1.0) < 1e-9
+    assert r["warning"] == ""
+
+
+def test_compare_refuses_to_call_a_tiny_sample_significant():
+    """The failure this feature exists to prevent: shipping on 3 examples."""
+    c = _client()
+    d = c.post("/api/datasets", json={"name": "cmp-tiny"}).json()
+    a = _run_with(c, "before", d["id"], {1: 0.0, 2: 0.0, 3: 0.0})
+    b = _run_with(c, "after", d["id"], {1: 1.0, 2: 1.0, 3: 1.0})
+    acc = c.get(f"/api/experiments/{a['id']}/compare/{b['id']}").json()["scorers"]["acc"]
+    assert acc["significant"] is False
+    assert acc["caution"]
+
+
+def test_compare_warns_when_the_datasets_differ():
+    c = _client()
+    d1 = c.post("/api/datasets", json={"name": "ds-a"}).json()
+    d2 = c.post("/api/datasets", json={"name": "ds-b"}).json()
+    a = _run_with(c, "x", d1["id"], {1: 0.2, 2: 0.3})
+    b = _run_with(c, "y", d2["id"], {1: 0.9, 2: 0.8})
+    r = c.get(f"/api/experiments/{a['id']}/compare/{b['id']}").json()
+    assert "different datasets" in r["warning"]
+
+
+def test_compare_is_scoped_to_the_project():
+    c = _client()
+    d = c.post("/api/datasets", json={"name": "scope"}).json()
+    a = _run_with(c, "a", d["id"], {1: 1.0})
+    assert c.get(f"/api/experiments/{a['id']}/compare/999999").status_code == 404

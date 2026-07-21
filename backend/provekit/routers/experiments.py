@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Experiment, ExperimentResult, Workspace, iso_utc
+from ..services import stats
 from ..services.workspace import current_workspace, workspace_from_key
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
@@ -27,23 +28,54 @@ class _ResultIn(BaseModel):
     scores: dict = {}
 
 
-def _summarize(results: list[ExperimentResult]) -> dict:
-    """Per-scorer means + an overall mean across every score value."""
+def _scorer_values(results: list[ExperimentResult]) -> dict[str, list[float]]:
+    """Per-scorer score lists. Non-numeric values are skipped, not coerced to zero."""
     agg: dict[str, list[float]] = {}
     for r in results:
         for k, v in (r.scores or {}).items():
             try:
-                a = agg.setdefault(k, [0.0, 0.0])
-                a[0] += float(v)
-                a[1] += 1
+                agg.setdefault(k, []).append(float(v))
             except (TypeError, ValueError):
                 continue
-    per = {k: (s / n) for k, (s, n) in agg.items() if n}
-    total_sum = sum(s for s, _ in agg.values())
-    total_n = sum(n for _, n in agg.values())
+    return agg
+
+
+def _summarize(results: list[ExperimentResult]) -> dict:
+    """Per-scorer means, plus the spread around them.
+
+    A mean on its own can't tell 0.82-over-20-examples from 0.82-over-2000, so every scorer
+    also reports n, standard deviation and a 95% interval.
+    """
+    agg = _scorer_values(results)
+    per = {k: (sum(v) / len(v)) for k, v in agg.items() if v}
+    flat = [x for v in agg.values() for x in v]
     return {"result_count": len(results),
             "scorer_means": per,
-            "mean_score": (total_sum / total_n) if total_n else None}
+            "scorer_stats": {k: stats.summarize(v) for k, v in agg.items()},
+            "mean_score": (sum(flat) / len(flat)) if flat else None}
+
+
+def _pairs_by_item(a_rows: list[ExperimentResult], b_rows: list[ExperimentResult],
+                   scorer: str) -> list[tuple[float, float]]:
+    """(a, b) score pairs for items scored in both runs.
+
+    Two runs over one dataset score the same items, so pairing on item_id removes item
+    difficulty from the comparison — the difference between detecting a real 5% gain and
+    losing it in the noise of how hard each example happens to be.
+    """
+    def index(rows):
+        out = {}
+        for r in rows:
+            if r.item_id is None:
+                continue
+            try:
+                out[r.item_id] = float((r.scores or {})[scorer])
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
+    a_idx, b_idx = index(a_rows), index(b_rows)
+    return [(a_idx[i], b_idx[i]) for i in sorted(a_idx.keys() & b_idx.keys())]
 
 
 def _experiment_row(db: Session, e: Experiment) -> dict:
@@ -109,6 +141,36 @@ def get_experiment(eid: int, db: Session = Depends(get_db),
     return {**_experiment_row(db, e),
             "results": [{"id": r.id, "item_id": r.item_id, "input": r.input, "output": r.output,
                          "expected": r.expected, "scores": r.scores} for r in results]}
+
+
+@router.get("/{eid}/compare/{other_id}")
+def compare_experiments(eid: int, other_id: int, db: Session = Depends(get_db),
+                        ws: Workspace = Depends(current_workspace)):
+    """Is the difference between two experiments real, or is it noise?
+
+    Returns per-scorer means with intervals, the delta, and a permutation-test p-value —
+    paired on item id where the two runs scored the same examples.
+    """
+    a, b = _get_experiment(db, ws, eid), _get_experiment(db, ws, other_id)
+    a_rows = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == a.id).all()
+    b_rows = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == b.id).all()
+    a_vals, b_vals = _scorer_values(a_rows), _scorer_values(b_rows)
+
+    scorers = {}
+    for name in sorted(set(a_vals) | set(b_vals)):
+        pairs = _pairs_by_item(a_rows, b_rows, name)
+        scorers[name] = stats.compare(a_vals.get(name, []), b_vals.get(name, []),
+                                      pairs=pairs or None)
+    warning = ""
+    if a.dataset_id != b.dataset_id:
+        # Scores over different material aren't comparable, whatever the arithmetic says.
+        warning = ("These experiments ran on different datasets, so the comparison measures "
+                   "the datasets as much as the runs.")
+    return {"a": {"id": a.id, "name": a.name, "dataset_id": a.dataset_id,
+                  "created_at": iso_utc(a.created_at)},
+            "b": {"id": b.id, "name": b.name, "dataset_id": b.dataset_id,
+                  "created_at": iso_utc(b.created_at)},
+            "alpha": stats.ALPHA, "warning": warning, "scorers": scorers}
 
 
 @router.delete("/{eid}")

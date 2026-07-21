@@ -86,7 +86,12 @@ on a dashboard. This is the full feature inventory.
   your own `fn(output, expected) -> float`. Shared by client and server.
 - **`pk.evaluate(dataset, target, scorers)`** — runs a target over a dataset, scores each output,
   records an experiment, returns a summary you can assert on to **gate CI on regressions**.
-- **Experiments** — per-scorer means and side-by-side comparison of runs on the same dataset.
+- **Experiments** — per-scorer means *with their spread* (n, standard deviation, 95% interval),
+  and side-by-side comparison of runs on the same dataset.
+- **Significance testing** — `GET /api/experiments/{a}/compare/{b}` answers whether a score
+  difference is real or noise: a seeded permutation test, **paired by dataset item** where both
+  runs scored the same examples, plus an explicit caution when the sample is too small for any
+  result to reach significance.
 - See [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## Interactive debugging

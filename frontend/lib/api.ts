@@ -112,9 +112,22 @@ export interface ReplayResult {
 export interface Dataset { id: number; name: string; description: string; item_count: number; created_at: string; }
 export interface DatasetItem { id: number; dataset_id: number; input: string; expected: string; meta: any; created_at: string; }
 export interface DatasetDetail extends Dataset { items: DatasetItem[]; }
+export interface ScorerStats { n: number; mean: number | null; stdev: number | null; ci95_low: number | null; ci95_high: number | null; }
 export interface Experiment {
   id: number; name: string; dataset_id: number | null; created_at: string;
   result_count: number; mean_score: number | null; scorer_means: Record<string, number>;
+  scorer_stats?: Record<string, ScorerStats>;
+}
+// Whether a difference between two runs is real or noise.
+export interface ScorerComparison {
+  a: ScorerStats; b: ScorerStats; paired: boolean; paired_n: number;
+  p_value: number | null; significant: boolean; delta: number | null;
+  delta_ci95_low?: number | null; delta_ci95_high?: number | null; caution: string;
+}
+export interface ExperimentComparison {
+  a: { id: number; name: string; dataset_id: number | null; created_at: string };
+  b: { id: number; name: string; dataset_id: number | null; created_at: string };
+  alpha: number; warning: string; scorers: Record<string, ScorerComparison>;
 }
 
 // The active project id (persisted client-side). Sent as X-Project-Id so every request is
@@ -224,6 +237,7 @@ export const api = {
   addDatasetItemFromTrace: (id: number, trace_id: string) => j<DatasetItem>(`/api/datasets/${id}/items/from-trace`, { method: "POST", body: JSON.stringify({ trace_id }) }),
   // experiments
   experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
+  compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),
   // projects (workspaces)
   projects: () => j<Project[]>("/api/projects"),
   createProject: (name: string) => j<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),

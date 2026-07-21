@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, Dataset, DatasetDetail, Experiment } from "@/lib/api";
+import { api, Dataset, DatasetDetail, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 
@@ -10,6 +10,16 @@ export default function DatasetsPage() {
   const [sel, setSel] = useState<number | null>(null);
   const [detail, setDetail] = useState<DatasetDetail | null>(null);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [cmpPick, setCmpPick] = useState<number[]>([]);
+  const [cmp, setCmp] = useState<ExperimentComparison | null>(null);
+
+  // Two runs selected → ask whether the gap between them is real.
+  const toggleCmp = (id: number) => setCmpPick((p) =>
+    p.includes(id) ? p.filter((x) => x !== id) : [...p, id].slice(-2));
+  useEffect(() => {
+    if (cmpPick.length !== 2) { setCmp(null); return; }
+    api.compareExperiments(cmpPick[0], cmpPick[1]).then(setCmp).catch(() => setCmp(null));
+  }, [cmpPick]);
   const [newName, setNewName] = useState("");
 
   const load = useCallback(() => { api.datasets().then(setList).catch(() => {}); }, []);
@@ -72,17 +82,32 @@ export default function DatasetsPage() {
                   <div style={{ marginBottom: 16 }}>
                     <div style={label}>Experiments</div>
                     <table style={table}>
-                      <thead><tr style={hrow}><th style={th}>Name</th><th style={th}>Results</th><th style={th}>Mean score</th></tr></thead>
+                      <thead><tr style={hrow}><th style={th}>Compare</th><th style={th}>Name</th><th style={th}>Results</th><th style={th}>Mean score</th></tr></thead>
                       <tbody>
                         {experiments.map((e) => (
                           <tr key={e.id} style={{ borderTop: "1px solid var(--border)" }}>
+                            <td style={td}>
+                              <input type="checkbox" checked={cmpPick.includes(e.id)}
+                                onChange={() => toggleCmp(e.id)} aria-label={`Compare ${e.name}`} />
+                            </td>
                             <td style={td}>{e.name}</td>
                             <td style={td}>{e.result_count}</td>
-                            <td style={{ ...td, fontWeight: 600 }}>{e.mean_score == null ? "—" : e.mean_score.toFixed(3)}</td>
+                            <td style={{ ...td, fontWeight: 600 }}>
+                              {e.mean_score == null ? "—" : e.mean_score.toFixed(3)}
+                              {/* The interval travels with the mean — a mean shown alone is
+                                  what lets a 20-example result read as settled. */}
+                              <Spread s={e.scorer_stats} />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    {cmpPick.length === 1 && (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                        Select a second run to test whether the difference is real.
+                      </div>
+                    )}
+                    {cmp && <Significance cmp={cmp} />}
                   </div>
                 )}
 
@@ -108,6 +133,53 @@ export default function DatasetsPage() {
         </div>
       </main>
     </>
+  );
+}
+
+// The spread behind a mean, shown inline so it can't be read past.
+function Spread({ s }: { s?: Record<string, { n: number; ci95_low: number | null; ci95_high: number | null }> }) {
+  const first = s && Object.values(s)[0];
+  if (!first || first.ci95_low == null || first.ci95_high == null) return null;
+  return (
+    <span className="muted" style={{ fontWeight: 400, fontSize: 11.5 }}>
+      {" "}±{((first.ci95_high - first.ci95_low) / 2).toFixed(3)} · n={first.n}
+    </span>
+  );
+}
+
+function Significance({ cmp }: { cmp: ExperimentComparison }) {
+  return (
+    <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 10, background: "var(--panel-2)" }}>
+      <div style={{ fontSize: 12.5, marginBottom: 8 }}>
+        <strong>{cmp.a.name}</strong> <span className="muted">vs</span> <strong>{cmp.b.name}</strong>
+      </div>
+      {cmp.warning && (
+        <div style={{ fontSize: 12, color: "var(--amber)", marginBottom: 8 }}>{cmp.warning}</div>
+      )}
+      {(Object.entries(cmp.scorers) as [string, ScorerComparison][]).map(([name, r]) => (
+        <div key={name} style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 12.5, display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+            <span className="mono">{name}</span>
+            <span style={{ fontWeight: 600, color: (r.delta ?? 0) >= 0 ? "var(--green)" : "var(--err)" }}>
+              {r.delta == null ? "—" : `${r.delta >= 0 ? "+" : ""}${r.delta.toFixed(3)}`}
+            </span>
+            {r.p_value != null && (
+              <span className="muted">p = {r.p_value < 0.001 ? "<0.001" : r.p_value.toFixed(3)}</span>
+            )}
+            {/* The verdict is stated in words: "p = 0.31" is not self-explanatory to most
+                readers, and this is the number people act on. */}
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase",
+                           color: r.significant ? "var(--green)" : "var(--muted)" }}>
+              {r.significant ? "significant" : "not significant"}
+            </span>
+            {r.paired && <span className="muted" style={{ fontSize: 11 }}>paired · n={r.paired_n}</span>}
+          </div>
+          {r.caution && (
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{r.caution}</div>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 

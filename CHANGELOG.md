@@ -4,6 +4,13 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **fix: a retried OTLP export duplicated every span in the batch.** Exporters retry on `5xx` by
+  replaying the whole batch, and ingest inserted each span again — silently inflating span
+  counts, tokens, and cost, with no way to tell a real repeat from a retry. Ingest is now
+  idempotent on `(project, trace_id, span_id)`, enforced by a unique index; the migration
+  collapses existing duplicates to the earliest copy. Scoped by `trace_id` because OpenTelemetry
+  only guarantees span-id uniqueness *within* a trace — two traces may legitimately reuse one.
+
 - **fix: revoking a superuser could silently do nothing.** `SUPERUSER_EMAILS` overrides the
   database flag, so clearing the flag on a listed account left it a full operator — and the users
   table, computing the same `or`, still rendered **✓ Superuser**, so the revoke looked like it had

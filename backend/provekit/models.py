@@ -2,7 +2,8 @@
 runs (the spans of an agent trace)."""
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text,
+                        UniqueConstraint, text)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -108,6 +109,16 @@ class Run(Base):
     # Captured from a span's session.id / gen_ai.conversation.id attribute when present.
     session_id: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    # OTLP exporters retry on 5xx by replaying the whole batch, so without this a retry
+    # silently doubles span counts, tokens and cost. Keyed on trace_id too because OTel only
+    # guarantees a span id is unique *within a trace* — two traces may reuse one, and dropping
+    # the second would be worse data loss than the duplicate this prevents. Partial
+    # (span_id != '') because rows created outside OTLP ingest — replays, evals — have none.
+    __table_args__ = (
+        Index("uq_run_span", "workspace_id", "trace_id", "span_id", unique=True,
+              sqlite_where=text("span_id != ''"), postgresql_where=text("span_id != ''")),
+    )
 
 
 class Dataset(Base):

@@ -7,6 +7,7 @@ POST /api/workspace/ingest-key."""
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -41,12 +42,58 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     rows = otel.ingest(payload)
     if ws.redact_pii or get_settings().redact_pii:   # per-project toggle, or the global default
         rows = [redact.scrub_run(kw) for kw in rows]
-    for kw in rows:
-        db.add(Run(workspace_id=ws.id, **kw))
-    if rows:
-        db.commit()
+    if _persist_spans(db, ws, rows):
         _prune_runs(db, ws)           # enforce retention so the table doesn't grow forever
     return {"partialSuccess": {}}
+
+
+def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
+    """Store spans we haven't seen before; return how many landed.
+
+    An OTLP exporter retries on 5xx and replays the *whole* batch, so the same span arrives
+    more than once in normal operation. A duplicate is not an error to report back — the
+    exporter did the right thing — it's a row we must not write twice. The `uq_run_span` index
+    is the actual guarantee; this filter keeps the common retry off the failure path.
+
+    Identity is (trace_id, span_id): OTel scopes span-id uniqueness to a trace, so two traces
+    may legitimately reuse one and both must be kept.
+    """
+    if not rows:
+        return 0
+    tids = {kw["trace_id"] for kw in rows if kw.get("span_id")}
+    seen = set()
+    if tids:
+        seen = {(t, s) for t, s in db.query(Run.trace_id, Run.span_id)
+                .filter(Run.workspace_id == ws.id, Run.trace_id.in_(tids), Run.span_id != "").all()}
+    fresh = []
+    for kw in rows:
+        key = (kw.get("trace_id") or "", kw.get("span_id") or "")
+        if key[1] and key in seen:
+            continue
+        if key[1]:
+            seen.add(key)             # a batch can also repeat a span within itself
+        fresh.append(kw)
+    if not fresh:
+        return 0
+    for kw in fresh:
+        db.add(Run(workspace_id=ws.id, **kw))
+    try:
+        db.commit()
+        return len(fresh)
+    except IntegrityError:
+        # Concurrent retries of the same batch raced past the filter above. Re-apply row by
+        # row so the spans that genuinely are new still land instead of the batch being lost.
+        db.rollback()
+        stored = 0
+        for kw in fresh:
+            try:
+                with db.begin_nested():
+                    db.add(Run(workspace_id=ws.id, **kw))
+            except IntegrityError:
+                continue              # the other request stored it; nothing to do
+            stored += 1
+        db.commit()
+        return stored
 
 
 def _prune_runs(db: Session, ws: Workspace) -> None:

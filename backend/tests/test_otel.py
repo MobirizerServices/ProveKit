@@ -152,6 +152,69 @@ def test_ingest_endpoint_persists_and_shows_in_history():
         assert runs[0]["type"] == "llm"
 
 
+def _identified(sid: str, tid: str = "a" * 32, **attrs):
+    """A span carrying real OTel ids — what any actual exporter sends."""
+    s = _span({"gen_ai.request.model": "gpt-4o", "gen_ai.completion": "ok", **attrs})
+    s["spanId"], s["traceId"] = sid, tid
+    return s
+
+
+def test_retried_export_does_not_duplicate_spans():
+    """OTLP exporters retry on 5xx by replaying the whole batch. The replay must be a no-op,
+    not a second copy — duplicates silently inflate span counts, tokens and cost."""
+    with TestClient(app) as client:
+        batch = _otlp(_identified("1111111111111111"), _identified("2222222222222222"))
+        assert client.post("/v1/traces", json=batch).status_code == 200
+        after_first = len(client.get("/api/runs?limit=200").json())
+
+        for _ in range(3):            # the exporter keeps retrying
+            assert client.post("/v1/traces", json=batch).status_code == 200
+        assert len(client.get("/api/runs?limit=200").json()) == after_first
+
+        # A new span in an otherwise-replayed batch still lands.
+        grown = _otlp(_identified("1111111111111111"), _identified("3333333333333333"))
+        client.post("/v1/traces", json=grown)
+        assert len(client.get("/api/runs?limit=200").json()) == after_first + 1
+
+
+def test_same_span_repeated_within_one_batch_is_stored_once():
+    with TestClient(app) as client:
+        before = len(client.get("/api/runs?limit=200").json())
+        dup = _identified("4444444444444444")
+        client.post("/v1/traces", json=_otlp(dup, dup))
+        assert len(client.get("/api/runs?limit=200").json()) == before + 1
+
+
+def test_same_span_id_in_two_traces_is_kept():
+    """OTel scopes span-id uniqueness to a *trace*. Two traces reusing an id is legal, and
+    dropping the second would be worse data loss than the duplicate the dedupe prevents."""
+    with TestClient(app) as client:
+        before = len(client.get("/api/runs?limit=200").json())
+        client.post("/v1/traces", json=_otlp(_identified("6666666666666666", tid="c" * 32)))
+        client.post("/v1/traces", json=_otlp(_identified("6666666666666666", tid="d" * 32)))
+        assert len(client.get("/api/runs?limit=200").json()) == before + 2
+
+
+def test_same_span_id_in_two_projects_is_not_a_collision():
+    """Span ids are only unique per project — two tenants can legitimately emit the same id."""
+    from provekit.database import SessionLocal
+    from provekit.models import Run, User, Workspace
+    with TestClient(app) as client:
+        client.post("/v1/traces", json=_otlp(_identified("5555555555555555")))
+        db = SessionLocal()
+        try:
+            owner = db.query(User).first()
+            other = Workspace(name="other-tenant", owner_user_id=owner.id)
+            db.add(other)
+            db.commit()
+            db.add(Run(workspace_id=other.id, type="llm", span_id="5555555555555555",
+                       trace_id="b" * 32))
+            db.commit()                # must not raise
+            assert db.query(Run).filter(Run.span_id == "5555555555555555").count() == 2
+        finally:
+            db.close()
+
+
 def test_ingest_with_bearer_key():
     """Real OTLP exporters authenticate with a Bearer ingest key (no cookies)."""
     from provekit.config import get_settings

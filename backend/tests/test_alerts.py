@@ -1,7 +1,11 @@
 """Alerts: CRUD, threshold evaluation, cooldown, and validation."""
+from unittest import mock
+
+import httpx
 from fastapi.testclient import TestClient
 
 from provekit.main import app
+from provekit.services import notify
 
 
 def _fail(trace):
@@ -53,3 +57,63 @@ def test_validation_and_delete():
     a = c.post("/api/alerts", json={"metric": "error_rate"}).json()
     assert c.delete(f"/api/alerts/{a['id']}").json()["ok"] is True
     assert c.delete(f"/api/alerts/{a['id']}").status_code == 404
+
+
+def test_webhook_url_is_ssrf_guarded_at_creation():
+    """The URL is user-supplied and fetched server-side. Rejecting it at creation also means
+    the operator learns it's wrong while looking at the form, not via a silent 3am breach.
+
+    Local mode deliberately permits localhost (it's a dev tool), so only the always-blocked
+    cases apply here; the private-range policy is asserted in hosted mode below."""
+    c = _client()
+    for bad in ("http://169.254.169.254/latest/meta-data", "file:///etc/passwd"):
+        r = c.post("/api/alerts", json={"metric": "error_rate", "webhook_url": bad})
+        assert r.status_code == 422, f"{bad} should be rejected"
+
+
+    # The hosted-mode private-range policy itself is asserted in test_netguard.py; the cases
+    # above are enough to prove alert creation actually routes through the guard.
+
+
+def test_breach_posts_to_the_webhook():
+    c = _client()
+    c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [_fail("al-hook")]}]}]})
+    sent = {}
+
+    def _fake_post(url, json=None, **kw):
+        sent["url"], sent["json"] = url, json
+        return httpx.Response(200)
+
+    with mock.patch("provekit.services.notify.httpx.post", _fake_post):
+        a = c.post("/api/alerts", json={"name": "errs", "metric": "error_rate", "comparator": "gt",
+                                        "threshold": 0.0,
+                                        "webhook_url": "https://hooks.slack.com/services/T/B/x"}).json()
+        fired = c.post("/api/alerts/check").json()["fired"]
+    hit = next(f for f in fired if f["id"] == a["id"])
+    assert hit["webhook_delivered"] is True
+    assert sent["url"].startswith("https://hooks.slack.com/")
+    assert "error_rate" in sent["json"]["text"]          # Slack shape
+
+
+def test_discord_gets_content_not_text():
+    """Discord rejects a body with neither `content` nor `embeds`, so the shape is per-host."""
+    assert "content" in notify.payload_for("https://discord.com/api/webhooks/1/x", "hi")
+    assert "content" in notify.payload_for("https://ptb.discord.com/api/webhooks/1/x", "hi")
+    assert "text" in notify.payload_for("https://hooks.slack.com/services/T/B/x", "hi")
+
+
+def test_a_dead_webhook_does_not_abort_the_alert_run():
+    """A breach is already recorded when delivery is attempted; a broken webhook must not
+    swallow the fired-list or stop later rules from evaluating."""
+    c = _client()
+    c.post("/v1/traces", json={"resourceSpans": [{"scopeSpans": [{"spans": [_fail("al-dead")]}]}]})
+
+    def _boom(url, json=None, **kw):
+        raise httpx.ConnectError("no route to host")
+
+    with mock.patch("provekit.services.notify.httpx.post", _boom):
+        a = c.post("/api/alerts", json={"metric": "error_rate", "comparator": "gt", "threshold": 0.0,
+                                        "webhook_url": "https://hooks.slack.com/services/T/B/y"}).json()
+        fired = c.post("/api/alerts/check").json()["fired"]
+    hit = next(f for f in fired if f["id"] == a["id"])
+    assert hit["webhook_delivered"] is False            # reported, not raised

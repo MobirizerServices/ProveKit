@@ -16,7 +16,7 @@ const metricLabel = (v: string) => METRICS.find((m) => m.v === v)?.label ?? v;
 export default function AlertsPanel() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", metric: "error_rate", comparator: "gt", threshold: "0.2", window_hours: "24", email: "" });
+  const [form, setForm] = useState({ name: "", metric: "error_rate", comparator: "gt", threshold: "0.2", window_hours: "24", email: "", webhook_url: "" });
   const [msg, setMsg] = useState("");
 
   const load = () => api.alerts().then(setAlerts).catch(() => {});
@@ -27,8 +27,9 @@ export default function AlertsPanel() {
       await api.createAlert({
         name: form.name || metricLabel(form.metric), metric: form.metric, comparator: form.comparator,
         threshold: Number(form.threshold), window_hours: Number(form.window_hours), email: form.email,
+        webhook_url: form.webhook_url,
       });
-      setForm({ ...form, name: "", email: "" }); setOpen(false); load();
+      setForm({ ...form, name: "", email: "", webhook_url: "" }); setOpen(false); load();
     } catch (e: any) { setMsg(String(e.message || e)); }
   };
   const check = async () => {
@@ -62,13 +63,16 @@ export default function AlertsPanel() {
           <input value={form.window_hours} onChange={(e) => setForm({ ...form, window_hours: e.target.value })} style={inp(50)} />
           <span className="muted" style={{ fontSize: 12.5 }}>h · email</span>
           <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="alerts@you.com" style={inp(160)} />
+          <span className="muted" style={{ fontSize: 12.5 }}>· webhook</span>
+          <input value={form.webhook_url} onChange={(e) => setForm({ ...form, webhook_url: e.target.value })}
+            placeholder="Slack/Discord incoming webhook URL" style={inp(230)} />
           <button className="btn btn-sm" onClick={create}>Create</button>
         </div>
       )}
 
       {alerts.length === 0 ? (
         <div className="muted" style={{ fontSize: 13, padding: "6px 0" }}>
-          No alerts yet. Create one to get emailed when a metric crosses a threshold.
+          No alerts yet. Create one to get notified by email or Slack when a metric crosses a threshold.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -78,6 +82,7 @@ export default function AlertsPanel() {
               <span className="muted mono" style={{ fontSize: 12, flex: 1 }}>
                 {metricLabel(a.metric)} {a.comparator === "gt" ? ">" : "<"} {a.threshold} · {a.window_hours}h
                 {a.email ? ` · ${a.email}` : ""}
+                {a.webhook_url ? " · webhook" : ""}
                 {a.last_triggered_at ? ` · last fired ${new Date(a.last_triggered_at).toLocaleDateString()}` : ""}
               </span>
               <button className="btn btn-sm" onClick={() => api.toggleAlert(a.id, !a.enabled).then(load)}

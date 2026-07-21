@@ -103,7 +103,9 @@ on a dashboard. This is the full feature inventory.
 - **Dashboard** — trace volume, error rate, latency p50/p95, tokens, cost, a traffic chart, and a
   per-model breakdown over a selectable 1h–90d window (`GET /api/metrics`).
 - **Alerts** — threshold rules over those metrics (error rate, latency, volume, tokens) with a
-  cooldown and a management UI; `POST /api/alerts/check` evaluates them and emails on a breach.
+  cooldown and a management UI; `POST /api/alerts/check` evaluates them and, on a breach,
+  emails and/or posts to a **Slack / Discord incoming webhook** (SSRF-guarded, validated when
+  you save the rule rather than when it fires).
 
 ## Accounts, projects & keys
 

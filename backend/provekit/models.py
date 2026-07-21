@@ -172,7 +172,8 @@ class ExperimentResult(Base):
 
 class Alert(Base):
     """A threshold rule over the dashboard metrics. When breached (and outside its cooldown)
-    it notifies by email. Evaluated on demand via POST /api/alerts/check (or a cron)."""
+    it notifies by email and/or a chat webhook. Evaluated via POST /api/alerts/check (or a
+    cron)."""
     __tablename__ = "alerts"
     id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int] = _ws_fk()
@@ -182,6 +183,7 @@ class Alert(Base):
     threshold: Mapped[float] = mapped_column(Float, default=0.0)
     window_hours: Mapped[int] = mapped_column(Integer, default=24)
     email: Mapped[str] = mapped_column(String(255), default="")
+    webhook_url: Mapped[str] = mapped_column(String(500), default="")   # Slack/Discord incoming
     enabled: Mapped[bool] = mapped_column(default=True)
     last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

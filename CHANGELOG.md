@@ -4,6 +4,13 @@ All notable changes to ProveKit. This project is pre-1.0; expect breaking change
 
 ## Unreleased — Interactive debugging + live in production
 
+- **Alerts reach Slack and Discord, not just email.** A breach can now POST to an incoming
+  webhook alongside the email. The URL is SSRF-guarded and validated when you save the rule —
+  discovering a typo at 3am via a breach that notified nobody is the failure this fixes. The
+  payload shape is chosen per host (Slack reads `text`, Discord `content`), a dead webhook is
+  reported rather than raised so it can't abort the alert run, and `/api/alerts/check` returns
+  `webhook_delivered` so a cron caller can tell a delivery failure from a rule with no webhook.
+
 - **fix: a retried OTLP export duplicated every span in the batch.** Exporters retry on `5xx` by
   replaying the whole batch, and ingest inserted each span again — silently inflating span
   counts, tokens, and cost, with no way to tell a real repeat from a retry. Ingest is now

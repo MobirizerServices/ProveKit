@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Alert, Workspace, _now, iso_utc
-from ..services import email
+from ..services import email, notify
+from ..services.netguard import guard_url
 from ..services.workspace import current_workspace
 from .metrics import compute_metrics
 
@@ -27,6 +28,7 @@ class _AlertIn(BaseModel):
     threshold: float = 0.0
     window_hours: int = 24
     email: str = ""
+    webhook_url: str = ""
     enabled: bool = True
 
 
@@ -37,7 +39,8 @@ class _AlertPatch(BaseModel):
 def _row(a: Alert) -> dict:
     return {"id": a.id, "name": a.name, "metric": a.metric, "comparator": a.comparator,
             "threshold": a.threshold, "window_hours": a.window_hours, "email": a.email,
-            "enabled": a.enabled, "last_triggered_at": iso_utc(a.last_triggered_at),
+            "webhook_url": a.webhook_url, "enabled": a.enabled,
+            "last_triggered_at": iso_utc(a.last_triggered_at),
             "created_at": iso_utc(a.created_at)}
 
 
@@ -55,9 +58,18 @@ def create_alert(data: _AlertIn, db: Session = Depends(get_db),
         raise HTTPException(422, f"metric must be one of {sorted(_METRICS)}")
     if data.comparator not in _COMPARATORS:
         raise HTTPException(422, "comparator must be 'gt' or 'lt'")
+    hook = data.webhook_url.strip()[:500]
+    if hook:
+        # Reject a bad or internal URL now, while someone is looking at the form. Discovering
+        # it at 3am via a breach that notified nobody is the failure this feature exists to fix.
+        try:
+            guard_url(hook)
+        except Exception as exc:
+            raise HTTPException(422, f"webhook_url rejected: {exc}")
     a = Alert(workspace_id=ws.id, name=data.name[:160] or data.metric, metric=data.metric,
               comparator=data.comparator, threshold=data.threshold,
-              window_hours=max(1, data.window_hours), email=data.email[:255], enabled=data.enabled)
+              window_hours=max(1, data.window_hours), email=data.email[:255],
+              webhook_url=hook, enabled=data.enabled)
     db.add(a)
     db.commit()
     return _row(a)
@@ -90,8 +102,14 @@ def _breached(value: float, comparator: str, threshold: float) -> bool:
     return value > threshold if comparator == "gt" else value < threshold
 
 
+def _message(a: Alert, ws: Workspace, value) -> str:
+    """One wording for every channel, so email and chat can't describe a breach differently."""
+    return (f"{a.metric} is {value} ({a.comparator} {a.threshold}) over the last "
+            f"{a.window_hours}h in project {ws.name}.")
+
+
 def check_alerts(db: Session, ws: Workspace) -> list[dict]:
-    """Evaluate every enabled alert; fire (record + email) any breach outside its cooldown.
+    """Evaluate every enabled alert; fire (record + notify) any breach outside its cooldown.
     Returns the list that fired this run."""
     fired = []
     now = _now()
@@ -109,12 +127,15 @@ def check_alerts(db: Session, ws: Workspace) -> list[dict]:
                 continue
         a.last_triggered_at = now
         db.commit()
+        body = _message(a, ws, value)
         if a.email:
-            email.send(a.email, f"[ProveKit] alert: {a.name}",
-                       f"{a.metric} is {value} ({a.comparator} {a.threshold}) over the last "
-                       f"{a.window_hours}h in project {ws.name}.")
+            email.send(a.email, f"[ProveKit] alert: {a.name}", body)
+        delivered = notify.send_webhook(a.webhook_url, f"*[ProveKit] {a.name}* — {body}")
         fired.append({"id": a.id, "name": a.name, "metric": a.metric, "value": value,
-                      "threshold": a.threshold})
+                      "threshold": a.threshold,
+                      # surfaced so a cron/CI caller can tell a silent delivery failure from a
+                      # rule that simply has no webhook configured
+                      "webhook_delivered": delivered if a.webhook_url else None})
     return fired
 
 

@@ -40,9 +40,9 @@ export interface AdminUser { id: number; email: string; name: string; auth_provi
 export interface AdminProject { id: number; name: string; owner: string; member_count: number; span_count: number; retention: number; redact_pii: boolean; created_at: string; }
 export interface Alert {
   id: number; name: string; metric: string; comparator: string; threshold: number;
-  window_hours: number; email: string; enabled: boolean; last_triggered_at: string | null; created_at: string;
+  window_hours: number; email: string; webhook_url: string; enabled: boolean; last_triggered_at: string | null; created_at: string;
 }
-export interface AlertIn { name?: string; metric: string; comparator?: string; threshold?: number; window_hours?: number; email?: string; enabled?: boolean; }
+export interface AlertIn { name?: string; metric: string; comparator?: string; threshold?: number; window_hours?: number; email?: string; webhook_url?: string; enabled?: boolean; }
 
 export interface Metrics {
   window_hours: number; trace_count: number; error_count: number; error_rate: number;

@@ -314,6 +314,32 @@ class ModelRollup(Base):
     )
 
 
+class RetentionEvent(Base):
+    """What retention deleted, and when.
+
+    Pruning enforces a per-project span cap on every ingest, and it used to do so silently —
+    so "my trace is missing" had no answer distinguishable from "it never arrived", which are
+    very different bugs to chase. Recording the deletion makes the first one checkable.
+
+    Coalesced by hour rather than one row per prune: on a busy project pruning runs on almost
+    every batch, and a row each would be a second write-amplification problem in the name of
+    observing the first.
+    """
+    __tablename__ = "retention_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    bucket: Mapped[datetime] = mapped_column(DateTime, index=True)   # start of the hour, UTC
+    deleted: Mapped[int] = mapped_column(Integer, default=0)
+    # The cap in force — so a jump in deletions can be traced to a policy change rather than
+    # to a traffic spike.
+    keep: Mapped[int] = mapped_column(Integer, default=0)
+    last_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    __table_args__ = (
+        Index("uq_retention_event", "workspace_id", "bucket", unique=True),
+    )
+
+
 class SpanNote(Base):
     """A teammate's note pinned to one span of a trace — inline collaboration on a specific step."""
     __tablename__ = "span_notes"

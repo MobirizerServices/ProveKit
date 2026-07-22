@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
-from ..models import Feedback, Run, SpanNote, Workspace, iso_utc
+from ..models import Feedback, RetentionEvent, Run, SpanNote, Workspace, _now, iso_utc
 from ..services import apikey, deploy, limits, otel, redact, share, spool
 from ..services.auth import get_current_user
 from ..services.workspace import current_workspace
@@ -173,7 +173,12 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
 
 
 def _prune_runs(db: Session, ws: Workspace) -> None:
-    """Keep only the newest N spans for a project (its own retention, or the global default)."""
+    """Keep only the newest N spans for a project (its own retention, or the global default).
+
+    Records what it deleted. Silent pruning made "my trace is missing" indistinguishable from
+    "my trace never arrived" — a config question and an instrumentation bug, chased very
+    differently, with nothing in the product to tell them apart.
+    """
     keep = ws.retention if ws.retention and ws.retention > 0 else get_settings().runs_retention
     if keep <= 0:
         return
@@ -181,7 +186,45 @@ def _prune_runs(db: Session, ws: Workspace) -> None:
              .order_by(Run.id.desc()).offset(keep).all()]
     if stale:
         db.query(Run).filter(Run.id.in_(stale)).delete(synchronize_session=False)
+        _record_retention(db, ws, len(stale), keep)
         db.commit()
+
+
+def _record_retention(db: Session, ws: Workspace, deleted: int, keep: int) -> None:
+    """Add to this hour's deletion tally. Coalesced because pruning runs on nearly every
+    ingest, and a row per prune would be a write-amplification problem of its own."""
+    now = _now()
+    bucket = now.replace(minute=0, second=0, microsecond=0)
+    row = (db.query(RetentionEvent)
+           .filter(RetentionEvent.workspace_id == ws.id, RetentionEvent.bucket == bucket)
+           .first())
+    if row is None:
+        row = RetentionEvent(workspace_id=ws.id, bucket=bucket, deleted=0, keep=keep)
+        db.add(row)
+    row.deleted += deleted
+    row.keep = keep
+    row.last_at = now
+
+
+@ws_router.get("/retention")
+def retention_status(db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    """The answer to "where did my trace go?" — the policy, what's still here, and what was
+    deleted recently."""
+    keep = ws.retention if ws.retention and ws.retention > 0 else get_settings().runs_retention
+    stored = db.query(func.count(Run.id)).filter(Run.workspace_id == ws.id).scalar() or 0
+    oldest = db.query(func.min(Run.created_at)).filter(Run.workspace_id == ws.id).scalar()
+    events = (db.query(RetentionEvent).filter(RetentionEvent.workspace_id == ws.id)
+              .order_by(RetentionEvent.bucket.desc()).limit(48).all())
+    return {
+        "keep": keep,                       # 0 = unlimited
+        "stored_spans": stored,
+        # Nothing older than this exists any more — the single most useful fact when a trace
+        # someone remembers seeing is no longer in the list.
+        "oldest_retained_at": iso_utc(oldest) if oldest else None,
+        "pruned_total": sum(e.deleted for e in events),
+        "recent": [{"at": iso_utc(e.bucket), "deleted": e.deleted, "keep": e.keep,
+                    "last_at": iso_utc(e.last_at)} for e in events],
+    }
 
 
 class _KeyOut(BaseModel):

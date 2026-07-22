@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Experiment, ExperimentResult, Feedback, Workspace, iso_utc
 from ..services import calibration, stats
+from ..services import datasets as datasets_svc
 from ..services.workspace import current_workspace, workspace_from_key
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
@@ -18,6 +19,9 @@ key_router = APIRouter(prefix="/v1/experiments", tags=["experiments"])
 class _ExperimentIn(BaseModel):
     name: str
     dataset_id: int | None = None
+    # What produced this run: model, params, scorer names, split. Free-form because the caller
+    # knows its own setup and we would rather record something honest than a schema we forced.
+    config: dict = {}
 
 
 class _ResultIn(BaseModel):
@@ -212,6 +216,9 @@ def _calibration(db: Session, ws: Workspace, judge_name: str, human_name: str,
 def _experiment_row(db: Session, e: Experiment) -> dict:
     results = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == e.id).all()
     return {"id": e.id, "name": e.name, "dataset_id": e.dataset_id,
+            "dataset_version": e.dataset_version or 0,
+            "dataset_fingerprint": e.dataset_fingerprint or "",
+            "config": e.config or {},
             "created_at": iso_utc(e.created_at), **_summarize(results)}
 
 
@@ -223,10 +230,16 @@ def _get_experiment(db: Session, ws: Workspace, eid: int) -> Experiment:
 
 
 def _create(db: Session, ws: Workspace, data: _ExperimentIn) -> dict:
-    e = Experiment(workspace_id=ws.id, name=data.name[:160], dataset_id=data.dataset_id)
+    # Pin the data provenance at creation, not at read time. A result recorded without it is a
+    # number nobody can re-derive: months later there is no way to say which dataset contents
+    # produced it, so it can be quoted but never checked (#52).
+    pins = datasets_svc.pin(db, data.dataset_id)
+    e = Experiment(workspace_id=ws.id, name=data.name[:160], dataset_id=data.dataset_id,
+                   config=data.config or {}, **pins)
     db.add(e)
     db.commit()
-    return {"id": e.id, "name": e.name, "dataset_id": e.dataset_id, "created_at": iso_utc(e.created_at)}
+    return {"id": e.id, "name": e.name, "dataset_id": e.dataset_id, "config": e.config or {},
+            **pins, "created_at": iso_utc(e.created_at)}
 
 
 def _add_result(db: Session, ws: Workspace, eid: int, data: _ResultIn) -> dict:
@@ -310,11 +323,12 @@ def compare_experiments(eid: int, other_id: int, db: Session = Depends(get_db),
         pairs = _pairs_by_item(a_rows, b_rows, name)
         scorers[name] = stats.compare(a_vals.get(name, []), b_vals.get(name, []),
                                       pairs=pairs or None)
-    warning = ""
-    if a.dataset_id != b.dataset_id:
-        # Scores over different material aren't comparable, whatever the arithmetic says.
-        warning = ("These experiments ran on different datasets, so the comparison measures "
-                   "the datasets as much as the runs.")
+    # Scores over different material aren't comparable, whatever the arithmetic says. The
+    # dataset id was the only check available before #45; now the content fingerprint catches
+    # the case that actually bites — the SAME dataset, edited between the two runs, which
+    # produced a confident delta that was an artefact of the edit with nothing to say so.
+    ok, reason = datasets_svc.comparable(a, b)
+    warning = "" if ok else f"These experiments are not directly comparable: {reason}."
     return {"a": {"id": a.id, "name": a.name, "dataset_id": a.dataset_id,
                   "created_at": iso_utc(a.created_at)},
             "b": {"id": b.id, "name": b.name, "dataset_id": b.dataset_id,

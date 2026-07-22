@@ -305,6 +305,11 @@
       },
       "_ExperimentIn": {
         "properties": {
+          "config": {
+            "default": {},
+            "title": "Config",
+            "type": "object"
+          },
           "dataset_id": {
             "anyOf": [
               {

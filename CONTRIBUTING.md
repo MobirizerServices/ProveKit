@@ -84,7 +84,7 @@ print(*sorted(mods - have))"
 The docs are the markdown in `docs/`, rendered in place — there is no second copy to keep in
 sync. If a command in a guide fails for you, that's a one-file PR. Two are waiting right now:
 `docs/ADMIN.md` links `#revoking-actually-revoking` and
-`#impersonation--read-only-view-as-tenant`, both renamed headings. Fix them and flip
+`#impersonation--read-only-view-as-tenant`, one renamed heading and one that only differs under MkDocs' slugifier. Fix them and flip
 `validation.links.anchors` to `warn` in `docs/site/mkdocs.yml` so the next one gets caught.
 
 ### 3. Fix a bug with a failing test first

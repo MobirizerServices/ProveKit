@@ -33,7 +33,9 @@ Consequences worth knowing:
   build.
 - **Links that leave `docs/`** (`../CONTRIBUTING.md`, `../examples/README.md`) resolve on
   GitHub but are outside `docs_dir`, so MkDocs cannot check them and is configured not to warn.
-  In-page anchors *are* checked.
+  In-page anchors are reported but NOT gated (`validation.links.anchors: info`): MkDocs and
+  GitHub slugify headings differently, so failing the build on them would reject links that
+  work correctly in the repo.
 - **`docs/site/` itself** is excluded from the rendered site (`exclude_docs`); this file is
   meant to be read here, on GitHub.
 
@@ -63,5 +65,5 @@ actually been deployed.
 ## CI
 
 `.github/workflows/docs.yml` runs `mkdocs build --strict` on pushes to `main` and on PRs. It
-gates the *build*, not prose: bad YAML, a nav entry pointing at a deleted file, a broken anchor,
+gates the *build*, not prose: bad YAML, a nav entry pointing at a deleted file,
 an unreadable version. It does not publish anything.

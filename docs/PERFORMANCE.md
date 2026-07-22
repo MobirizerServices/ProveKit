@@ -60,7 +60,7 @@ RTT to the latencies below; the throughput ceiling is unaffected.
 
 Every measured run is preceded by a 20 s prefill so the project is already **at** its retention
 cap — i.e. every measured batch pays for pruning, which is the steady state of a long-running
-instance. The harness also discards a 5 s warm-up before it starts counting.
+instance. The harness also discards a warm-up before it starts counting — 5 s for the short runs below, 10 s for the soak (`--warmup`).
 
 ---
 
@@ -74,8 +74,11 @@ Three consecutive 20 s runs, 4 concurrent exporters, 100 spans/batch:
 | 2 | 10,289 | 36.7 ms | 48.6 ms | 54.0 ms | 70.0 ms | 0 | 0 |
 | 3 | 10,242 | 36.8 ms | 48.3 ms | 53.7 ms | 122.3 ms | 0 | 0 |
 
-Spread across repeats is under 1%. `/healthz` reported `queue_depth: 0`, `lag_seconds: 0.0`,
-`shed: 0` before and after every run — nothing was ever left staged.
+Spread across these three back-to-back repeats was under 1% — but that is *within one quiet
+session*, not a reproducibility claim. Repeats taken later on the same laptop while other work
+was running spread by ~24% (7.2k–9.0k spans/sec). On a machine with other load, treat the run
+you just took as the only number that describes your box. `/healthz` reported `queue_depth: 0`,
+`lag_seconds: 0.0`, `shed: 0` before and after every run — nothing was ever left staged.
 
 ### It saturates one core, not the box
 
@@ -124,7 +127,8 @@ per request, and the harness warns before it exceeds it.
 ### 10-minute soak
 
 One continuous 600 s run (after a 10 s warm-up), 4 exporters, 100 spans/batch, same SQLite
-single-worker config:
+single-worker config. The block below is the harness summary **reformatted for reading**
+(thousands separators added, the `rates` line dropped) — it is not literal stdout:
 
 ```
 spans/sec     9920.4   (99.2 batches/sec, 5,952,700 spans accepted, 5,895 MB sent)
@@ -303,12 +307,22 @@ climbing value is the earliest honest signal that ingest is behind.
 DATABASE_URL="sqlite:///./loadtest.db" INGEST_RATE_PER_MIN=0 SECRET_KEY=<something-long> \
   ./venv/bin/python -m uvicorn provekit.main:app --port 8011
 
-# 2. drive it, from the repo root (mints its own throwaway account + key on a local instance)
+# 2. prefill to the retention cap, so measured batches pay for pruning like a real instance.
+#    Skipping this measures an empty table and reports a number the steady state never reaches.
+./backend/venv/bin/python testkit/loadtest.py \
+  --endpoint http://localhost:8011 --bootstrap \
+  --concurrency 4 --batch-size 100 --duration 20 --warmup 0
+
+# 3. drive it, from the repo root (mints its own throwaway account + key on a local instance)
 ./backend/venv/bin/python testkit/loadtest.py \
   --endpoint http://localhost:8011 --bootstrap \
   --concurrency 4 --batch-size 100 --duration 20 --warmup 5 \
   --label "sqlite, 1 worker, <your hardware>" --json result.json
 ```
+
+Expect your own figure to differ, and prefer it to ours. Two runs taken on the authoring
+laptop while other work was running gave 7.2k and 9.0k spans/sec against the 10.3k published
+above — same machine, same command.
 
 The harness is stdlib-only, so it also runs from a machine that has nothing installed:
 

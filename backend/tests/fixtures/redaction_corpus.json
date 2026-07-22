@@ -1,0 +1,143 @@
+{
+  "_readme": [
+    "Labelled corpus for services/redact.py. Each entry is either SENSITIVE (something that",
+    "must be masked, with the type expected) or CLEAN (ordinary agent output that must survive",
+    "untouched). Rates are computed and asserted in tests/test_redaction_corpus.py and",
+    "published in docs/TRACING.md.",
+    "",
+    "The clean cases are the point. A masker is easy to make recall-perfect by masking",
+    "everything; what makes it usable is not destroying real output. Entries marked",
+    "'known_false_positive' are cases this regex-based masker currently gets wrong \u2014 they are",
+    "recorded rather than deleted so the number is honest and a future fix has a target."
+  ],
+  "sensitive": [
+    {
+      "text": "email me at alice@example.com",
+      "type": "EMAIL"
+    },
+    {
+      "text": "contact: bob.smith+tag@sub.domain.co.uk please",
+      "type": "EMAIL"
+    },
+    {
+      "text": "From: no-reply@corp.io To: ops@corp.io",
+      "type": "EMAIL"
+    },
+    {
+      "text": "user_email='carol@test.org'",
+      "type": "EMAIL"
+    },
+    {
+      "text": "card 4111 1111 1111 1111 declined",
+      "type": "CARD"
+    },
+    {
+      "text": "charge 5500-0000-0000-0004 now",
+      "type": "CARD"
+    },
+    {
+      "text": "pan=4012888888881881",
+      "type": "CARD"
+    },
+    {
+      "text": "ssn 123-45-6789 on file",
+      "type": "SSN"
+    },
+    {
+      "text": "Social Security Number: 987-65-4320",
+      "type": "SSN"
+    },
+    {
+      "text": "key sk-abcdefghijklmnop1234567890",
+      "type": "KEY"
+    },
+    {
+      "text": "OPENAI_API_KEY=sk-proj-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "type": "KEY"
+    },
+    {
+      "text": "aws id AKIAIOSFODNN7EXAMPLE rotated",
+      "type": "KEY"
+    },
+    {
+      "text": "token ghp_abcdefghijklmnopqrstuvwxyz0123",
+      "type": "KEY"
+    },
+    {
+      "text": "gho_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 granted",
+      "type": "KEY"
+    },
+    {
+      "text": "call me on +1 415 555 0132",
+      "type": "PHONE"
+    },
+    {
+      "text": "phone: (020) 7946 0958",
+      "type": "PHONE"
+    },
+    {
+      "text": "reach support at +44 7700 900123",
+      "type": "PHONE"
+    }
+  ],
+  "clean": [
+    {
+      "text": "The capital of Iceland is Reykjavik."
+    },
+    {
+      "text": "Summarise the attached quarterly report in three bullets."
+    },
+    {
+      "text": "SELECT id, name FROM users WHERE active = true LIMIT 10"
+    },
+    {
+      "text": "The build failed with exit code 137 (OOM killed)."
+    },
+    {
+      "text": "Retrieved 5 documents with scores 0.91, 0.88, 0.84, 0.80, 0.79."
+    },
+    {
+      "text": "Upgrade to version 2.14.3 to pick up the fix."
+    },
+    {
+      "text": "Commit a3f9c21e8b74d5620fabc3319d0e77aa2b41c8de is the culprit."
+    },
+    {
+      "text": "The meeting is at 14:30 on 2026-03-11.",
+      "note": "date/time must survive"
+    },
+    {
+      "text": "Total is $1,299.00 including tax."
+    },
+    {
+      "text": "Latency p95 was 1450 ms across 20000 requests."
+    },
+    {
+      "text": "The function returns a 404 when the record is absent."
+    },
+    {
+      "text": "Use temperature 0.7 and top_p 0.95 for this task."
+    },
+    {
+      "text": "Trace 7f3a9c2b1d4e6f8a0b2c4d6e8f0a2b4c has 312 spans."
+    },
+    {
+      "text": "The customer asked about the refund policy for digital goods."
+    },
+    {
+      "text": "ISBN 978-0-13-235088-4 is Clean Code.",
+      "known_false_positive": "CARD",
+      "note": "a long digit run is shaped exactly like a card number to this regex; recorded rather than deleted so the published rate stays honest"
+    },
+    {
+      "text": "Order 1234567890123 shipped on Tuesday.",
+      "known_false_positive": "CARD",
+      "note": "a long digit run is shaped exactly like a card number to this regex; recorded rather than deleted so the published rate stays honest"
+    },
+    {
+      "text": "Invoice 4900123456789012 was paid.",
+      "known_false_positive": "CARD",
+      "note": "a long digit run is shaped exactly like a card number to this regex; recorded rather than deleted so the published rate stays honest"
+    }
+  ]
+}

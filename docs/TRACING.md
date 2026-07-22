@@ -172,6 +172,23 @@ what was touched:
 That marker is what makes a mangled output traceable to the masker instead of blamed on the
 model.
 
+**Measured quality.** Regex redaction has two failure modes and both are measured against a
+labelled corpus (`backend/tests/fixtures/redaction_corpus.json`), re-run on every CI build:
+
+| | rate |
+|---|---|
+| Recall (labelled PII that gets masked) | **100% recall** |
+| False positives (clean text that gets mangled) | **18% false-positive rate** |
+
+The false positives are all the same shape: long digit runs — ISBNs, order numbers, invoice
+ids — are indistinguishable from a card number to a regex. They are listed explicitly in the
+corpus rather than removed from it, so the published number stays honest and a future fix has
+a target. Recall is measured over the patterns the corpus covers (emails, cards, SSNs,
+provider keys, phone numbers); it is not a claim that nothing else is sensitive.
+
+This is a safety net, not a guarantee. Don't put secrets in agent output and rely on this to
+remove them.
+
 ## Fail-open
 
 Tracing never takes your agent down. If the key/endpoint are unset, OpenTelemetry isn't

@@ -9,19 +9,38 @@ from __future__ import annotations
 
 import re
 
-# (label, compiled pattern). Order matters: match the most specific/greedy first (a card
-# number before a bare digit run). Each match is replaced by [REDACTED_<LABEL>].
-_PATTERNS: list[tuple[str, re.Pattern]] = [
-    ("EMAIL", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
-    # 13-16 digit card numbers, optionally separated by spaces/hyphens.
-    ("CARD", re.compile(r"\b(?:\d[ -]?){13,16}\b")),
-    ("SSN", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
-    # OpenAI-style / ProveKit / AWS / generic long secret tokens.
-    ("KEY", re.compile(r"\b(?:sk|pk|rk)[-_][A-Za-z0-9]{16,}\b")),
-    ("KEY", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("KEY", re.compile(r"\bgh[posru]_[A-Za-z0-9]{20,}\b")),
-    # Phone numbers (loose): +CC and 7+ digits with common separators.
-    ("PHONE", re.compile(r"\+?\d[\d ().-]{7,}\d")),
+def _enough_digits(match: str) -> bool:
+    """A phone number has at least 9 digits.
+
+    Without this the loose pattern ate ISO dates: "2026-03-11" is eight digits with separators
+    and matched exactly. Dates are extremely common in agent output, so this was the single
+    highest-volume false positive the corpus found. Nine is chosen because the shortest
+    international number in the corpus has eleven and the longest false positive (a date) has
+    eight — the gap is where the threshold belongs.
+    """
+    return sum(c.isdigit() for c in match) >= 9
+
+
+# (label, compiled pattern, extra validator or None). Order matters: match the most
+# specific/greedy first (a card number before a bare digit run). Each match is replaced by
+# [REDACTED_<LABEL>]. A validator lets a rule express a condition regexes are bad at —
+# counting digits across separators — rather than being tuned into unreadability.
+_PATTERNS: list[tuple[str, re.Pattern, object]] = [
+    ("EMAIL", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), None),
+    # 13-16 digit card numbers, optionally separated by spaces/hyphens. Anchored to end on a
+    # digit: the previous form let the trailing separator into the match, so masking ate the
+    # following space and glued the replacement onto the next word.
+    ("CARD", re.compile(r"\b\d(?:[ -]?\d){12,15}\b"), None),
+    ("SSN", re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), None),
+    # Provider secret tokens. The body allows internal - and _ because current OpenAI keys are
+    # `sk-proj-<blob>`: the previous [A-Za-z0-9]{16,} body stopped dead at the second hyphen,
+    # so every project-scoped key passed through completely unmasked. That is the worst class
+    # of bug this module can have — a leak that looks exactly like working redaction.
+    ("KEY", re.compile(r"\b(?:sk|pk|rk)[-_][A-Za-z0-9][A-Za-z0-9_-]{14,}[A-Za-z0-9]\b"), None),
+    ("KEY", re.compile(r"\bAKIA[0-9A-Z]{16}\b"), None),
+    ("KEY", re.compile(r"\bgh[posru]_[A-Za-z0-9]{20,}\b"), None),
+    # Phone numbers (loose): +CC and 7+ digits with common separators, gated on digit count.
+    ("PHONE", re.compile(r"\+?\d[\d ().-]{7,}\d"), _enough_digits),
 ]
 
 
@@ -43,10 +62,19 @@ def redact_text_counted(text: str | None) -> tuple[str | None, dict[str, int]]:
         return text, {}
     out = text
     counts: dict[str, int] = {}
-    for label, pat in _PATTERNS:
-        out, n = pat.subn(f"[REDACTED_{label}]", out)
-        if n:
-            counts[label] = counts.get(label, 0) + n
+    for label, pat, validator in _PATTERNS:
+        hits = 0
+
+        def _sub(m, _label=label, _validator=validator):
+            nonlocal hits
+            if _validator is not None and not _validator(m.group()):
+                return m.group()          # matched the shape, failed the rule — leave it alone
+            hits += 1
+            return f"[REDACTED_{_label}]"
+
+        out = pat.sub(_sub, out)
+        if hits:
+            counts[label] = counts.get(label, 0) + hits
     return out, counts
 
 

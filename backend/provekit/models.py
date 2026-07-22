@@ -115,9 +115,17 @@ class Run(Base):
     # guarantees a span id is unique *within a trace* — two traces may reuse one, and dropping
     # the second would be worse data loss than the duplicate this prevents. Partial
     # (span_id != '') because rows created outside OTLP ingest — replays, evals — have none.
+    # Composites for the hot reads. workspace_id was already indexed alone, but it is the least
+    # selective column here — leading with it and carrying the discriminating column is what
+    # keeps a busy project's dashboard off a full scan. See migration f2a3b4c5d6e7 for the
+    # query shape behind each one.
     __table_args__ = (
         Index("uq_run_span", "workspace_id", "trace_id", "span_id", unique=True,
               sqlite_where=text("span_id != ''"), postgresql_where=text("span_id != ''")),
+        Index("ix_runs_ws_root", "workspace_id", "parent_span_id", "id"),
+        Index("ix_runs_ws_created", "workspace_id", "created_at"),
+        Index("ix_runs_ws_status_created", "workspace_id", "status", "created_at"),
+        Index("ix_runs_ws_session", "workspace_id", "session_id"),
     )
 
 

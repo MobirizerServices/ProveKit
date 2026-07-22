@@ -47,6 +47,11 @@ def flatten_attrs(attributes: list) -> dict:
 
 
 _INDEXED_MSG_RE = re.compile(r"^llm\.(input|output)_messages\.(\d+)\.message\.(role|content|name)$")
+# OpenLLMetry/Traceloop — the dominant emitter of the legacy dialect — flattens per message
+# instead of emitting flat gen_ai.prompt/gen_ai.completion. Reading only the flat keys dropped
+# those payloads whole: a fully populated span stored an empty input and a null output.
+_TRACELOOP_MSG_RE = re.compile(r"^gen_ai\.(prompt|completion)\.(\d+)\.(role|content|name)$")
+_TRACELOOP_DIRECTION = {"prompt": "input", "completion": "output"}
 _INDEXED_TEXT_RE = re.compile(
     r"^llm\.(input|output)_messages\.(\d+)\.message\.contents\.(\d+)\.message_content\.text$")
 
@@ -72,6 +77,10 @@ def _reconstruct_indexed_messages(attrs: dict, direction: str) -> list[dict] | N
         m = _INDEXED_TEXT_RE.match(key)
         if m and m.group(1) == direction:
             text_parts.setdefault(int(m.group(2)), {})[int(m.group(3))] = str(value)
+            continue
+        m = _TRACELOOP_MSG_RE.match(key)
+        if m and _TRACELOOP_DIRECTION[m.group(1)] == direction:
+            by_index.setdefault(int(m.group(2)), {})[m.group(3)] = str(value)
     if not by_index and not text_parts:
         return None
     indices = sorted(set(by_index) | set(text_parts))
@@ -83,6 +92,13 @@ def _reconstruct_indexed_messages(attrs: dict, direction: str) -> list[dict] | N
             joined = " ".join(text_parts[i][j] for j in sorted(text_parts[i]))
             content = content or joined
         out.append({"role": fields.get("role") or fields.get("name") or "user", "content": content})
+    # A function-calling reply has no message *content* — the answer is in the tool_calls
+    # attributes. The reconstruction is then a list of empty-content messages, which is truthy
+    # and used to override output.value, the one place the tool call actually survived. So the
+    # span stored '[{"role": "assistant", "content": ""}]' for a perfectly good response.
+    # Returning None lets the caller fall through to the dialect that still has the payload.
+    if not any(m["content"] for m in out):
+        return None
     return out
 
 
@@ -126,20 +142,29 @@ def map_span(span: dict) -> dict:
     survives, not just the LLM calls) and classified: agent | llm | tool | step. The
     trace/span/parent ids are carried so the portal can rebuild the tree."""
     attrs = flatten_attrs(span.get("attributes"))
-    model = _first(attrs, "gen_ai.request.model", "gen_ai.response.model", "llm.model_name", "gen_ai.model")
+    # embedding.model_name last: an embedding call never carries llm.model_name, so without it
+    # every embedding span (one per chunk on ingest, one per query at retrieval) stored no
+    # model at all and was invisible to pricing.
+    model = _first(attrs, "gen_ai.request.model", "gen_ai.response.model", "llm.model_name",
+                   "gen_ai.model", "embedding.model_name")
     provider = _first(attrs, "gen_ai.provider.name", "gen_ai.system", "llm.provider")
     operation = _first(attrs, "gen_ai.operation.name")
-    tool = _first(attrs, "gen_ai.tool.name")
+    # `tool.name` is OpenInference's key (SpanAttributes.TOOL_NAME). Reading only the gen_ai
+    # form meant every tool call from crewai/langchain/llama_index/smolagents — instrumentors
+    # ProveKit installs by default — landed as an unnamed "step" and never matched a tool
+    # filter. The single highest-impact gap the conformance suite found.
+    tool = _first(attrs, "gen_ai.tool.name", "tool.name")
+    kind = (_first(attrs, "openinference.span.kind") or "").upper()
     session = _first(attrs, "session.id", "gen_ai.conversation.id", "thread.id", "session_id")
 
     # Reconstructed indexed OpenInference attributes take priority: they can be present when
     # input.value/gen_ai.input.messages are absent (see _reconstruct_indexed_messages).
     prompt = (_reconstruct_indexed_messages(attrs, "input")
              or _first(attrs, "gen_ai.input.messages", "gen_ai.prompt", "input.value",
-                       "llm.input_messages", "input"))
+                       "llm.input_messages", "input", "gen_ai.tool.call.arguments"))
     completion = (_reconstruct_indexed_messages(attrs, "output")
                  or _first(attrs, "gen_ai.output.messages", "gen_ai.completion", "output.value",
-                           "llm.output_messages", "output"))
+                           "llm.output_messages", "output", "gen_ai.tool.call.result"))
     usage = {}
     it = _first(attrs, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.token_count.prompt")
     ot = _first(attrs, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.token_count.completion")
@@ -157,9 +182,11 @@ def map_span(span: dict) -> dict:
     dur_ms = round((end - start) / 1e6) if end > start else 0
     status = "failed" if (span.get("status") or {}).get("code") == 2 else "completed"
 
-    if tool:
+    if tool or kind == "TOOL":
         rtype, op = "tool", "execute_tool"
-    elif operation == "invoke_agent":
+    elif operation == "invoke_agent" or kind == "AGENT":
+        # OpenInference marks an agent turn with span.kind rather than an operation name, so
+        # without this only frameworks emitting gen_ai.operation.name ever produced an agent.
         rtype, op = "agent", "invoke_agent"
     elif model or provider:   # a real model call, not just any span that carries gen_ai.* io
         rtype, op = "llm", operation or "chat"
@@ -190,8 +217,11 @@ def map_span(span: dict) -> dict:
             params[dst] = v
     if params:
         meta["params"] = params
+    # `llm.finish_reason` is what OpenInference actually emits; the old list ended with
+    # `llm.response.finish_reason`, which nothing emits — so no OpenInference span ever
+    # recorded one and a length-truncated answer looked identical to a complete one.
     finish = _first(attrs, "gen_ai.response.finish_reasons", "gen_ai.response.finish_reason",
-                    "llm.response.finish_reason")
+                    "llm.finish_reason", "llm.response.finish_reason")
     if finish is not None:
         meta["finish_reason"] = finish
     events = []

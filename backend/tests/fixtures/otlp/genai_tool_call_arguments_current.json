@@ -1,0 +1,63 @@
+{
+  "instrumentor": "langchain",
+  "dialect": "genai_current",
+  "note": "REGRESSION GUARD \u2014 this was a live mapping bug found by this suite and fixed: A gen_ai tool span carries its payload in gen_ai.tool.call.arguments / gen_ai.tool.call.result, neither of which is read. A conformant tool span therefore stores an EMPTY input and output \u2014 the run is classified 'tool' correctly and then shows nothing about what the tool was asked or answered.",
+  "span": {
+    "traceId": "4444555566667777888899990000eeee",
+    "spanId": "8f90a1b2c3d4e5f6",
+    "parentSpanId": "",
+    "name": "execute_tool get_weather",
+    "startTimeUnixNano": "1753144600000000000",
+    "endTimeUnixNano": "1753144600070000000",
+    "status": {
+      "code": 1
+    },
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "get_weather"
+        }
+      },
+      {
+        "key": "gen_ai.tool.type",
+        "value": {
+          "stringValue": "function"
+        }
+      },
+      {
+        "key": "gen_ai.tool.call.id",
+        "value": {
+          "stringValue": "call_7712"
+        }
+      },
+      {
+        "key": "gen_ai.tool.call.arguments",
+        "value": {
+          "stringValue": "{\"city\": \"Berlin\"}"
+        }
+      },
+      {
+        "key": "gen_ai.tool.call.result",
+        "value": {
+          "stringValue": "{\"temp_c\": 21}"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "type": "tool",
+    "request.input": {
+      "city": "Berlin"
+    },
+    "result.text": {
+      "temp_c": 21
+    }
+  }
+}

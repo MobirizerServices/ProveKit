@@ -24,9 +24,12 @@ own test case — a failure names the exact field that moved. A list/dict expect
 against the PARSED stored string, so fixtures stay readable and stay independent of json.dumps
 spacing. `expect_absent` asserts a conditionally-set field was NOT written.
 
-`fixtures/otlp/known_gaps/` holds payloads ProveKit maps WRONG today. They assert the mapping we
-want and are marked xfail, with the damage described in the fixture's "gap" field: they document
-the bug where a reader will meet it, and go green by themselves once map_span learns the key.
+`fixtures/otlp/known_gaps/` held payloads ProveKit mapped WRONG. Building this suite found seven
+of them and all seven have since been fixed, so those fixtures were promoted into the corpus as
+ordinary regression guards — each keeps the story of the bug it caught in its "note". The
+directory is intentionally gone rather than kept empty: a slot for known-broken mappings invites
+adding one instead of fixing it. A newly discovered gap should be a failing fixture, and stay
+failing until someone fixes the mapping.
 """
 import functools
 import json
@@ -39,7 +42,6 @@ from provekit.services import otel
 
 FIXTURES = Path(__file__).parent / "fixtures" / "otlp"
 CONFORMANCE = sorted(FIXTURES.glob("*.json"))
-KNOWN_GAPS = sorted((FIXTURES / "known_gaps").glob("*.json"))
 
 #: Instrumentor families that MUST stay covered — the LLM providers and agent frameworks users
 #: actually arrive with, plus the generic HTTP instrumentors (a tool call is a span too).
@@ -124,18 +126,9 @@ def test_absent(fixture, path):
     assert _dig(run, path) is _MISSING, f"{path} should not have been written"
 
 
-@pytest.mark.xfail(reason="known map_span gap — see the fixture's 'gap' field", strict=False)
-@pytest.mark.parametrize("fixture,path,expected", list(_expected(KNOWN_GAPS)))
-def test_known_gap(fixture, path, expected):
-    """The mapping we WANT for a payload ProveKit gets wrong today. Non-strict xfail on purpose:
-    the day map_span learns the key this xpasses instead of turning the suite red."""
-    _, run = _fixture(fixture)
-    assert _matches(expected, _dig(run, path))
-
-
 # ---- the corpus itself ----
 @pytest.mark.parametrize("fixture", [pytest.param(str(p), id=p.stem)
-                                     for p in CONFORMANCE + KNOWN_GAPS])
+                                     for p in CONFORMANCE])
 def test_fixture_is_wellformed(fixture):
     fx, _ = _fixture(fixture)
     assert fx["instrumentor"] in _families(), "unknown instrumentor family"
@@ -146,23 +139,21 @@ def test_fixture_is_wellformed(fixture):
     # tree the portal rebuilds (and the columns are String(32)/String(16)).
     assert len(span["traceId"]) == 32 and len(span["spanId"]) == 16
     assert int(span["endTimeUnixNano"]) > int(span["startTimeUnixNano"])
-    if "known_gaps" not in fixture:
-        # The end-to-end test reads it back by type; a gap fixture asserts only the field it is
-        # about, since the rest of its mapping is whatever today's map_span does with it.
-        assert fx["expect"]["type"] in ("agent", "llm", "tool", "step")
-    else:
-        assert fx["gap"], "a known-gap fixture must say what breaks for the reader"
+    # Every fixture pins the node type: the end-to-end test reads rows back by it, and a
+    # fixture that asserts a payload field without pinning what kind of node carries it would
+    # keep passing if the classification ladder broke underneath it.
+    assert fx["expect"]["type"] in ("agent", "llm", "tool", "step")
 
 
 def test_span_ids_are_unique_across_the_corpus():
     """Ingest dedupes on (trace_id, span_id), so a copy-pasted id would make the end-to-end
     test below silently assert on one row twice."""
-    ids = [json.loads(p.read_text())["span"]["spanId"] for p in CONFORMANCE + KNOWN_GAPS]
+    ids = [json.loads(p.read_text())["span"]["spanId"] for p in CONFORMANCE]
     assert len(ids) == len(set(ids))
 
 
 def test_required_instrumentor_families_are_covered():
-    covered = {json.loads(p.read_text())["instrumentor"] for p in CONFORMANCE + KNOWN_GAPS}
+    covered = {json.loads(p.read_text())["instrumentor"] for p in CONFORMANCE}
     assert REQUIRED_FAMILIES - covered == set()
 
 

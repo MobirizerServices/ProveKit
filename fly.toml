@@ -1,0 +1,47 @@
+# ProveKit backend on Fly.io. Deploy from the repo root with the backend as the build
+# context, because backend/Dockerfile copies requirements.txt from its own directory:
+#
+#   fly deploy ./backend --config fly.toml
+#
+# The frontend is a second Fly app with its own config — deploy/ONE_CLICK.md has it, along
+# with the Postgres and secret steps this file cannot carry.
+
+app = "provekit-backend"
+primary_region = "iad"
+
+[build]
+  # Relative to the deploy working directory (./backend), not to this file.
+  dockerfile = "Dockerfile"
+
+[env]
+  # Login wall, secure cookies, strict SSRF guard on the outbound emit path. It also makes
+  # the app refuse to boot without a strong SECRET_KEY, which is deliberate:
+  #   fly secrets set SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
+  HOSTED = "true"
+  PORT = "8000"
+
+[processes]
+  # `fly postgres attach` sets DATABASE_URL to a postgres:// URL, which SQLAlchemy resolves
+  # to the psycopg2 driver. This image ships psycopg 3 only (backend/requirements.txt), so
+  # the scheme has to be rewritten or the process dies on its first connect. Otherwise this
+  # is the Dockerfile CMD verbatim. The substitution is a no-op on an already-correct URL.
+  app = "sh -c 'DATABASE_URL=$(printf %s \"$DATABASE_URL\" | sed -E \"s@^postgres(ql)?://@postgresql+psycopg://@\"); export DATABASE_URL; exec uvicorn provekit.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

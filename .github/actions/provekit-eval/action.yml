@@ -1,0 +1,179 @@
+name: ProveKit eval gate
+description: >-
+  Run pk.evaluate() against a ProveKit dataset, fail the build on a score regression, and
+  post the per-scorer deltas as one sticky pull-request comment.
+author: ProveKit contributors
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  api-key:
+    description: Project key from the portal (Project keys). Pass a secret, never a literal.
+    required: true
+  endpoint:
+    description: Your ProveKit URL, e.g. https://provekit.your-company.com
+    required: true
+  dataset:
+    description: Dataset name or numeric id to evaluate against.
+    required: true
+  target:
+    description: >-
+      The thing being evaluated, as `module:function` or `path/to/file.py:function`. It is
+      called once per dataset item with that item's input and must return the output.
+    required: true
+  scorers:
+    description: >-
+      Comma-separated scorers: built-in names (exact_match, contains, regex_match,
+      json_valid) and/or `module:function` for your own `fn(output, expected) -> float`.
+      An unrecognised name is an error, not a silent skip.
+    required: false
+    default: exact_match
+  threshold:
+    description: >-
+      Minimum mean score to pass. Empty (the default) reports without gating — set it, or
+      max-regression, once you know where your scores sit.
+    required: false
+    default: ""
+  max-regression:
+    description: >-
+      How far the mean may fall below the baseline before the build fails, e.g. 0.02.
+      Ignored when there is no baseline.
+    required: false
+    default: ""
+  baseline-experiment:
+    description: >-
+      Experiment id to diff against, fetched with the same project key. Use this when you
+      have a fixed reference run (e.g. the one you last shipped).
+    required: false
+    default: ""
+  baseline-file:
+    description: >-
+      Path to a summary JSON a previous run wrote (see the summary-file output). Restore it
+      from actions/cache or an artifact to diff against the last run on the base branch.
+      A missing file is a first run, not an error.
+    required: false
+    default: ""
+  experiment-name:
+    description: Name recorded in the portal. Defaults to `ci <short sha>`.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory to run in; also the root the target is imported from.
+    required: false
+    default: "."
+  requirements:
+    description: >-
+      Optional pip requirements file for the target's own dependencies, installed before the
+      eval runs (relative to working-directory).
+    required: false
+    default: ""
+  provekit-version:
+    description: >-
+      pip spec for the SDK. `provekit[trace]` installs the auto-instrumentors, so any LLM
+      call your target makes is captured; pin it (e.g. `provekit[trace]==0.6.0`) for a
+      reproducible gate.
+    required: false
+    default: provekit[trace]
+  comment:
+    description: Post the score table as a pull-request comment. Requires pull-requests:write.
+    required: false
+    default: "true"
+  comment-key:
+    description: >-
+      Identity of the sticky comment; defaults to the dataset. Give each gate its own key
+      when one workflow evaluates several datasets.
+    required: false
+    default: ""
+  github-token:
+    description: Token used to post the comment.
+    required: false
+    default: ${{ github.token }}
+  summary-file:
+    description: Where to write the experiment summary JSON (relative to working-directory).
+    required: false
+    default: provekit-eval-summary.json
+  soft-fail:
+    description: >-
+      Report the verdict but never fail the job. For rolling a gate out on a repo whose
+      scores you do not trust yet.
+    required: false
+    default: "false"
+
+outputs:
+  passed:
+    description: '"true" when every configured check passed.'
+    value: ${{ steps.eval.outputs.passed }}
+  mean-score:
+    description: Mean score across every scorer and item; empty if nothing was scored.
+    value: ${{ steps.eval.outputs.mean-score }}
+  experiment-id:
+    description: Id of the experiment created in the portal.
+    value: ${{ steps.eval.outputs.experiment-id }}
+  result-count:
+    description: Number of dataset items scored.
+    value: ${{ steps.eval.outputs.result-count }}
+  summary-file:
+    description: Absolute path to the summary JSON — cache it as the next run's baseline.
+    value: ${{ steps.eval.outputs.summary-file }}
+  comment-file:
+    description: Absolute path to the rendered markdown report.
+    value: ${{ steps.eval.outputs.comment-file }}
+
+runs:
+  using: composite
+  steps:
+    # No setup-python here: the runner image already has one, and a job that evaluates its
+    # own agent has almost certainly set up the interpreter that agent needs. Add
+    # actions/setup-python before this step if you want a specific version.
+    - name: Install provekit
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PROVEKIT_SPEC: ${{ inputs.provekit-version }}
+        REQUIREMENTS: ${{ inputs.requirements }}
+      run: |
+        set -euo pipefail
+        python3 -m pip install --disable-pip-version-check --quiet "$PROVEKIT_SPEC"
+        if [ -n "$REQUIREMENTS" ]; then
+          python3 -m pip install --disable-pip-version-check --quiet -r "$REQUIREMENTS"
+        fi
+
+    # Every input arrives through env, never through ${{ }} interpolated into the script —
+    # an interpolated dataset name from a PR title is a shell injection.
+    - name: Evaluate
+      id: eval
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_API_KEY: ${{ inputs.api-key }}
+        INPUT_ENDPOINT: ${{ inputs.endpoint }}
+        INPUT_DATASET: ${{ inputs.dataset }}
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_SCORERS: ${{ inputs.scorers }}
+        INPUT_THRESHOLD: ${{ inputs.threshold }}
+        INPUT_MAX_REGRESSION: ${{ inputs.max-regression }}
+        INPUT_BASELINE_EXPERIMENT: ${{ inputs.baseline-experiment }}
+        INPUT_BASELINE_FILE: ${{ inputs.baseline-file }}
+        INPUT_EXPERIMENT_NAME: ${{ inputs.experiment-name }}
+        INPUT_SUMMARY_FILE: ${{ inputs.summary-file }}
+        INPUT_COMMENT_KEY: ${{ inputs.comment-key }}
+      run: python3 "$GITHUB_ACTION_PATH/gate.py"
+
+    - name: Comment on the pull request
+      if: ${{ inputs.comment == 'true' }}
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        COMMENT_FILE: ${{ steps.eval.outputs.comment-file }}
+        COMMENT_KEY: ${{ inputs.comment-key != '' && inputs.comment-key || inputs.dataset }}
+      run: python3 "$GITHUB_ACTION_PATH/comment.py"
+
+    # Last, so the comment above always lands first — a failing gate that hides its own
+    # explanation is the thing teams hand-roll badly.
+    - name: Enforce the gate
+      if: ${{ steps.eval.outputs.passed != 'true' && inputs.soft-fail != 'true' }}
+      shell: bash
+      run: |
+        echo "::error::ProveKit eval gate failed — see the job summary for per-scorer deltas."
+        exit 1

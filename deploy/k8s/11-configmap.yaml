@@ -1,0 +1,43 @@
+# Non-secret backend configuration. Keys match the fields in backend/provekit/config.py
+# (pydantic-settings reads them case-insensitively from the environment). Replace
+# provekit.example.com with your hostname before applying.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provekit-config
+  namespace: provekit
+data:
+  # Login required, secure cookies, strict SSRF guard on the outbound emit path, JSON logs.
+  HOSTED: "true"
+  CORS_ORIGINS: "https://provekit.example.com"
+  WEB_BASE_URL: "https://provekit.example.com"
+
+  # Durable accept (backend/provekit/services/spool.py): each ingest batch is fsynced to disk
+  # before it is acknowledged, so a database blip cannot destroy accepted spans. SPOOL_DIR
+  # points at the volume mounted in 30-backend.yaml.
+  SPOOL_ENABLED: "true"
+  SPOOL_DIR: "/data/spool"
+  SPOOL_MAX_DEPTH: "5000"
+  SPOOL_DRAIN_SECONDS: "5.0"
+
+  # Quotas and limits. 0 disables a given limit.
+  INGEST_RATE_PER_MIN: "600"
+  LOGIN_ATTEMPTS_PER_MIN: "10"
+  RUNS_RETENTION: "10000"
+  MAX_BODY_BYTES: "25000000"
+  MONTHLY_SPAN_QUOTA: "0"
+  MAX_PROJECTS_PER_ACCOUNT: "0"
+  PLAYGROUND_MONTHLY_USD_CAP: "25.0"
+
+  REDACT_PII: "false"
+  REQUIRE_EMAIL_VERIFICATION: "false"
+  SUPERUSER_EMAILS: ""
+  THREAD_POOL_SIZE: "200"
+
+  # Email (password reset / verification). Without SMTP_HOST the links are logged, not sent.
+  # The password belongs in the Secret, not here.
+  SMTP_HOST: ""
+  SMTP_PORT: "587"
+  SMTP_USER: ""
+  SMTP_FROM: ""
+  SMTP_STARTTLS: "true"

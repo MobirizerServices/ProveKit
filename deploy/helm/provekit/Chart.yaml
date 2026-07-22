@@ -1,0 +1,25 @@
+apiVersion: v2
+name: provekit
+description: ProveKit — drop-in tracing for AI agents (FastAPI backend + Next.js portal)
+type: application
+
+# Chart version is independent of the app; bump it for chart-only changes.
+version: 0.1.0
+# Matches the FastAPI app version in backend/provekit/main.py. Used as the default image tag.
+appVersion: "0.1.0"
+
+home: https://github.com/MobirizerServices/ProveKit
+sources:
+  - https://github.com/MobirizerServices/ProveKit
+keywords:
+  - observability
+  - tracing
+  - llm
+  - agents
+  - opentelemetry
+
+# Postgres and Redis are rendered by this chart (templates/postgresql.yaml, templates/redis.yaml)
+# rather than pulled in as subcharts, so `helm install` works with no chart repositories
+# configured and no network access. Both are single-replica conveniences — point at managed
+# services with secrets.databaseUrl / secrets.redisUrl for anything you care about.
+dependencies: []

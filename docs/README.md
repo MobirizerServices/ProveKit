@@ -10,12 +10,20 @@
 - [Evaluation guide](EVALUATION.md) — datasets, scorers, `pk.evaluate()`, experiments, CI gates
 - [MCP debug channel](MCP.md) — debug traces from Claude Desktop / Cursor by project key
 - [Examples](../examples/README.md) — runnable demo agents (incl. LangGraph) that fill a portal
+- [Framework quickstarts](QUICKSTARTS.md) — LangGraph, CrewAI, LlamaIndex: install, code, span tree
+- [Migrating here](MIGRATING.md) — coming from LangSmith or Langfuse: concept map and switch path
+- [Go & Java](SDK_OTHER_LANGUAGES.md) — no SDK needed; the OTLP exporter config that classifies correctly
+- [HTTP API](API.md) — the OpenAPI spec, auth model, and generating clients
+- [API stability](API_STABILITY.md) — what's stable, what's experimental, and the deprecation window
+- [CI eval gate](CI_GATE.md) — the `provekit-eval` GitHub Action and PR score deltas
 
 **Deploy & release**
 
 - [Admin console](ADMIN.md) — platform operators: bootstrapping superusers, what `/admin` shows
 - [Deployment](DEPLOY.md) — local vs hosted (TLS, Postgres, Redis)
 - [Deploy to a dedicated VPS](DEPLOY_PROVEKIT_ONLINE.md) — **canonical**: how provekit.online runs
+- [One-click deploy](../deploy/ONE_CLICK.md) — Render / Railway / Fly blueprints (unverified against live accounts)
+- [Kubernetes](../deploy/helm/README.md) — Helm chart, plus plain manifests in [deploy/k8s](../deploy/k8s/README.md)
 - [Shared VPS](DEPLOY_CONTABO_SHARED.md) · [host toggle](DEPLOY_CONTABO_TOGGLE.md) — co-hosting setups
 - [Publishing](PUBLISHING.md) — release `provekit` to PyPI
 

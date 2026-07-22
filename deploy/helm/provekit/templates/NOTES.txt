@@ -1,0 +1,51 @@
+ProveKit {{ .Chart.AppVersion }} installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+{{- if .Values.ingress.enabled }}
+
+Portal:  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ include "provekit.ingressHost" . }}
+Health:  curl http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ include "provekit.ingressHost" . }}/healthz
+
+Point an agent at it:
+
+    export PROVEKIT_ENDPOINT=http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ include "provekit.ingressHost" . }}
+    export PROVEKIT_API_KEY=<project key from the portal>
+    # then add `import provekit.auto` to your agent
+
+{{- else }}
+
+No ingress. Port-forward to look around:
+
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "provekit.frontend.fullname" . }} 3000:{{ .Values.frontend.service.port }}
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "provekit.backend.serviceName" . }} 8000:{{ .Values.backend.service.port }}
+
+Then open http://localhost:3000 and check http://localhost:8000/healthz.
+
+Set ingress.enabled=true and config.domain=<your host> for a real deployment — the browser,
+the SDK and the session cookie all want one origin.
+{{- end }}
+
+Migrations ran on startup (alembic upgrade head, serialized across replicas by a Postgres
+advisory lock). Watch the rollout:
+
+    kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "provekit.backend.fullname" . }}
+
+{{- if not (include "provekit.redisUrl" .) }}
+
+WARNING: no REDIS_URL. Rate-limit windows, playground spend counters and monthly span quotas
+are per-worker and reset on restart — a deterrent, not a ceiling. Set redis.enabled=true or
+secrets.redisUrl before opening this instance to other people.
+{{- end }}
+
+{{- if and .Values.spool.enabled (not .Values.spool.persistence.enabled) }}
+
+NOTE: the ingest spool is on an emptyDir. Batches staged but not yet landed survive a container
+crash, not a pod being rescheduled. Set spool.persistence.enabled=true (with a ReadWriteMany
+class, or backend.replicaCount: 1) if that window matters to you.
+{{- end }}
+
+{{- if .Values.postgresql.enabled }}
+
+NOTE: running the bundled Postgres — one replica, one volume, no backups. Move to a managed
+database (postgresql.enabled=false + secrets.databaseUrl) before this holds anything you would
+miss.
+{{- end }}

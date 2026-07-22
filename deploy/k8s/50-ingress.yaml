@@ -1,0 +1,57 @@
+# Same routing as the Caddyfile in the compose stack: /api, /v1 and /healthz to the backend,
+# everything else to the frontend. One origin, so session cookies stay first-party and the SDK
+# posts OTLP to https://<host>/v1/traces with no CORS involved.
+#
+# Replace provekit.example.com (here, in 11-configmap.yaml and in 40-frontend.yaml) and set an
+# ingressClassName your cluster actually has.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: provekit
+  namespace: provekit
+  labels:
+    app.kubernetes.io/part-of: provekit
+  annotations:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # The playground streams responses; without a raised read timeout SSE gets cut off.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # Trace batches are large. MAX_BODY_BYTES is enforced by the app; the proxy has to agree.
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - provekit.example.com
+      secretName: provekit-tls
+  rules:
+    - host: provekit.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+          - path: /healthz
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  name: http

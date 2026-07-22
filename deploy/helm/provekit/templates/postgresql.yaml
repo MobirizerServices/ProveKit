@@ -1,0 +1,134 @@
+{{- if .Values.postgresql.enabled }}
+{{/*
+Bundled Postgres: one StatefulSet, one PVC. No replication, no failover, no backups — this
+exists so `helm install` gives you a working stack, not so you run your production database
+here. Point secrets.databaseUrl at a managed instance and set postgresql.enabled=false when
+the data starts to matter.
+*/}}
+{{- $pg := include "provekit.postgresql.fullname" . }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $pg }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+type: Opaque
+stringData:
+  POSTGRES_USER: {{ .Values.postgresql.auth.username | quote }}
+  POSTGRES_DB: {{ .Values.postgresql.auth.database | quote }}
+  POSTGRES_PASSWORD: {{ required "postgresql.auth.password is required when postgresql.enabled=true" .Values.postgresql.auth.password | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $pg }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgresql
+      port: {{ .Values.postgresql.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    {{- include "provekit.selectorLabels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $pg }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+spec:
+  serviceName: {{ $pg }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "provekit.selectorLabels" (dict "ctx" . "component" "postgresql") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "provekit.componentLabels" (dict "ctx" . "component" "postgresql") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 70          # the `postgres` user in the alpine image
+        runAsGroup: 70
+        fsGroup: 70
+      containers:
+        - name: postgresql
+          # Not prefixed with imageRegistry — that setting is for ProveKit's own images.
+          # Mirror this into a private registry and set the full repository here if you
+          # cannot pull from Docker Hub.
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            # A subdirectory, not the mount root: many storage classes leave a lost+found
+            # behind and initdb refuses a non-empty data directory.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          envFrom:
+            - secretRef:
+                name: {{ $pg }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgresql.auth.username | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgresql.auth.username | quote }}]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- with .Values.postgresql.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      {{- with .Values.postgresql.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgresql.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgresql.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or (not .Values.postgresql.persistence.enabled) .Values.postgresql.persistence.existingClaim }}
+      volumes:
+        - name: data
+          {{- if .Values.postgresql.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.postgresql.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- end }}
+  {{- if and .Values.postgresql.persistence.enabled (not .Values.postgresql.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.postgresql.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size }}
+        {{- if .Values.postgresql.persistence.storageClass }}
+        storageClassName: {{ .Values.postgresql.persistence.storageClass }}
+        {{- end }}
+  {{- end }}
+{{- end }}

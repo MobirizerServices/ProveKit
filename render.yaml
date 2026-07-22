@@ -1,0 +1,83 @@
+# ProveKit — Render Blueprint. Creates a Postgres database, the FastAPI backend and the
+# Next.js frontend from this repo. See deploy/ONE_CLICK.md for the button and the two
+# manual steps this file cannot do for you.
+#
+# Only the frontend is meant to be public: the browser talks to it, and the Next server
+# rewrites /api, /v1 and /healthz to the backend (frontend/next.config.js). That keeps the
+# session cookie first-party — it is SameSite=Lax (backend/provekit/routers/auth.py), so a
+# split-domain setup would look fine and then silently fail to authenticate.
+
+databases:
+  - name: provekit-db
+    databaseName: provekit
+    user: provekit
+    plan: free
+    region: oregon
+
+services:
+  - type: web
+    name: provekit-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /healthz
+    # Same as the Dockerfile CMD, wrapped to fix one thing: Render hands out DATABASE_URL as
+    # postgresql://…, which SQLAlchemy resolves to the psycopg2 driver. This image ships
+    # psycopg 3 only (backend/requirements.txt), so without the scheme rewrite the process
+    # dies on its first connect. The substitution is a no-op on an already-correct URL.
+    dockerCommand: sh -c 'DATABASE_URL=$(printf %s "$DATABASE_URL" | sed -E "s@^postgres(ql)?://@postgresql+psycopg://@"); export DATABASE_URL; exec uvicorn provekit.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'
+    envVars:
+      # Pinned rather than left to Render's default so the frontend's build-time
+      # API_PROXY_TARGET (below) can name a port that is guaranteed to be the one uvicorn
+      # binds. 10000 is Render's own default; the value matters less than the two agreeing.
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: provekit-db
+          property: connectionString
+      # Signs sessions and derives the key material that seals provider credentials.
+      # HOSTED=true refuses to boot on a weak or missing value (backend/provekit/main.py),
+      # so let Render generate one. Losing it only logs everyone out.
+      - key: SECRET_KEY
+        generateValue: true
+      # Login wall, secure cookies, strict SSRF guard on the outbound emit path.
+      - key: HOSTED
+        value: "true"
+      # Public URL of the *frontend* — used for links in verification / reset email. It
+      # does not exist until Render has created the service, so this is left unsynced and
+      # filled in afterwards (see deploy/ONE_CLICK.md).
+      - key: WEB_BASE_URL
+        sync: false
+      # Same-origin means the backend never sees a browser Origin, so CORS is unused here;
+      # set this only if you later expose the backend on its own domain.
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: provekit-frontend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /
+    envVars:
+      # Turns on the middleware login gate: portal routes redirect to /login without a
+      # session cookie (frontend/middleware.ts).
+      - key: HOSTED
+        value: "true"
+      # Build argument consumed by frontend/Dockerfile. next.config.js bakes the rewrite
+      # destination into the standalone build, so this has to be right *at build time*, not
+      # at boot.
+      #
+      # Port 10000, not 8000: Render injects PORT into every web service and the backend's
+      # start command binds ${PORT:-8000}, so the fallback never applies here. Pointing this
+      # at 8000 yields a frontend that builds fine and 502s on every API call — the failure
+      # mode a one-click deploy exists to prevent. PORT is pinned below so the two cannot
+      # drift apart.
+      # If you rename the backend service, change this to match and redeploy the frontend.
+      - key: API_PROXY_TARGET
+        value: http://provekit-backend:10000

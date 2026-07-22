@@ -1,0 +1,34 @@
+# Copy to .github/workflows/eval-gate.yml in your repo.
+#
+# The minimum useful gate: every pull request runs the agent over a dataset, fails if the
+# mean score drops below a floor, and leaves the per-scorer table as a comment.
+name: Eval gate
+
+on:
+  pull_request:
+
+# The comment is written with the job's own GITHUB_TOKEN; without pull-requests: write the
+# eval still gates, it just can't post (the table stays in the job summary).
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: MobirizerServices/ProveKit/.github/actions/provekit-eval@main
+        with:
+          api-key: ${{ secrets.PROVEKIT_API_KEY }}
+          endpoint: ${{ secrets.PROVEKIT_ENDPOINT }}
+          dataset: qa-golden
+          target: examples/ci/eval_target.py:answer
+          scorers: contains,examples/ci/eval_target.py:not_empty
+          threshold: "0.8"
+          # requirements: requirements.txt   # your agent's own dependencies

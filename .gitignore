@@ -37,3 +37,6 @@ deploy/provekit.online.env
 # Next build dirs
 frontend/.next-dev/
 frontend/.next-build/
+
+# stray bytecode from example scripts
+examples/**/__pycache__/

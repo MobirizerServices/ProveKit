@@ -1,0 +1,148 @@
+{{/*
+Backend Deployment.
+
+No migration Job or init container: init_db() runs `alembic upgrade head` on startup and
+takes a Postgres advisory lock first (backend/provekit/database.py), so concurrent replicas
+serialize instead of racing. The startupProbe gives that upgrade time to finish.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "provekit.backend.fullname" . }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "backend") | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "provekit.selectorLabels" (dict "ctx" . "component" "backend") | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "provekit.componentLabels" (dict "ctx" . "component" "backend") | nindent 8 }}
+        {{- with .Values.backend.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Roll the pods when config or secrets change; envFrom alone would not.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if and .Values.secrets.create (not .Values.secrets.existingSecret) }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.commonAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.backend.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "provekit.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "provekit.image" (list . .Values.backend.image) }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          {{- with .Values.backend.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # --proxy-headers + --forwarded-allow-ips=* makes the app read X-Forwarded-For/Proto,
+          # so rate limits and audit logs see the real client IP instead of the ingress pod's.
+          # It trusts whatever sets those headers: only expose this Service through the ingress.
+          command:
+            - uvicorn
+            - provekit.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --workers
+            - {{ .Values.backend.workers | quote }}
+            - --proxy-headers
+            - --forwarded-allow-ips=*
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            {{- include "provekit.envFrom" . | nindent 12 }}
+            {{- with .Values.backend.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.backend.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.backend.startupProbe | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.backend.readinessProbe | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.backend.livenessProbe | nindent 12 }}
+          {{- with .Values.backend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.spool.enabled }}
+            - name: spool
+              mountPath: {{ .Values.spool.dir }}
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- if .Values.spool.enabled }}
+        - name: spool
+          {{- if .Values.spool.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.spool.persistence.existingClaim | default (printf "%s-spool" (include "provekit.backend.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.backend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

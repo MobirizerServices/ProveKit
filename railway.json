@@ -1,0 +1,16 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "//": "ProveKit backend service on Railway. Set the service's Root Directory to `backend` so the Docker build context matches backend/Dockerfile (it does COPY requirements.txt .). The frontend is a second service from the same repo — see deploy/ONE_CLICK.md for its config and the variables both services need.",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "sh -c 'DATABASE_URL=$(printf %s \"$DATABASE_URL\" | sed -E \"s@^postgres(ql)?://@postgresql+psycopg://@\"); export DATABASE_URL; exec uvicorn provekit.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'",
+    "healthcheckPath": "/healthz",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "numReplicas": 1
+  }
+}

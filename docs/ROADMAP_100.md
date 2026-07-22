@@ -65,14 +65,14 @@ The single strongest lever on adoption. ProveKit's pitch is "one import" — the
 
 27. **Hosted free tier.** Signup → key already works on a hosted instance, and the quota work (#79/#80) makes opening one up safe. What's left is the offer itself: plan tiers, and the billing hook to move off free. 🔴 L ◑
 28. **`provekit doctor`.** ~~Every misconfiguration looked identical to "working".~~ `provekit-doctor` checks config, packages, instrumentation coverage, reachability and auth, naming the fix for each; non-zero exit on real failure. 🔴 S ✅
-29. **Framework quickstarts.** Copy-paste starting points for LangGraph, CrewAI, and LlamaIndex, each verified end to end. The examples exist; the docs don't route people to them by framework. 🔴 S ◑
+29. **Framework quickstarts.** ~~The examples existed; the docs didn't route people to them by framework.~~ [QUICKSTARTS.md](QUICKSTARTS.md) — install line, minimal traced program and the actual span tree for LangGraph, CrewAI and LlamaIndex, including which attributes `map_span` keeps and which it drops. 🔴 S ✅
 30. **Instrumentation coverage report.** ~~No way to see which installed libraries aren't instrumented.~~ Reported by `provekit-doctor`; not yet surfaced in the portal. 🟡 S ◑
 31. **Diagnostic empty state.** The "listening for your first trace…" state is good; make it say *why* nothing has arrived (no key seen, key seen but no spans, spans rejected). 🔴 S ◑
 32. **Preloaded sample project.** A new account should have traces to click before it has an integration. `provekit-demo` does this from the CLI — do it server-side at signup. 🟡 S ◑
 33. **Versioned docs site.** Docs are markdown in the repo; there's no searchable, versioned site, which is table-stakes for evaluation. 🔴 M ✖
 34. **Actionable error messages.** Every rejection (bad key, malformed OTLP, rate limit) should name the fix, not the failure. 🟡 S ◑
-35. **One-click deploy.** Railway / Render / Fly buttons that stand up a working instance from the repo. 🟡 S ✖
-36. **Migration guides.** "Coming from LangSmith / Langfuse" — the concept mapping and the import path. Adoption is usually a switch, not a greenfield choice. 🟡 M ✖
+35. **One-click deploy.** ~~No blueprints.~~ `render.yaml`, `railway.json`, `fly.toml` and [ONE_CLICK.md](../deploy/ONE_CLICK.md). Not yet deployed against real accounts — flagged as such in the doc rather than implied working. 🟡 S ◑
+36. **Migration guides.** ~~Nothing for people switching.~~ [MIGRATING.md](MIGRATING.md) — concept mapping for LangSmith and Langfuse, what moves cleanly, what doesn't, and the OTLP endpoint as the fastest path. 🟡 M ✅
 37. **Interactive product tour.** First visit to a populated portal should teach the flow graph, not present it cold. 🟢 M ✖
 38. **Zero-config local mode polish.** Local mode skips login and lands in a default project — extend it to a single `provekit up` that runs backend + frontend + demo data. 🟡 S ◑
 
@@ -92,7 +92,7 @@ Datasets, scorers, experiments and a CI gate all exist. What's missing is everyt
 48. **Server-side custom scorers.** Scorers run client-side from `provekit.scorers`; a registry of sandboxed server-side scorers makes them shareable and usable in online eval. 🟡 L ◑
 49. **LLM-judge calibration.** A judge scorer exists; nothing measures it against human labels, which is the only thing that makes a judge credible. 🔴 M ◑
 50. **Cost & latency as eval axes.** Quality is scored; the trade-off against cost and latency isn't, though both are already captured per span. 🟡 S ◑
-51. **GitHub Action.** `pk.evaluate()` can gate CI, but every team writes the same workflow YAML. Ship it, with PR-comment score deltas. 🟡 S ✖
+51. **GitHub Action.** ~~Every team wrote the same workflow YAML.~~ A composite action at `.github/actions/provekit-eval` that runs the eval, gates on a threshold and posts per-scorer deltas as a PR comment; usage in [CI_GATE.md](CI_GATE.md). 🟡 S ✅
 52. **Eval reproducibility.** Pin model, params, dataset version, and scorer version into the experiment record so a result can be re-derived months later. 🔴 M ◑
 
 ## E. Debugging depth (53–64)
@@ -149,17 +149,17 @@ What running ProveKit *for other people* requires. The [admin console](ADMIN.md)
 ProveKit is OTel-native, which is real leverage — but the surface a team builds *against* is still one Python package and a portal.
 
 87. **TypeScript SDK.** ~~No idiomatic TS client.~~ `clients/typescript` ships `trace`/`span`/`score`/`flush`/`diagnose` plus `observeOpenAI`/`observeAnthropic` (streaming included), zero runtime dependencies, same wire format as Python. Framework-level instrumentation (LangChain.js, Vercel AI SDK) still open. 🔴 L ✅
-88. **Thin Go / Java guides.** No SDK needed — document the OTLP exporter config that produces correctly-classified spans. 🟡 S ✖
+88. **Thin Go / Java guides.** ~~Undocumented.~~ [SDK_OTHER_LANGUAGES.md](SDK_OTHER_LANGUAGES.md) — the classification ladder, the attribute table across all three dialects, and the collector-vs-direct-JSON choice (Go's `otlptracehttp` is protobuf-only, and a protobuf body currently returns 200 with `errorMessage: invalid JSON`, which exporters read as success). 🟡 S ✅
 89. **OTel convention conformance.** Track the evolving `gen_ai` semantic conventions and contribute the mapping upstream — cheap credibility for an OTel-native tool. 🟡 M ◑
-90. **OpenAPI spec + generated clients.** The read API is documented in prose; a spec makes it programmable and testable. 🔴 S ✖
+90. **OpenAPI spec + generated clients.** ~~FastAPI served `/openapi.json`, but nothing committed it, diffed it, or kept it honest.~~ `scripts/export_openapi.py` writes [openapi.json](openapi.json), CI fails when it drifts, and [API.md](API.md) covers the auth split and client generation — with an honest audit of which endpoints still lack response models. 🔴 S ✅
 91. **A real CLI.** `provekit-demo` and `provekit-mcp` only. `provekit traces`, `provekit eval`, `provekit datasets` would put the product in scripts and CI. 🟡 M ◑
 92. **Outbound webhooks.** Trace-completed / alert-fired / experiment-finished events pushed to customer systems. 🟡 M ✖
 93. **Bulk & scheduled export.** To S3 or a warehouse, so trace data joins the rest of a company's analytics. 🟡 M ✖
 94. **OTLP gRPC ingest.** HTTP/JSON only; gRPC is the default in several exporters and its absence reads as incomplete OTel support. 🔴 M ✖
 95. **MCP write operations.** The MCP channel is read-only (list, get, failures). Letting Claude *curate a dataset* or *start an experiment* from a trace closes the loop. 🟡 M ◑
-96. **Helm chart / k8s manifests.** Docker Compose is the only supported deployment; most companies self-host on Kubernetes. 🔴 M ✖
+96. **Helm chart / k8s manifests.** ~~Docker Compose was the only supported deployment.~~ A chart at `deploy/helm/provekit` and plain manifests at `deploy/k8s` (the latter verified with `kubectl kustomize`; the chart is **unlinted** — `helm` wasn't available — and says so). 🔴 M ◑
 97. **Terraform provider.** Declarative projects, keys, and alerts for teams that manage infra as code. 🟢 L ✖
-98. **API stability policy.** Pre-1.0 with no stated deprecation policy — reasonable today, but a blocker to depending on it. 🔴 S ✖
+98. **API stability policy.** ~~No stated deprecation policy.~~ [API_STABILITY.md](API_STABILITY.md) — three tiers (stable `/v1` + SDK surface, experimental, internal `/api`), what counts as breaking, and the deprecation window with a worked example. 🔴 S ✅
 99. **Custom span renderers.** A plugin hook so a team can render *their* domain span (a retrieval, a simulation, a game state) natively. 🟢 L ✖
 100. **Contribution ladder.** Good-first-issues, an instrumentor contribution guide, and a template gallery — an OSS tool's ecosystem is its moat or its ceiling. 🟡 M ◑
 

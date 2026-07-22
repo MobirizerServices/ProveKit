@@ -1,0 +1,26 @@
+# kubectl apply -k deploy/k8s
+#
+# The Secrets are not listed here on purpose — create them first (see 10-secret.example.yaml,
+# or the `kubectl create secret` one-liners in README.md) so real credentials never sit in the
+# repo. Everything else is safe to apply as-is once you have edited the hostname and images.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: provekit
+
+resources:
+  - 00-namespace.yaml
+  - 11-configmap.yaml
+  - 20-postgres.yaml
+  - 21-redis.yaml
+  - 30-backend.yaml
+  - 40-frontend.yaml
+  - 50-ingress.yaml
+
+images:
+  - name: provekit-backend
+    newName: provekit-backend
+    newTag: latest
+  - name: provekit-frontend
+    newName: provekit-frontend
+    newTag: latest

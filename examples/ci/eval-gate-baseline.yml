@@ -1,0 +1,60 @@
+# Copy to .github/workflows/eval-gate.yml in your repo.
+#
+# The same gate, plus deltas against the last run on the default branch. A floor alone can't
+# see a slow slide toward it, so this adds `max-regression`: the PR fails if it gives up more
+# than 2 points against main, even while still above the floor.
+#
+# The project-key API can read one experiment by id but cannot list experiments, so "the
+# previous run" has to be handed to the action. Two ways: pin `baseline-experiment` to a
+# fixed id, or — as here — let each main-branch run leave its summary in the Actions cache.
+# Caches written on the default branch are readable from every pull request; the reverse
+# isn't true, which is exactly the direction we want.
+name: Eval gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # No exact hit is expected: restore-keys takes the newest baseline written by main.
+      - uses: actions/cache/restore@v4
+        with:
+          path: .provekit-baseline.json
+          key: provekit-baseline-${{ github.sha }}
+          restore-keys: provekit-baseline-
+
+      - id: eval
+        uses: MobirizerServices/ProveKit/.github/actions/provekit-eval@main
+        with:
+          api-key: ${{ secrets.PROVEKIT_API_KEY }}
+          endpoint: ${{ secrets.PROVEKIT_ENDPOINT }}
+          dataset: qa-golden
+          target: examples/ci/eval_target.py:answer
+          scorers: contains,examples/ci/eval_target.py:not_empty
+          threshold: "0.8"
+          max-regression: "0.02"
+          baseline-file: .provekit-baseline.json
+          summary-file: .provekit-baseline.json
+          experiment-name: ${{ github.event_name }} ${{ github.ref_name }}
+
+      # Only main publishes a baseline: a PR that improved the score shouldn't become the
+      # bar before it merges, and a PR that broke it shouldn't lower the bar at all.
+      - if: ${{ github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .provekit-baseline.json
+          key: provekit-baseline-${{ github.sha }}

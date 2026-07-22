@@ -1,0 +1,19 @@
+# Throwaway values so the chart renders without real credentials:
+#
+#   helm lint     deploy/helm/provekit -f deploy/helm/provekit/ci/lint-values.yaml
+#   helm template deploy/helm/provekit -f deploy/helm/provekit/ci/lint-values.yaml
+#
+# The chart refuses to render a weak SECRET_KEY under config.hosted=true, which is the point —
+# it fails at template time instead of in a CrashLoopBackOff. That also means a bare
+# `helm lint` with no values fails by design. Never install with these.
+# chart-testing (`ct lint`) picks up everything in ci/ automatically.
+imageRegistry: registry.example.com/provekit
+config:
+  domain: provekit.example.com
+ingress:
+  enabled: true
+secrets:
+  secretKey: "lint-only-not-a-real-secret-key"
+postgresql:
+  auth:
+    password: "lint-only-not-a-real-password"

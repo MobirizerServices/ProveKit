@@ -1,0 +1,79 @@
+# Redis holds rate-limit windows, playground spend counters and monthly span quotas — shared
+# state across backend replicas, not a system of record. No trace data lives here, so an
+# emptyDir is fine: losing it resets those counters, nothing else.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: provekit
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: provekit
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: provekit
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: provekit
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: provekit
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/part-of: provekit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/part-of: provekit
+    spec:
+      securityContext:
+        runAsUser: 999           # the `redis` user in the alpine image
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

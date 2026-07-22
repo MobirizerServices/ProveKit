@@ -1,0 +1,27 @@
+{{- if .Values.backend.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "provekit.backend.fullname" . }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "backend") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.backend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "provekit.selectorLabels" (dict "ctx" . "component" "backend") | nindent 6 }}
+{{- end }}
+{{- if .Values.frontend.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "provekit.frontend.fullname" . }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "provekit.selectorLabels" (dict "ctx" . "component" "frontend") | nindent 6 }}
+{{- end }}

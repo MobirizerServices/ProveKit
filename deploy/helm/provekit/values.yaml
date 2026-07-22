@@ -1,0 +1,372 @@
+# ProveKit Helm values.
+#
+# Minimum viable install (bundled Postgres + Redis, no ingress):
+#   helm install provekit deploy/helm/provekit \
+#     --set imageRegistry=ghcr.io/your-org \
+#     --set secrets.secretKey="$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')" \
+#     --set postgresql.auth.password="$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))')"
+#
+# See deploy/helm/README.md for the values that actually matter.
+
+# Prefix for every image reference (registry + org). Leave empty to use image.repository as-is,
+# which is what you want for a locally loaded image (kind load / minikube image load).
+imageRegistry: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+# - name: regcred
+
+# ---------------------------------------------------------------------------
+# Backend — FastAPI. Serves /v1 (SDK ingest + key-authed reads), /api (cookie-authed
+# portal APIs) and /healthz. Listens on 8000; that is fixed by backend/Dockerfile's CMD.
+# ---------------------------------------------------------------------------
+backend:
+  image:
+    repository: provekit-backend
+    tag: ""          # empty -> Chart.appVersion
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  # uvicorn --workers. Prefer replicas for scale; workers are useful to fill a large pod.
+  # Rate-limit and quota windows are only global across workers when REDIS_URL is set.
+  workers: 1
+
+  service:
+    type: ClusterIP
+    port: 8000
+    annotations: {}
+    # The stock frontend image bakes API_PROXY_TARGET=http://backend:8000 at build time
+    # (frontend/Dockerfile). Set this to "backend" to make that baked default resolve
+    # in-cluster instead of rebuilding the frontend image. Only safe with one release
+    # per namespace — the name stops being release-scoped.
+    name: ""
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+  # /healthz returns 503 when the database (or a configured Redis) is unreachable.
+  # Readiness pulls the pod out of the Service on that; liveness has a deliberately loose
+  # failureThreshold so a database blip drains traffic instead of restart-looping the fleet.
+  startupProbe:
+    failureThreshold: 30
+    periodSeconds: 5
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    # uid 10001 = the `appuser` created in backend/Dockerfile, which owns /data.
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    runAsNonRoot: true
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    # The spool writes to spool.dir (a mounted volume), so a read-only root filesystem works.
+    # Left off by default because it also blocks anything else the image wants to write.
+    readOnlyRootFilesystem: false
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+  # Extra env vars, e.g. provider credentials for the playground.
+  extraEnv: []
+  # - name: SOMETHING
+  #   value: "value"
+  extraEnvFrom: []
+  # - secretRef:
+  #     name: my-extra-secret
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+
+# ---------------------------------------------------------------------------
+# Frontend — Next.js standalone server. Listens on $PORT (3000 by default, set in
+# frontend/Dockerfile). Stateless.
+# ---------------------------------------------------------------------------
+frontend:
+  image:
+    repository: provekit-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations: {}
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 6
+
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    # uid 1000 = the `node` user the frontend image runs as.
+    runAsUser: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: false
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+  extraEnv: []
+  extraEnvFrom: []
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+
+# ---------------------------------------------------------------------------
+# Application config (non-secret). Rendered into a ConfigMap and consumed with envFrom
+# by both deployments. Names match the fields in backend/provekit/config.py.
+# ---------------------------------------------------------------------------
+config:
+  # Public hostname. Drives CORS_ORIGINS / WEB_BASE_URL / NEXT_PUBLIC_SITE_URL and the
+  # Ingress host when ingress.host is unset.
+  domain: ""
+
+  # HOSTED=true: login required, secure cookies, strict SSRF guard on outbound emit,
+  # JSON logs, and the frontend middleware login gate. Refuses to boot without a strong
+  # SECRET_KEY (see backend/provekit/main.py::_guard_production_config).
+  hosted: true
+
+  # Override the derived values if the browser origin differs from `domain`.
+  corsOrigins: ""      # default: https://{{ domain }}
+  webBaseUrl: ""       # default: https://{{ domain }}
+  siteUrl: ""          # NEXT_PUBLIC_SITE_URL; default: https://{{ domain }}
+
+  # Quotas. 0 disables a limit.
+  ingestRatePerMin: 600
+  loginAttemptsPerMin: 10
+  runsRetention: 10000
+  maxBodyBytes: 25000000
+  monthlySpanQuota: 0
+  maxProjectsPerAccount: 0
+  playgroundMonthlyUsdCap: 25.0
+
+  redactPii: false
+  requireEmailVerification: false
+  superuserEmails: ""
+  threadPoolSize: 200
+  otelExportUrl: ""
+
+  smtp:
+    host: ""
+    port: 587
+    user: ""
+    from: ""
+    starttls: true
+
+  # Anything else you want in the ConfigMap, verbatim.
+  extra: {}
+  #   SOME_FLAG: "true"
+
+# ---------------------------------------------------------------------------
+# Durable accept (backend/provekit/services/spool.py). Each ingest batch is fsynced to disk
+# before it is acknowledged and released once the rows commit, so a database blip cannot
+# destroy accepted spans. The spool is NODE-LOCAL: it protects against a database outage,
+# not against losing the pod. Its depth also drives ingest backpressure and /healthz.
+# ---------------------------------------------------------------------------
+spool:
+  enabled: true
+  # Mounted at this path. /data exists in the image and is owned by uid 10001.
+  dir: /data/spool
+  # Refuse new batches (retriable 503) once this many are waiting to land. 0 = off.
+  maxDepth: 5000
+  drainSeconds: 5.0
+
+  persistence:
+    # false -> emptyDir. Staged batches survive a container crash but not pod rescheduling.
+    # true  -> PVC. With ReadWriteOnce this pins backend replicas to one node; use a
+    #          ReadWriteMany class, or run replicaCount: 1, if you enable it.
+    enabled: false
+    storageClass: ""
+    accessModes: ["ReadWriteOnce"]
+    size: 5Gi
+    existingClaim: ""
+
+# ---------------------------------------------------------------------------
+# Secrets. Rendered into a Secret unless existingSecret is set.
+# ---------------------------------------------------------------------------
+secrets:
+  create: true
+  # Use a Secret you manage yourself (SealedSecret, External Secrets, …). It must carry the
+  # same keys this chart would write: SECRET_KEY, DATABASE_URL, and optionally REDIS_URL,
+  # SENTRY_DSN, SMTP_PASSWORD. It is mounted with envFrom, so extra keys become env vars too.
+  existingSecret: ""
+
+  # REQUIRED with hosted: true. >=16 chars and not a known dev default, or the backend
+  # refuses to start. Signs sessions and derives the key material that seals provider
+  # credentials at rest — rotating it logs everyone out; it does not lose stored data.
+  #   python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+  secretKey: ""
+
+  # Leave empty to use the bundled Postgres (postgresql.enabled). Set it to point at a
+  # managed database, e.g.
+  #   postgresql+psycopg://user:pass@host:5432/provekit
+  databaseUrl: ""
+
+  # Leave empty to use the bundled Redis (redis.enabled). Empty *and* redis.enabled=false
+  # means rate-limit and quota counters are per-worker and reset on restart.
+  redisUrl: ""
+
+  sentryDsn: ""
+  smtpPassword: ""
+
+  # Extra keys merged into the Secret verbatim (plain values, not base64).
+  extra: {}
+
+# ---------------------------------------------------------------------------
+# Bundled Postgres. A single replica with one PVC — no replication, no failover, no
+# backups. Fine for a trial; use a managed database (secrets.databaseUrl) in production.
+# ---------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: provekit
+    database: provekit
+    # Required when enabled and secrets.databaseUrl is unset. Keep it URL-safe (no @ : / ?
+    # # or %) — it is interpolated into the connection URL. Otherwise set secrets.databaseUrl
+    # with the password percent-encoded yourself.
+    password: ""
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessModes: ["ReadWriteOnce"]
+    size: 20Gi
+    existingClaim: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Bundled Redis. Holds rate-limit windows, spend counters and monthly span quotas — shared
+# state across backend replicas, not a system of record. Losing it resets those counters.
+# ---------------------------------------------------------------------------
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  # Redis' own persistence is left at the image default (RDB snapshots to an ephemeral dir).
+  persistence:
+    enabled: false
+    storageClass: ""
+    accessModes: ["ReadWriteOnce"]
+    size: 1Gi
+    existingClaim: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Ingress. Mirrors the Caddyfile in the compose stack: /api, /v1 and /healthz go to the
+# backend, everything else to the frontend. Same-origin, so cookies stay first-party and
+# no CORS is involved.
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: nginx
+  # Defaults to config.domain.
+  host: ""
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # The playground streams responses; raise the read timeout or SSE gets cut off.
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # Traces can be large. MAX_BODY_BYTES is enforced by the app; the proxy needs to agree.
+    # nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+  tls:
+    enabled: true
+    secretName: ""     # default: {{ fullname }}-tls
+  # Extra rules appended verbatim (path -> service), if you need to carve out more routes.
+  extraPaths: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+# Applied to every pod this chart creates.
+commonLabels: {}
+commonAnnotations: {}

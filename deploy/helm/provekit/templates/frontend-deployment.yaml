@@ -1,0 +1,129 @@
+{{/*
+Frontend Deployment (Next.js standalone server).
+
+Deliberately does NOT mount the backend Secret: the portal pods need HOSTED and a port, not
+the database URL or SECRET_KEY.
+
+The browser calls /api and /v1 on this origin. The ingress routes those straight to the
+backend; the Next rewrite (API_PROXY_TARGET, baked at image build time in frontend/Dockerfile)
+is only the fallback for calls that reach the Next server itself. If you use the stock image,
+either rebuild it with --build-arg API_PROXY_TARGET=http://<backend-service>:8000 or set
+backend.service.name=backend so the baked default resolves in-cluster.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "provekit.frontend.fullname" . }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.frontend.autoscaling.enabled }}
+  replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "provekit.selectorLabels" (dict "ctx" . "component" "frontend") | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "provekit.componentLabels" (dict "ctx" . "component" "frontend") | nindent 8 }}
+        {{- with .Values.frontend.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if or .Values.commonAnnotations .Values.frontend.podAnnotations }}
+      annotations:
+        {{- with .Values.commonAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.frontend.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "provekit.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: {{ include "provekit.image" (list . .Values.frontend.image) }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          {{- with .Values.frontend.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            # Activates the middleware login gate: portal routes redirect to /login without
+            # a session cookie (frontend/middleware.ts).
+            - name: HOSTED
+              value: {{ .Values.config.hosted | quote }}
+            # Server-rendered metadata base. NEXT_PUBLIC_* values referenced from client
+            # components are inlined at image build time — set those with --build-arg.
+            - name: NEXT_PUBLIC_SITE_URL
+              value: {{ include "provekit.siteUrl" . | quote }}
+            {{- with .Values.frontend.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.frontend.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            {{- toYaml .Values.frontend.readinessProbe | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            {{- toYaml .Values.frontend.livenessProbe | nindent 12 }}
+          {{- with .Values.frontend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.frontend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

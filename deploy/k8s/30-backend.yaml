@@ -1,0 +1,135 @@
+# ProveKit backend — FastAPI. Serves /v1 (SDK ingest + key-authed reads), /api (cookie-authed
+# portal APIs) and /healthz on port 8000. That port is fixed by backend/Dockerfile's CMD; the
+# 8100 you see in docker-compose.yml is a host publish, not the container port.
+#
+# The Service is named `backend` on purpose: the frontend image bakes
+# API_PROXY_TARGET=http://backend:8000 at build time, so the stock image resolves it in-cluster
+# with no rebuild.
+#
+# Set the image to your own registry before applying — ProveKit publishes no public images.
+#   docker build -t <registry>/provekit-backend:<tag> backend/ && docker push …
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: provekit
+  labels:
+    app.kubernetes.io/name: provekit-backend
+    app.kubernetes.io/part-of: provekit
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: provekit-backend
+    app.kubernetes.io/part-of: provekit
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: provekit
+  labels:
+    app.kubernetes.io/name: provekit-backend
+    app.kubernetes.io/part-of: provekit
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: provekit-backend
+      app.kubernetes.io/part-of: provekit
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: provekit-backend
+        app.kubernetes.io/part-of: provekit
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # uid 10001 = the `appuser` created in backend/Dockerfile, which owns /data.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+      containers:
+        - name: backend
+          image: provekit-backend:latest       # CHANGE ME
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # --proxy-headers + --forwarded-allow-ips=* makes the app read X-Forwarded-For/Proto,
+          # so rate limits and audit logs see the real client IP instead of the ingress pod's.
+          # It trusts whatever sets those headers: only expose this Service via the ingress.
+          command:
+            - uvicorn
+            - provekit.main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --proxy-headers
+            - --forwarded-allow-ips=*
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: provekit-config
+            - secretRef:
+                name: provekit-secrets
+          # /healthz reports the database and (if configured) Redis, plus the ingest spool
+          # depth and lag. It returns 503 when the database is unreachable — readiness pulls
+          # the pod out of the Service on that, and liveness has a deliberately loose
+          # failureThreshold so a database blip drains traffic instead of restart-looping.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            # `alembic upgrade head` runs on startup, serialized across replicas by a Postgres
+            # advisory lock — allow 150s for a replica that has to wait its turn.
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 12
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: spool
+              mountPath: /data/spool
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # The ingest spool is node-local by design: it protects against a database outage, not
+        # against losing the pod. An emptyDir keeps staged batches across a container crash;
+        # swap in a PVC (ReadWriteMany, or replicas: 1) if you want them to survive
+        # rescheduling too.
+        - name: spool
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,27 @@
+{{- if and .Values.spool.enabled .Values.spool.persistence.enabled (not .Values.spool.persistence.existingClaim) }}
+{{/*
+The spool is node-local by design (see services/spool.py). A ReadWriteOnce claim is shared by
+every backend replica in this Deployment, which pins them all to one node — run
+backend.replicaCount: 1, or use a ReadWriteMany storage class, if you turn this on.
+*/}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "provekit.backend.fullname" . }}-spool
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "backend") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.spool.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.spool.persistence.size }}
+  {{- if .Values.spool.persistence.storageClass }}
+  storageClassName: {{ .Values.spool.persistence.storageClass }}
+  {{- end }}
+{{- end }}

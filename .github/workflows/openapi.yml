@@ -1,0 +1,38 @@
+name: OpenAPI
+
+# The committed spec (docs/openapi.json) is what client generators and API consumers read.
+# It is only trustworthy if it cannot drift, so regenerate it here and fail when it differs
+# from what the app actually serves. No path filter: the job is cheap, and filtering would
+# make it skip (and so silently pass) on the merges most likely to need it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  spec-is-current:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Regenerate and compare
+        run: python scripts/export_openapi.py --check
+      - name: Show the drift
+        if: failure()
+        run: |
+          python scripts/export_openapi.py
+          git --no-pager diff -- docs/openapi.json
+          echo "::error::docs/openapi.json is out of date — run 'python scripts/export_openapi.py' and commit the result."
+      - name: Upload the regenerated spec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi.json
+          path: docs/openapi.json

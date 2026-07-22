@@ -1,0 +1,118 @@
+{{- if .Values.redis.enabled }}
+{{/*
+Bundled Redis. The backend uses it for rate-limit windows, playground spend counters and
+monthly span quotas — shared state across replicas, not a system of record. Without it those
+counters are per-worker and reset on restart, which /api/projects/usage reports as
+`approximate: true`. Trace data never lives here.
+*/}}
+{{- $redis := include "provekit.redis.fullname" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $redis }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: {{ .Values.redis.service.port }}
+      targetPort: redis
+      protocol: TCP
+  selector:
+    {{- include "provekit.selectorLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $redis }}
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    # One instance over one volume: never run two at once.
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "provekit.selectorLabels" (dict "ctx" . "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "provekit.componentLabels" (dict "ctx" . "component" "redis") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 999          # the `redis` user in the alpine image
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: redis
+          # Not prefixed with imageRegistry — that setting is for ProveKit's own images.
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- with .Values.redis.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          {{- if .Values.redis.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.redis.persistence.existingClaim | default (printf "%s-data" $redis) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.redis.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.redis.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if and .Values.redis.persistence.enabled (not .Values.redis.persistence.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $redis }}-data
+  labels:
+    {{- include "provekit.componentLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml .Values.redis.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size }}
+  {{- if .Values.redis.persistence.storageClass }}
+  storageClassName: {{ .Values.redis.persistence.storageClass }}
+  {{- end }}
+{{- end }}
+{{- end }}

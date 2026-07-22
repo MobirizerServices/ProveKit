@@ -1,0 +1,53 @@
+{{/*
+Non-secret backend configuration. Keys match the field names in backend/provekit/config.py
+(pydantic-settings reads them case-insensitively from the environment).
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "provekit.configMapName" . }}
+  labels:
+    {{- include "provekit.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  HOSTED: {{ .Values.config.hosted | quote }}
+  CORS_ORIGINS: {{ include "provekit.corsOrigins" . | quote }}
+  WEB_BASE_URL: {{ include "provekit.webBaseUrl" . | quote }}
+
+  # Durable accept (services/spool.py). SPOOL_DIR points at the mounted volume.
+  SPOOL_ENABLED: {{ .Values.spool.enabled | quote }}
+  {{- if .Values.spool.enabled }}
+  SPOOL_DIR: {{ .Values.spool.dir | quote }}
+  SPOOL_MAX_DEPTH: {{ .Values.spool.maxDepth | quote }}
+  SPOOL_DRAIN_SECONDS: {{ .Values.spool.drainSeconds | quote }}
+  {{- end }}
+
+  # Quotas and limits. 0 disables a given limit.
+  INGEST_RATE_PER_MIN: {{ .Values.config.ingestRatePerMin | quote }}
+  LOGIN_ATTEMPTS_PER_MIN: {{ .Values.config.loginAttemptsPerMin | quote }}
+  RUNS_RETENTION: {{ .Values.config.runsRetention | quote }}
+  MAX_BODY_BYTES: {{ .Values.config.maxBodyBytes | quote }}
+  MONTHLY_SPAN_QUOTA: {{ .Values.config.monthlySpanQuota | quote }}
+  MAX_PROJECTS_PER_ACCOUNT: {{ .Values.config.maxProjectsPerAccount | quote }}
+  PLAYGROUND_MONTHLY_USD_CAP: {{ .Values.config.playgroundMonthlyUsdCap | quote }}
+
+  REDACT_PII: {{ .Values.config.redactPii | quote }}
+  REQUIRE_EMAIL_VERIFICATION: {{ .Values.config.requireEmailVerification | quote }}
+  SUPERUSER_EMAILS: {{ .Values.config.superuserEmails | quote }}
+  THREAD_POOL_SIZE: {{ .Values.config.threadPoolSize | quote }}
+  {{- with .Values.config.otelExportUrl }}
+  OTEL_EXPORT_URL: {{ . | quote }}
+  {{- end }}
+
+  # Email. Without SMTP_HOST, reset/verification links are logged instead of sent.
+  SMTP_HOST: {{ .Values.config.smtp.host | quote }}
+  SMTP_PORT: {{ .Values.config.smtp.port | quote }}
+  SMTP_USER: {{ .Values.config.smtp.user | quote }}
+  SMTP_FROM: {{ .Values.config.smtp.from | quote }}
+  SMTP_STARTTLS: {{ .Values.config.smtp.starttls | quote }}
+  {{- range $k, $v := .Values.config.extra }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

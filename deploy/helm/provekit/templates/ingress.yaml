@@ -1,0 +1,71 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := include "provekit.ingressHost" . }}
+{{- if not $host }}
+{{- fail "ingress.enabled=true requires config.domain (or ingress.host)" }}
+{{- end }}
+{{/*
+Same routing as the Caddyfile in the compose stack: /api, /v1 and /healthz to the backend,
+everything else to the frontend. One origin, so session cookies stay first-party and the SDK
+posts OTLP to https://<host>/v1/traces without CORS.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "provekit.fullname" . }}
+  labels:
+    {{- include "provekit.labels" . | nindent 4 }}
+  {{- if or .Values.ingress.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" (include "provekit.fullname" .)) }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "provekit.backend.serviceName" . }}
+                port:
+                  name: http
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "provekit.backend.serviceName" . }}
+                port:
+                  name: http
+          - path: /healthz
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "provekit.backend.serviceName" . }}
+                port:
+                  name: http
+          {{- with .Values.ingress.extraPaths }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "provekit.frontend.fullname" . }}
+                port:
+                  name: http
+{{- end }}

@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 
 from . import pricing
 
@@ -147,8 +148,12 @@ def map_span(span: dict) -> dict:
     if ot is not None:
         usage["output_tokens"] = ot
 
-    start = int(span.get("startTimeUnixNano") or 0)
-    end = int(span.get("endTimeUnixNano") or 0)
+    # Parsed defensively: a non-numeric timestamp from a buggy exporter used to raise out of
+    # here, and since ingest now retains a batch it failed to persist, one malformed span
+    # would be retried out of the spool forever. A bad timestamp costs its own span's
+    # duration, not the batch.
+    start = _int(span.get("startTimeUnixNano"))
+    end = _int(span.get("endTimeUnixNano"))
     dur_ms = round((end - start) / 1e6) if end > start else 0
     status = "failed" if (span.get("status") or {}).get("code") == 2 else "completed"
 
@@ -220,14 +225,51 @@ def map_span(span: dict) -> dict:
     }
 
 
-def ingest(payload: dict) -> list[dict]:
-    """Turn an OTLP ExportTraceServiceRequest into a list of Run kwargs (one per span)."""
+#: How far a client's clock may run ahead of ours before we stop trusting its timestamps.
+#: Generous on purpose — it has to absorb network delay, exporter batching and ordinary NTP
+#: drift, so that a flag means "this clock is wrong", not "this export was slow".
+CLOCK_SKEW_TOLERANCE_MS = 60_000
+
+
+def ingest(payload: dict, *, received_ns: int | None = None) -> list[dict]:
+    """Turn an OTLP ExportTraceServiceRequest into a list of Run kwargs (one per span).
+
+    `received_ns` is server receipt time, used to detect client clock skew. The waterfall
+    positions every bar from client-supplied start offsets, so a machine whose clock is wrong
+    draws a chart that is confidently, invisibly nonsense — spans overlapping that never did,
+    or a child starting before its parent. Detecting it is the only way the chart can say so.
+    """
+    received_ns = received_ns if received_ns is not None else time.time_ns()
     runs = []
     for rs in payload.get("resourceSpans", []):
         for ss in rs.get("scopeSpans", []) + rs.get("instrumentationLibrarySpans", []):
             for span in ss.get("spans", []):
-                runs.append(map_span(span))
+                runs.append(_with_skew(map_span(span), span, received_ns))
     return runs
+
+
+def _with_skew(row: dict, span: dict, received_ns: int) -> dict:
+    """Flag a span whose clock disagrees with ours by more than the tolerance.
+
+    Only a span that ended in the *future* is evidence of skew. A timestamp in the past is
+    perfectly normal — exporters batch, networks are slow, a process can sit on a span for
+    seconds — so treating "old" as skew would flag every healthy deployment.
+    """
+    end = _int(span.get("endTimeUnixNano"))
+    if not end:
+        return row
+    ahead_ms = (end - received_ns) / 1_000_000
+    if ahead_ms > CLOCK_SKEW_TOLERANCE_MS:
+        meta = row.setdefault("result", {}).setdefault("meta", {})
+        meta["clock_skew_ms"] = round(ahead_ms)
+    return row
+
+
+def _int(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 # ---- emit (best-effort) ----

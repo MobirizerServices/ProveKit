@@ -186,6 +186,11 @@ def _prune_runs(db: Session, ws: Workspace) -> None:
     keep = ws.retention if ws.retention and ws.retention > 0 else get_settings().runs_retention
     if keep <= 0:
         return
+    # Note: this is a per-project row cap and stays row-based even when the table is
+    # partitioned, because a partition spans every tenant — dropping one to enforce ONE
+    # project's cap would delete other projects' retained data. Partition drops
+    # (services/partitions.drop_before) enforce the instance-wide time horizon instead; the
+    # two are complementary, not alternatives.
     stale = [r.id for r in db.query(Run.id).filter(Run.workspace_id == ws.id)
              .order_by(Run.id.desc()).offset(keep).all()]
     if stale:

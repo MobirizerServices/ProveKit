@@ -101,6 +101,23 @@ def _as_text(v) -> str:
         return str(v)
 
 
+#: Per-field storage ceiling for captured payloads, in characters.
+#:
+#: A documented boundary, not an incidental slice: anything longer is cut here, a marker is
+#: written to `result.meta.truncation` recording the original length, and the tail is dropped.
+#: It is never stored elsewhere — ProveKit does not keep a copy you cannot see. Raise it if
+#: your payloads are bigger and your database can carry them (see roadmap #20 for the real
+#: fix, moving large payloads to object storage).
+MAX_PAYLOAD_CHARS = 8000
+
+
+def _truncate(value, limit: int):
+    """(stored, marker) — marker is None when nothing was dropped."""
+    if not isinstance(value, str) or len(value) <= limit:
+        return value, None
+    return value[:limit], {"stored_chars": limit, "original_chars": len(value)}
+
+
 def map_span(span: dict) -> dict:
     """Map one OTLP span to Run kwargs. Every span is kept (so the full nested flow
     survives, not just the LLM calls) and classified: agent | llm | tool | step. The
@@ -172,12 +189,20 @@ def map_span(span: dict) -> dict:
                        "level": ea.get("log.level", "INFO"), "logger": ea.get("log.logger", "")})
     if events:
         meta["events"] = events
+    stored_input, in_trunc = _truncate(_as_text(prompt), MAX_PAYLOAD_CHARS)
+    stored_output, out_trunc = _truncate(_as_text(completion), MAX_PAYLOAD_CHARS)
+    if in_trunc or out_trunc:
+        # What was kept vs. what arrived. Silently dropping the tail of a payload and
+        # rendering it like a complete one means a truncated answer reads as the model's
+        # answer — the reader has no way to tell the tool did it.
+        meta["truncation"] = {k: v for k, v in
+                              (("input", in_trunc), ("output", out_trunc)) if v}
     return {
         "type": rtype,
         "label": label[:200],
         "request": {"type": rtype, "provider": provider, "model": model,
-                    "operation": op, "input": _as_text(prompt)[:8000]},
-        "result": {"text": _as_text(completion) or None, "output": None, "meta": meta},
+                    "operation": op, "input": stored_input},
+        "result": {"text": stored_output or None, "output": None, "meta": meta},
         "status": status,
         "duration_ms": dur_ms,
         "error": (span.get("status") or {}).get("message", "") if status == "failed" else "",

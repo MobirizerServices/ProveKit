@@ -27,22 +27,56 @@ _PATTERNS: list[tuple[str, re.Pattern]] = [
 
 def redact_text(text: str | None) -> str | None:
     """Return `text` with any matched PII replaced by [REDACTED_<TYPE>]. None/empty pass through."""
-    if not text or not isinstance(text, str):
-        return text
-    out = text
-    for label, pat in _PATTERNS:
-        out = pat.sub(f"[REDACTED_{label}]", out)
+    out, _ = redact_text_counted(text)
     return out
 
 
+def redact_text_counted(text: str | None) -> tuple[str | None, dict[str, int]]:
+    """`redact_text`, plus how many matches of each type were replaced.
+
+    The counts exist so a span can say it was masked. These patterns have false positives —
+    the PHONE rule in particular will eat any long digit run — and when that mangles a real
+    output, the visible result is a model that appears to have produced nonsense. Recording
+    what the masker did makes that traceable to the masker instead of blamed on the model.
+    """
+    if not text or not isinstance(text, str):
+        return text, {}
+    out = text
+    counts: dict[str, int] = {}
+    for label, pat in _PATTERNS:
+        out, n = pat.subn(f"[REDACTED_{label}]", out)
+        if n:
+            counts[label] = counts.get(label, 0) + n
+    return out, counts
+
+
 def scrub_run(kw: dict) -> dict:
-    """Redact the free-text fields of a Run kwargs dict (input, output text, error) in place."""
+    """Redact the free-text fields of a Run kwargs dict (input, output text, error) in place.
+
+    Also stamps `result.meta.redaction` with the fields touched and the per-type match counts,
+    so the portal can badge the span. A span that was silently altered between what the agent
+    produced and what you are reading is the kind of thing an observability tool must not do
+    without saying so.
+    """
+    touched: dict[str, dict[str, int]] = {}
+
     req = kw.get("request")
     if isinstance(req, dict) and req.get("input"):
-        req["input"] = redact_text(req["input"])
+        req["input"], n = redact_text_counted(req["input"])
+        if n:
+            touched["input"] = n
     res = kw.get("result")
     if isinstance(res, dict) and res.get("text"):
-        res["text"] = redact_text(res["text"])
+        res["text"], n = redact_text_counted(res["text"])
+        if n:
+            touched["output"] = n
     if kw.get("error"):
-        kw["error"] = redact_text(kw["error"])
+        kw["error"], n = redact_text_counted(kw["error"])
+        if n:
+            touched["error"] = n
+
+    if touched and isinstance(res, dict):
+        meta = res.setdefault("meta", {})
+        if isinstance(meta, dict):
+            meta["redaction"] = {"fields": sorted(touched), "counts": touched}
     return kw

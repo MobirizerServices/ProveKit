@@ -142,6 +142,36 @@ span synchronously (handy in short scripts).
 | `PROVEKIT_API_KEY` | the `pk_` project key from the portal |
 | `PROVEKIT_ENDPOINT` | your ProveKit URL; traces ship to `${PROVEKIT_ENDPOINT}/v1/traces` |
 
+## What gets stored, exactly
+
+Two things happen to a payload between your agent and the portal, and both are recorded on
+the span rather than applied silently.
+
+**Truncation.** Captured input and output are stored up to **8,000 characters each**
+(`MAX_PAYLOAD_CHARS` in `backend/provekit/services/otel.py`). Past that the tail is dropped —
+not stored elsewhere, not recoverable; ProveKit keeps no copy you can't see. When it happens
+the span carries a marker:
+
+```json
+"meta": { "truncation": { "input": { "stored_chars": 8000, "original_chars": 41233 } } }
+```
+
+So a cut answer is never rendered as if it were the whole one. If your payloads are routinely
+larger, raise the constant and make sure your database can carry it.
+
+**Redaction.** With PII redaction on (`REDACT_PII`, or per-project in Settings), matched
+emails, cards, SSNs, keys and phone numbers are replaced with `[REDACTED_<TYPE>]` before
+storage. The masking is regex-based, so it has false positives — the phone pattern will eat
+any long digit run, including order and invoice numbers. Every masked span therefore records
+what was touched:
+
+```json
+"meta": { "redaction": { "fields": ["input"], "counts": { "input": { "EMAIL": 2 } } } }
+```
+
+That marker is what makes a mangled output traceable to the masker instead of blamed on the
+model.
+
 ## Fail-open
 
 Tracing never takes your agent down. If the key/endpoint are unset, OpenTelemetry isn't

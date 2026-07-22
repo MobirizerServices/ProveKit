@@ -587,6 +587,17 @@
         "title": "_KeyOut",
         "type": "object"
       },
+      "_LabelIn": {
+        "properties": {
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "_LabelIn",
+        "type": "object"
+      },
       "_MemberIn": {
         "properties": {
           "email": {
@@ -1014,22 +1025,6 @@
         "title": "_RunIn",
         "type": "object"
       },
-      "_SplitIn": {
-        "properties": {
-          "ratio": {
-            "default": 0.2,
-            "title": "Ratio",
-            "type": "number"
-          },
-          "seed": {
-            "default": 0,
-            "title": "Seed",
-            "type": "integer"
-          }
-        },
-        "title": "_SplitIn",
-        "type": "object"
-      },
       "_SubIn": {
         "properties": {
           "enabled": {
@@ -1085,6 +1080,36 @@
           "name"
         ],
         "title": "_ViewIn",
+        "type": "object"
+      },
+      "provekit__routers__datasets___SplitIn": {
+        "properties": {
+          "ratio": {
+            "default": 0.2,
+            "title": "Ratio",
+            "type": "number"
+          },
+          "seed": {
+            "default": 0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "title": "_SplitIn",
+        "type": "object"
+      },
+      "provekit__routers__prompts___SplitIn": {
+        "properties": {
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Weights",
+            "type": "object"
+          }
+        },
+        "title": "_SplitIn",
         "type": "object"
       }
     }
@@ -2875,7 +2900,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/_SplitIn"
+                "$ref": "#/components/schemas/provekit__routers__datasets___SplitIn"
               }
             }
           },
@@ -4270,6 +4295,117 @@
         "summary": "Save Prompt",
         "tags": [
           "playground"
+        ]
+      }
+    },
+    "/api/prompts/{name}/label": {
+      "post": {
+        "description": "Move a label onto a version. Labels are unique per name, so this moves rather than adds —\ntwo versions both labelled \"production\" would make the fetch ambiguous.",
+        "operationId": "set_label_api_prompts__name__label_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_LabelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Label",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/prompts/{name}/split": {
+      "post": {
+        "description": "Set the live traffic split across versions of one prompt.",
+        "operationId": "set_split_api_prompts__name__split_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provekit__routers__prompts___SplitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Split",
+        "tags": [
+          "prompts"
         ]
       }
     },
@@ -6433,6 +6569,83 @@
         "summary": "Export Traces By Key",
         "tags": [
           "export"
+        ]
+      }
+    },
+    "/v1/prompts/{name}": {
+      "get": {
+        "description": "Fetch a prompt at runtime, by label or through an active traffic split.\n\nKey-authed because this is called by the customer's application, not their browser — that\nis the whole point of #61: changing a prompt should not need a deploy.",
+        "operationId": "fetch_prompt_v1_prompts__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "label",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Label",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch Prompt",
+        "tags": [
+          "prompts"
         ]
       }
     },

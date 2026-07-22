@@ -23,7 +23,7 @@ from .observability import (
 from .routers import (
     activity, admin, alerts, apikeys, auth, automation, dataset_writes, datasets, digests, experiments,
     export,
-    metrics, playground, scim, sso,
+    metrics, playground, prompts, scim, sso,
     projects, traces, views, webhooks,
 )
 
@@ -224,6 +224,8 @@ app.include_router(views.router)
 app.include_router(webhooks.router)
 app.include_router(digests.router)
 app.include_router(automation.router)
+app.include_router(prompts.router)
+app.include_router(prompts.key_router)
 app.include_router(activity.router)
 app.include_router(export.router)
 app.include_router(export.key_router)

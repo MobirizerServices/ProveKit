@@ -382,6 +382,56 @@ def span(name: str, **attributes):
             raise
 
 
+def get_prompt(name: str, *, label: str = "", key: str = "", default=None) -> dict | None:
+    """Fetch a prompt from the portal at runtime (#61), honouring any live A/B split (#62).
+
+        p = pk.get_prompt("checkout-agent", label="production", key=session_id)
+        reply = client.chat.completions.create(model=p["model"], messages=p["messages"])
+
+    `key` is what the split is keyed on — pass a session or user id. Assignment is stable for
+    that key, so a user stays on one variant across their whole conversation; without it the
+    variants interleave mid-conversation and the comparison measures assignment noise.
+
+    Returns `default` if the portal is unreachable, unconfigured, or has no such prompt. A
+    prompt fetch that raises would take down the app on a network blip — the same fail-open
+    contract the rest of this SDK follows — so a caller who needs a guarantee passes a default
+    and gets it.
+
+    The served version is recorded on the current span as `prompt.version` / `prompt.served_by`
+    so live scores can be attributed back to the variant that produced them. A split whose
+    outcome isn't attached to the run leaves two populations nobody can tell apart.
+    """
+    import os
+
+    configure()
+    api_key = _api_key or os.environ.get("PROVEKIT_API_KEY")
+    endpoint = (_endpoint or os.environ.get("PROVEKIT_ENDPOINT") or "").rstrip("/")
+    if not api_key or not endpoint:
+        return default
+    try:
+        import httpx
+        r = httpx.get(f"{endpoint}/v1/prompts/{name}",
+                      params={"label": label, "key": key},
+                      headers={"Authorization": f"Bearer {api_key}"}, timeout=5)
+        if r.status_code >= 400:
+            log.debug("provekit: prompt %r fetch returned %s", name, r.status_code)
+            return default
+        body = r.json()
+    except Exception as exc:
+        log.debug("provekit: prompt %r fetch failed: %s", name, exc)
+        return default
+    try:
+        from opentelemetry import trace as _otel
+        span = _otel.get_current_span()
+        if span is not None:
+            span.set_attribute("prompt.name", name)
+            span.set_attribute("prompt.version", int(body.get("version") or 0))
+            span.set_attribute("prompt.served_by", str(body.get("served_by") or ""))
+    except Exception:
+        pass          # attribution is a nicety; never let it cost the caller their prompt
+    return body
+
+
 def score(name: str, *, score: float | None = None, value: str | None = None,
           comment: str | None = None, trace_id: str | None = None) -> bool:
     """Attach a feedback score to a trace from code — a scorer, a guardrail, a heuristic.

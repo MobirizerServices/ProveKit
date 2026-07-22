@@ -13,8 +13,8 @@ submodule (a same-named top-level export would shadow that module).
 """
 from provekit import scorers
 from provekit.eval import evaluate
-from provekit.trace import configure, init, span
+from provekit.trace import configure, get_prompt, init, span
 from provekit.vcr import ReplayMiss, ReplayReport, replay, tool
 
 __all__ = ["init", "configure", "span", "evaluate", "scorers",
-           "tool", "replay", "ReplayReport", "ReplayMiss"]
+           "tool", "replay", "ReplayReport", "ReplayMiss", "get_prompt"]

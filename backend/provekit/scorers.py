@@ -619,7 +619,97 @@ def token_budget(output, expected) -> float | None:
 
 
 # The named registry pk.evaluate() and the portal resolve string scorer names against.
+def session_turns(output) -> list[dict]:
+    """Normalise a multi-turn output into [{input, output}, …] (#44).
+
+    Accepts a captured session (a list of span dicts sharing a session_id, as
+    `GET /api/traces` returns them), an already-shaped list of turns, or a JSON string of
+    either. Returns [] when there is no conversation to score — so a session scorer reports
+    "not applicable" rather than zero on a single-turn run, which would drag an experiment's
+    mean with a judgement it never made.
+    """
+    import json as _json
+
+    if isinstance(output, str):
+        try:
+            output = _json.loads(output)
+        except ValueError:
+            return []
+    if isinstance(output, dict):
+        output = output.get("turns") or output.get("session") or []
+    if not isinstance(output, list) or not output:
+        return []
+    turns = []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        if "input" in item or "output" in item:
+            turns.append({"input": str(item.get("input") or ""),
+                          "output": str(item.get("output") or "")})
+            continue
+        # A captured span: request.input / result.text, the shape the read API returns.
+        req, res = item.get("request") or {}, item.get("result") or {}
+        if isinstance(req, dict) or isinstance(res, dict):
+            turns.append({"input": str((req or {}).get("input") or ""),
+                          "output": str((res or {}).get("text") or "")})
+    return [t for t in turns if t["input"] or t["output"]]
+
+
+def session_complete(output, expected) -> float | None:
+    """Did every turn produce an answer?
+
+    The most common multi-turn failure is not a wrong answer but a turn that returned nothing
+    — a tool timeout, a truncated stream — which single-turn scoring over the final output
+    cannot see at all, because the last turn may be perfectly fine.
+    """
+    turns = session_turns(output)
+    if not turns:
+        return None
+    answered = sum(1 for t in turns if t["output"].strip())
+    return answered / len(turns)
+
+
+def session_no_repeat(output, expected) -> float | None:
+    """Did the assistant repeat itself across turns?
+
+    A loop is the characteristic multi-turn failure — the agent restating the same answer while
+    the user rephrases — and it is invisible to any scorer that only sees the final output.
+    """
+    turns = session_turns(output)
+    if len(turns) < 2:
+        return None
+    seen, repeats = set(), 0
+    for t in turns:
+        norm = " ".join(t["output"].lower().split())
+        if norm and norm in seen:
+            repeats += 1
+        seen.add(norm)
+    return 1.0 - (repeats / len(turns))
+
+
+def session_expected_covered(output, expected) -> float | None:
+    """Share of the expected points that appear somewhere in the conversation.
+
+    Scored over the WHOLE session rather than the final turn: in a multi-turn exchange the
+    answer is often assembled across turns, so requiring it all in the last one would fail a
+    conversation that actually succeeded.
+    """
+    turns = session_turns(output)
+    if not turns:
+        return None
+    wants = [w.strip().lower() for w in str(expected or "").split("|") if w.strip()]
+    if not wants:
+        return None
+    hay = " ".join(t["output"].lower() for t in turns)
+    return sum(1 for w in wants if w in hay) / len(wants)
+
+
 SCORERS = {
+    # Multi-turn / session scorers (#44). Each returns None on a single-turn
+    # run, so an inapplicable row is omitted rather than scored zero.
+    "session_complete": session_complete,
+    "session_no_repeat": session_no_repeat,
+    "session_expected_covered": session_expected_covered,
     "exact_match": exact_match,
     "contains": contains,
     "regex_match": regex_match,

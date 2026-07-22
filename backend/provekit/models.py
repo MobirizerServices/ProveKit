@@ -157,6 +157,10 @@ class DatasetItem(Base):
     dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"), index=True)
     input: Mapped[str] = mapped_column(Text, default="")
     expected: Mapped[str] = mapped_column(Text, default="")
+    # A multi-turn example (#44): [{"input": ..., "expected": ...}, …]. Empty for the ordinary
+    # single-turn row, so every existing dataset keeps its exact meaning — a conversation is an
+    # additional shape, not a reinterpretation of the old one.
+    turns: Mapped[list] = mapped_column(JSON, default=list)
     meta: Mapped[dict] = mapped_column(JSON, default=dict)
     # "" (unassigned) | train | test. Empty by default so existing datasets keep behaving as
     # one undivided set — silently reassigning them would change what every saved experiment
@@ -261,6 +265,12 @@ class Prompt(Base):
     model: Mapped[str] = mapped_column(String(120), default="")
     messages: Mapped[list] = mapped_column(JSON, default=list)
     params: Mapped[dict] = mapped_column(JSON, default=dict)
+    # A moving pointer ("production", "staging") so an app fetches by label rather than pinning
+    # a version number — which is what lets a prompt change without a deploy (#61).
+    label: Mapped[str] = mapped_column(String(64), default="", index=True)
+    # Share of traffic for a live A/B (#62). 0 = not serving. Two versions of one name each
+    # carrying a weight is the whole experiment; anything else is a deploy.
+    traffic: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

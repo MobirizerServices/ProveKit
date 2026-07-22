@@ -240,3 +240,18 @@ Published results from a run on a laptop, with all of that spelled out, are in
 - **Portal:** https://provekit.online
 - **Source & more examples:** https://github.com/MobirizerServices/ProveKit
 - **PyPI:** https://pypi.org/project/provekit/
+
+
+## `e2e_features.py` — feature sweep against a running instance
+
+The unit suite drives the app in-process with `TestClient`. This drives the real HTTP surface
+of a real uvicorn process, so it catches what in-process tests structurally cannot: a router
+that was never registered, middleware ordering, serialization, and auth that only bites over
+the wire. Several features in this repo shipped unreachable exactly that way.
+
+    make backend
+    backend/venv/bin/python testkit/e2e_features.py     # PK_API to point elsewhere
+
+35 checks across ingest, read paths, eval, automation, prompts, collaboration, integrations,
+admin and auth. It is re-runnable against the same database on purpose — trace ids are unique
+per run, because fixed ones make the second run trip ingest dedupe and look like a failure.

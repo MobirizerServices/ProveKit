@@ -35,11 +35,37 @@ def current_workspace(request: Request, user=Depends(get_current_user),
     only if the user is a member (so the header can't be used to reach another tenant's
     data). With no/invalid header, fall back to the user's default project."""
     pid = request.headers.get("X-Project-Id")
-    if pid and pid.isdigit() and is_member(db, int(pid), user.id):
-        ws = db.get(Workspace, int(pid))
-        if ws:
-            return ws
-    return get_or_create_default_workspace(db, user)
+    if pid and pid.isdigit():
+        member = is_member(db, int(pid), user.id)
+        if member:
+            ws = db.get(Workspace, int(pid))
+            if ws:
+                _guard_viewer(request, member.role)
+                return ws
+    ws = get_or_create_default_workspace(db, user)
+    member = is_member(db, ws.id, user.id)
+    _guard_viewer(request, member.role if member else None)
+    return ws
+
+
+def _guard_viewer(request: Request, role: str | None) -> None:
+    """Refuse a write from a read-only viewer (#72).
+
+    The check lives HERE, next to the resolution, and not in a middleware reading
+    `X-Project-Id` — which is what I built first and got wrong. This function's whole job is
+    that the header is only a *request*: an unknown or non-member project falls back to the
+    caller's default. A middleware judging the header therefore evaluated a different project
+    than the one the write landed in, and a viewer could bypass it by pointing the header at a
+    project they weren't in at all. One resolution, one authorization decision.
+    """
+    from fastapi import HTTPException
+
+    from .roles import can_write
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if not can_write(role):
+        raise HTTPException(403, "Your role in this project is viewer, which is read-only. "
+                                 "Ask an owner for member access to make changes.")
 
 
 def workspace_from_key(db: Session, request, authorization: str | None) -> Workspace:

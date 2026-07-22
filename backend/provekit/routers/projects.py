@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import (Alert, ApiKey, Dataset, DatasetItem, Experiment, ExperimentResult,
                       Feedback, Run, User, Workspace, WorkspaceMember, iso_utc)
-from ..services import audit, limits
+from ..services import audit, limits, roles
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
 
@@ -150,7 +150,10 @@ def add_member(pid: int, data: _MemberIn, request: Request,
         raise HTTPException(404, "No account with that email — they must sign up first")
     if is_member(db, pid, target.id):
         raise HTTPException(409, "Already a member")
-    role = "owner" if data.role == "owner" else "member"
+    # Anything unrecognised becomes viewer, not member. If a caller sends a role we don't
+    # know, the safe reading is the least privilege it could have meant — defaulting the other
+    # way turns a typo into write access.
+    role = data.role if data.role in roles.ALL_ROLES else roles.VIEWER
     db.add(WorkspaceMember(workspace_id=pid, user_id=target.id, role=role))
     db.commit()
     audit.record(db, user, audit.MEMBER_ADD, workspace_id=pid, target_type="user",

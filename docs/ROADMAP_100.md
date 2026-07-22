@@ -123,7 +123,7 @@ ProveKit is currently a single-player tool with multi-user auth.
 69. **Issue-tracker handoff.** One click from a trace to a GitHub issue with the shared link and context embedded. 🟡 S ✖
 70. **Redaction on share.** Signed `/shared/{token}` links expose the full payload; sharing a trace externally needs field-level masking. 🔴 M ◑
 71. **Scheduled digests.** A weekly "here's what regressed" email or Slack post. 🟡 M ✖
-72. **Finer roles.** Owner/member only — no read-only viewer, which is what most stakeholders should get. 🔴 M ◑
+72. **Finer roles.** ~~Owner/member only, and both could write — so a PM or support lead had to be handed a role that can delete the project's data.~~ A `viewer` role, enforced in `workspace.current_workspace` immediately after the project is resolved, method-based so a new mutating endpoint is covered the day it is written. An unrecognised role falls to viewer, not member. 🔴 M ✅
 73. **Pending-invite state.** Members are invited by email; there's no visible pending/expired invite lifecycle. 🟡 S ◑
 74. **Activity feed.** Who changed a prompt, promoted a dataset row, or resolved an alert. 🟢 M ✖
 

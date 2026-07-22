@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # this only keeps that cost off a user's first load.
     rollup_interval_seconds: float = 900.0
 
+    # Large-payload offload (services/payloads.py). Empty dir → off, which is the default: a
+    # deployment that hasn't chosen a store must not start scattering its data across two
+    # places. Set both to move prompts/completions past the threshold out of the row.
+    payload_offload_dir: str = ""
+    payload_offload_min_bytes: int = 4096
+
     # Mask PII (emails, cards, SSNs, phones, common secret keys) in captured span
     # input/output/error before it's stored. Off by default; a safety net for hosted use.
     redact_pii: bool = False

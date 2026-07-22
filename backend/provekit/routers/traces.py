@@ -21,6 +21,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, RetentionEvent, Run, SpanNote, Workspace, _now, iso_utc
 from ..services import apikey, deploy, limits, otel, redact, share, spool
+from ..services import payloads
 from ..services import search as search_svc
 from ..services.auth import get_current_user
 from ..services.workspace import current_workspace
@@ -153,7 +154,8 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
     if not fresh:
         return 0
     for kw in fresh:
-        db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw), **kw))
+        db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw),
+                     **payloads.offload_row(kw)))
     try:
         db.commit()
         return len(fresh)
@@ -165,7 +167,8 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
         for kw in fresh:
             try:
                 with db.begin_nested():
-                    db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw), **kw))
+                    db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw),
+                     **payloads.offload_row(kw)))
             except IntegrityError:
                 continue              # the other request stored it; nothing to do
             stored += 1
@@ -257,8 +260,9 @@ def get_run(rid: int, db: Session = Depends(get_db), ws: Workspace = Depends(cur
     r = db.get(Run, rid)
     if not r or r.workspace_id != ws.id:
         raise HTTPException(404, "Run not found")
-    return {"id": r.id, "type": r.type, "label": r.label, "request": r.request,
-            "result": r.result, "status": r.status, "duration_ms": r.duration_ms,
+    req, res = payloads.resolve_row(r.request, r.result)
+    return {"id": r.id, "type": r.type, "label": r.label, "request": req,
+            "result": res, "status": r.status, "duration_ms": r.duration_ms,
             "error": r.error, "created_at": iso_utc(r.created_at)}
 
 
@@ -369,10 +373,20 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
 
 
 def _span_rows(spans: list) -> list[dict]:
-    return [{"id": s.id, "span_id": s.span_id, "parent_span_id": s.parent_span_id,
-             "type": s.type, "label": s.label, "status": s.status, "duration_ms": s.duration_ms,
-             "request": s.request, "result": s.result, "error": s.error,
-             "session_id": s.session_id, "created_at": iso_utc(s.created_at)} for s in spans]
+    """Serialize spans for the trace view, inflating any offloaded payload (#20).
+
+    This is the detail view, which is where someone actually reads a prompt — the trace LIST
+    deliberately does not go through here, so listing traces never touches the blob store.
+    """
+    out = []
+    for s in spans:
+        req, res = payloads.resolve_row(s.request, s.result)
+        out.append({"id": s.id, "span_id": s.span_id, "parent_span_id": s.parent_span_id,
+                    "type": s.type, "label": s.label, "status": s.status,
+                    "duration_ms": s.duration_ms, "request": req, "result": res,
+                    "error": s.error, "session_id": s.session_id,
+                    "created_at": iso_utc(s.created_at)})
+    return out
 
 
 def _trace_spans(db: Session, ws_id: int, trace_id: str) -> list:

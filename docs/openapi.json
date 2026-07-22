@@ -234,6 +234,32 @@
         "title": "_DatasetIn",
         "type": "object"
       },
+      "_DigestIn": {
+        "properties": {
+          "cadence": {
+            "default": "weekly",
+            "title": "Cadence",
+            "type": "string"
+          },
+          "email": {
+            "default": "",
+            "title": "Email",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "webhook_url": {
+            "default": "",
+            "title": "Webhook Url",
+            "type": "string"
+          }
+        },
+        "title": "_DigestIn",
+        "type": "object"
+      },
       "_EditIn": {
         "description": "One edit inside a multi-span replay.\n\nkind=\"llm\"  — messages/model/params replace the captured request and the span is re-run live.\nkind=\"tool\" — `arguments` replace the captured tool input. Nothing is executed: ProveKit does\n              not own the tool. Identical arguments serve the recorded response; changed\n              arguments make that response evidence of nothing (see _multi_reconstruct).",
         "properties": {
@@ -2608,6 +2634,143 @@
         "summary": "Dataset Version",
         "tags": [
           "datasets"
+        ]
+      }
+    },
+    "/api/digests": {
+      "get": {
+        "operationId": "list_digests_api_digests_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Digests",
+        "tags": [
+          "digests"
+        ]
+      },
+      "post": {
+        "operationId": "create_digest_api_digests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_DigestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Digest",
+        "tags": [
+          "digests"
+        ]
+      }
+    },
+    "/api/digests/{digest_id}": {
+      "delete": {
+        "operationId": "delete_digest_api_digests__digest_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "digest_id",
+            "required": true,
+            "schema": {
+              "title": "Digest Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Digest",
+        "tags": [
+          "digests"
+        ]
+      }
+    },
+    "/api/digests/{digest_id}/preview": {
+      "post": {
+        "description": "What this digest would say right now, without sending or rescheduling it.\n\nConfiguring a weekly digest and finding out in a week whether it is useful is a bad loop.",
+        "operationId": "preview_api_digests__digest_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "digest_id",
+            "required": true,
+            "schema": {
+              "title": "Digest Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "digests"
         ]
       }
     },

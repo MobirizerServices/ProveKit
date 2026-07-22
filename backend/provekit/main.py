@@ -21,7 +21,8 @@ from .observability import (
     setup_logging,
 )
 from .routers import (
-    activity, admin, alerts, apikeys, auth, dataset_writes, datasets, experiments, export,
+    activity, admin, alerts, apikeys, auth, dataset_writes, datasets, digests, experiments,
+    export,
     metrics, playground,
     projects, traces, views, webhooks,
 )
@@ -72,12 +73,38 @@ async def lifespan(app: FastAPI):
         pass
     init_db()
     tasks = [asyncio.create_task(_drain_spool_forever()),
-             asyncio.create_task(_roll_up_forever())]
+             asyncio.create_task(_roll_up_forever()),
+             asyncio.create_task(_send_digests_forever())]
     try:
         yield
     finally:
         for t in tasks:
             t.cancel()
+
+
+async def _send_digests_forever() -> None:
+    """Deliver recurring project digests (services/digests.py).
+
+    Driven by each digest's own last_sent_at rather than a cron expression, so an instance that
+    was down over a window boundary sends late instead of skipping it entirely. Checking hourly
+    is enough for daily/weekly cadences and keeps the query trivial.
+    """
+    from .database import SessionLocal
+    from .services import digests as digest_svc
+    while True:
+        try:
+            def _pass():
+                db = SessionLocal()
+                try:
+                    return digest_svc.run_due(db)
+                finally:
+                    db.close()
+            await run_in_threadpool(_pass)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger("provekit").exception("digest pass failed")
+        await asyncio.sleep(3600)
 
 
 async def _roll_up_forever() -> None:
@@ -167,6 +194,7 @@ app.include_router(projects.router)
 app.include_router(playground.router)
 app.include_router(views.router)
 app.include_router(webhooks.router)
+app.include_router(digests.router)
 app.include_router(activity.router)
 app.include_router(export.router)
 app.include_router(export.key_router)

@@ -386,6 +386,34 @@ class WebhookSubscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class Digest(Base):
+    """A recurring "here's what changed" summary for a project.
+
+    Alerts fire on a threshold, which answers "is something broken right now". Nobody was
+    answering the slower question — did quality drift this week, is spend climbing — and that
+    one is only visible by comparing a window to the one before it. A dashboard shows it to
+    whoever opens the dashboard; a digest shows it to a team that didn't.
+
+    Destination reuses the alert webhook shape (`notify.payload_for` picks Slack/Discord/
+    PagerDuty/Opsgenie by host) or an email address, so this adds a schedule rather than a
+    second delivery stack.
+    """
+    __tablename__ = "digests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    cadence: Mapped[str] = mapped_column(String(16), default="weekly")   # daily | weekly
+    webhook_url: Mapped[str] = mapped_column(String(500), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+    enabled: Mapped[bool] = mapped_column(default=True)
+    # When the last one actually went out. The scheduler is driven by this rather than by a
+    # cron expression, so a restarted or briefly-down instance sends late instead of skipping
+    # the window entirely — a digest nobody received is indistinguishable from nothing to
+    # report, which is the failure that makes people stop trusting it.
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_status: Mapped[str] = mapped_column(String(160), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class RetentionEvent(Base):
     """What retention deleted, and when.
 

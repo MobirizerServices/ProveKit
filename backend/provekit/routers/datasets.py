@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Dataset, DatasetItem, Run, Workspace, iso_utc
+from ..services import datasets as datasets_svc
 from ..services.workspace import current_workspace, workspace_from_key
 
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
@@ -32,12 +33,45 @@ class _FromTraceIn(BaseModel):
 
 def _dataset_row(d: Dataset, count: int) -> dict:
     return {"id": d.id, "name": d.name, "description": d.description,
-            "item_count": count, "created_at": iso_utc(d.created_at)}
+            "item_count": count, "version": d.version or 1,
+            "created_at": iso_utc(d.created_at)}
 
 
 def _item_row(it: DatasetItem) -> dict:
     return {"id": it.id, "dataset_id": it.dataset_id, "input": it.input,
-            "expected": it.expected, "meta": it.meta, "created_at": iso_utc(it.created_at)}
+            "expected": it.expected, "meta": it.meta, "split": it.split or "",
+            "created_at": iso_utc(it.created_at)}
+
+
+class _SplitIn(BaseModel):
+    ratio: float = 0.2
+    seed: int = 0
+
+
+@router.post("/{dataset_id}/split")
+def assign_split(dataset_id: int, data: _SplitIn, db: Session = Depends(get_db),
+                 ws: Workspace = Depends(current_workspace)):
+    """Deterministically label a train/test split.
+
+    Hash-based, not random: the same item lands in the same split every time, so re-splitting
+    can't quietly move examples across the boundary and invalidate every earlier comparison.
+    """
+    _get_dataset(db, ws, dataset_id)
+    try:
+        counts = datasets_svc.assign_split(db, dataset_id, data.ratio, seed=data.seed)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return {"dataset_id": dataset_id, "counts": counts}
+
+
+@router.get("/{dataset_id}/version")
+def dataset_version(dataset_id: int, db: Session = Depends(get_db),
+                    ws: Workspace = Depends(current_workspace)):
+    """Version, content fingerprint and split breakdown — the provenance an experiment pins."""
+    d = _get_dataset(db, ws, dataset_id)
+    return {"dataset_id": dataset_id, "version": d.version or 1,
+            "fingerprint": datasets_svc.fingerprint(db, dataset_id),
+            "splits": datasets_svc.split_counts(db, dataset_id)}
 
 
 def _get_dataset(db: Session, ws: Workspace, dataset_id: int) -> Dataset:
@@ -96,6 +130,7 @@ def add_item(dataset_id: int, data: _ItemIn, db: Session = Depends(get_db),
     it = DatasetItem(workspace_id=ws.id, dataset_id=dataset_id, input=data.input,
                      expected=data.expected, meta=data.meta or {})
     db.add(it)
+    datasets_svc.bump(db, dataset_id)
     db.commit()
     return _item_row(it)
 
@@ -115,6 +150,7 @@ def add_item_from_trace(dataset_id: int, data: _FromTraceIn, db: Session = Depen
     it = DatasetItem(workspace_id=ws.id, dataset_id=dataset_id, input=inp,
                      expected=data.expected or out, meta={"trace_id": data.trace_id})
     db.add(it)
+    datasets_svc.bump(db, dataset_id)
     db.commit()
     return _item_row(it)
 
@@ -127,6 +163,7 @@ def delete_item(dataset_id: int, item_id: int, db: Session = Depends(get_db),
     if not it or it.workspace_id != ws.id or it.dataset_id != dataset_id:
         raise HTTPException(404, "Item not found")
     db.delete(it)
+    datasets_svc.bump(db, dataset_id)
     db.commit()
     return {"ok": True}
 

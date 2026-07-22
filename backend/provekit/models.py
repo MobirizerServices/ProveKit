@@ -142,6 +142,10 @@ class Dataset(Base):
     workspace_id: Mapped[int] = _ws_fk()
     name: Mapped[str] = mapped_column(String(160), default="")
     description: Mapped[str] = mapped_column(Text, default="")
+    # Bumped on every content change. An experiment records the version it ran against, so
+    # "these two runs are comparable" becomes a fact rather than an assumption — a dataset
+    # edited between two runs silently invalidated the comparison, and nothing said so.
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
@@ -154,6 +158,10 @@ class DatasetItem(Base):
     input: Mapped[str] = mapped_column(Text, default="")
     expected: Mapped[str] = mapped_column(Text, default="")
     meta: Mapped[dict] = mapped_column(JSON, default=dict)
+    # "" (unassigned) | train | test. Empty by default so existing datasets keep behaving as
+    # one undivided set — silently reassigning them would change what every saved experiment
+    # was measured over.
+    split: Mapped[str] = mapped_column(String(16), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
@@ -165,6 +173,15 @@ class Experiment(Base):
     workspace_id: Mapped[int] = _ws_fk()
     name: Mapped[str] = mapped_column(String(160), default="")
     dataset_id: Mapped[int | None] = mapped_column(ForeignKey("datasets.id"), nullable=True, index=True)
+    # What this run was actually measured against and with. Without it a result is a number
+    # with no provenance: months later nobody can say which dataset contents, which model, or
+    # which scorers produced it, so it can be quoted but never re-derived or trusted.
+    dataset_version: Mapped[int] = mapped_column(Integer, default=0)
+    # Content hash of the items as they were at run time. The version counter says "something
+    # changed"; the fingerprint proves whether two runs saw identical data even across
+    # restores, re-imports, or a counter that was reset.
+    dataset_fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    config: Mapped[dict] = mapped_column(JSON, default=dict)   # model, params, scorers, split
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

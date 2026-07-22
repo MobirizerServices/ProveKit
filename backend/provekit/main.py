@@ -23,7 +23,7 @@ from .observability import (
 from .routers import (
     activity, admin, alerts, apikeys, auth, dataset_writes, datasets, digests, experiments,
     export,
-    metrics, playground,
+    metrics, playground, scim, sso,
     projects, traces, views, webhooks,
 )
 
@@ -175,6 +175,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(sso.router)
+app.include_router(scim.router)
 app.include_router(apikeys.router)
 # BEFORE traces.router: same path and method, and Starlette dispatches to the first match.
 # Registered after, this is dead code and a protobuf body silently returns "success" again.

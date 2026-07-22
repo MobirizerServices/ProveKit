@@ -4,8 +4,12 @@ ProveKit isn't just a log viewer — you can open any captured run, **edit the p
 with real data, and re-run it**, then compare outputs, replay the whole flow, or score an edit
 against a dataset.
 
-This guide covers the four things you can do. For the design/architecture, see
+This guide covers the five things you can do. For the design/architecture, see
 [design/INTERACTIVE_DEBUGGING.md](design/INTERACTIVE_DEBUGGING.md).
+
+> Only want to **read** a run rather than re-run it? Jump to
+> [§5 Step through a trace](#5-step-through-a-trace--walk-the-run-one-span-at-a-time). It needs no
+> API key, no model connection and no configuration — it reads what was already captured.
 
 ---
 
@@ -83,6 +87,88 @@ over every item (substituting `{{input}}` / `{{expected}}` per item), scores the
 expected value with the built-in scorers (`exact_match`, `contains`), and saves a real
 **experiment** you can open from the Datasets page. This turns a promising prompt edit into a
 measured regression check in one click.
+
+---
+
+## 5. Step through a trace — walk the run one span at a time
+
+Open a trace and press **⏯ Step through**. You move through the run span by span and see what was
+recorded at each one, with what changed since the step before it.
+
+### This is a replay, not a live debugger
+
+ProveKit holds a **finished** trace. Nothing is paused, no process is waiting on you, and there is
+no "continue" that resumes an agent — stepping walks spans that already ran. A debugger that
+claimed to pause a live agent and didn't would mislead you at the exact moment you are trying to
+work out what happened, so this one says "replay" in its own header and never says "paused".
+
+For re-running part of a captured run with different inputs, that's §2 and §3 above; they are
+separate features and they cost provider calls, which this one does not.
+
+### Keys
+
+| Key | Does |
+|---|---|
+| `n` · `→` · `↓` · `space` | Next step |
+| `p` · `←` · `↑` | Previous step |
+| `Home` / `End` | First / last step |
+| `Esc` | Close |
+
+Clicking a step in the left rail jumps straight to it. Keys are ignored while you're typing in a
+field, so the notes box and the share form still work.
+
+### Order is execution order, not arrival order
+
+Spans arrive out of order: a child span finishes and exports before the parent that is still
+waiting on it, so `GET /api/traces/{id}` returns rows in the order they landed. The step list
+sorts them by each span's **captured start time** (`result.meta.start_ns`, epoch nanoseconds),
+with tree order as the tiebreak so a parent that started at the same instant as its child comes
+first. Stepping through array position would have walked the trace in the order the exporter's
+batches happened to flush.
+
+### What each step shows
+
+- The span's **input, output and error** — the same view as the inspector, including any
+  [custom span renderer](CUSTOM_RENDERERS.md) your team registered.
+- **Changed since the previous step**: type, status, model, provider, operation, tool, finish
+  reason, session, error text, and the `replay_state` badge on a forked branch (so the step where
+  a reproduction turns into a hypothesis is called out where you'll see it).
+- **Elapsed, tokens so far and estimated cost so far**, so you can see what the run had already
+  spent by the time it reached the step that went wrong.
+- **Overlap**: if a step started *before* the previous one finished, they ran concurrently and the
+  panel says so. The list is linear; the run was not.
+
+### What "state" means here
+
+The captured span — input, output, error, usage, timing. **Local variables were never captured**,
+so this cannot show them and doesn't pretend to.
+
+The one inference it makes is labelled as one: when a step's recorded input contains the previous
+step's recorded output *verbatim*, it says so as a **substring match** — the same heuristic
+`services/replay.py` uses to thread an edited output forward. A step that summarises or reformats
+the previous output shows no carry-over even though it consumed it, and two steps can share a
+string by coincidence. It is a hint about data flow, not a captured edge.
+
+### Traces that are broken in the way that matters
+
+A run that died before its root span could be exported has **no root** — and that is exactly the
+trace you want to step through. Every parentless span is treated as a root, and any span the tree
+walk can't reach (a parent cycle, a duplicate id) is appended rather than dropped: the debugger
+never silently omits a span.
+
+If some spans carried no timestamp, they're placed after the last span that did and the panel says
+how many — their position is **inferred, not measured**. If no span carried one at all, the panel
+says the list is tree order, not execution order.
+
+### Deep links
+
+The URL carries `#step-<span id>` as you move, so "it goes wrong here" is a paste-able link that
+opens the trace on that step. Closing leaves `#span-<span id>` behind, which selects the span
+without reopening the debugger. Both work on a **shared link** too — stepping only reads the
+captured trace and writes nothing, so a teammate handed a read-only link can walk it the same way.
+Fields a share link withholds are stripped by the server before the shared payload is built
+(`services/share.py`), so they are missing from the step view for the same reason they're missing
+everywhere else on that page: they were never sent.
 
 ---
 

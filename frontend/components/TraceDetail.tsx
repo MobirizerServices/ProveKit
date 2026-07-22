@@ -6,6 +6,7 @@ import { estimateCost, fmtCost } from "@/lib/cost";
 import { useVirtualRows } from "@/lib/useVirtualRows";
 import TraceGraph, { heatColor } from "@/components/TraceGraph";
 import Playground from "@/components/Playground";
+import StepThrough, { readStepHash } from "@/components/StepThrough";
 import { SpanBody } from "@/components/spanRenderers";
 
 const TYPE_COLOR: Record<string, string> = {
@@ -109,14 +110,19 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [pgSpan, setPgSpan] = useState<TraceSpan | null>(null);
   const [tip, setTip] = useState(false);
-  // Deep link: `#span-<id>` points at one span. Read on mount *and* on hashchange so a pasted
-  // link works without a reload, and re-read per trace so the target is resolved against the
-  // spans actually loaded.
+  // Deep links. `#span-<id>` points at one span; `#step-<id>` points at the same span *and*
+  // opens the step-through debugger on it (components/StepThrough.tsx). Read on mount *and* on
+  // hashchange so a pasted link works without a reload, and re-read per trace so the target is
+  // resolved against the spans actually loaded.
   const [hashSpan, setHashSpan] = useState<string | null>(null);
+  const [hashStep, setHashStep] = useState<string | null>(null);
+  const [stepping, setStepping] = useState(false);
   useEffect(() => {
     const read = () => {
-      const m = /^#span-(.+)$/.exec(window.location.hash || "");
+      const h = window.location.hash || "";
+      const m = /^#span-(.+)$/.exec(h);
       setHashSpan(m ? decodeURIComponent(m[1]) : null);
+      setHashStep(readStepHash(h));
     };
     read();
     window.addEventListener("hashchange", read);
@@ -125,6 +131,11 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   useEffect(() => {
     if (hashSpan && spans.some((s) => s.span_id === hashSpan)) setPicked(hashSpan);
   }, [hashSpan, spans]);
+  // Only auto-open once the linked span is actually in this trace — a link to another trace's
+  // span should do nothing, not drop the reader into step 1 of whatever is loaded.
+  useEffect(() => {
+    if (hashStep && spans.some((s) => s.span_id === hashStep)) { setPicked(hashStep); setStepping(true); }
+  }, [hashStep, spans]);
   useEffect(() => { try { setTip(!localStorage.getItem("pk_debug_tip")); } catch { /* no storage */ } }, []);
   const dismissTip = () => { setTip(false); try { localStorage.setItem("pk_debug_tip", "1"); } catch { /* no storage */ } };
   const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
@@ -182,6 +193,12 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
           {root?.session_id && <span style={chip("var(--purple)")} title="session / thread">◆ {root.session_id}</span>}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          {/* Available on shared/read-only traces too: stepping reads the captured trace and
+              writes nothing, so a teammate handed a link can walk it the same way. */}
+          {spans.length > 0 && (
+            <button className="btn btn-sm" onClick={() => setStepping(true)}
+              title="Walk this trace one span at a time, in the order they started">⏯ Step through</button>
+          )}
           {!readOnly && traceId && <ShareButton traceId={traceId} />}
           {/* data-tour marks the elements the product tour rings (components/Tour.tsx). */}
           <div data-tour="view-toggle" style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2 }}>
@@ -224,6 +241,25 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
       )}
 
       {!readOnly && traceId && <FeedbackPanel traceId={traceId} />}
+
+      {stepping && (
+        <StepThrough
+          spans={spans}
+          startAt={picked}
+          onStep={setPicked}
+          onClose={(id) => {
+            setStepping(false);
+            // replaceState fires no hashchange, so the `#step-` state has to be cleared by hand
+            // — otherwise the effect above would re-open the panel on the next spans change.
+            setHashStep(null);
+            if (id) {
+              setPicked(id);
+              try { window.history.replaceState(null, "", `#span-${encodeURIComponent(id)}`); } catch { /* no history */ }
+            }
+          }}
+          renderBody={(s) => <SpanBody span={s} fallback={<DefaultBody span={s} />} />}
+        />
+      )}
     </div>
   );
 }

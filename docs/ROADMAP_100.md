@@ -28,7 +28,7 @@ The category ProveKit is *judged* on. An observability tool that silently drops 
 data is worse than none — it produces confident wrong answers.
 
 1. **Idempotent ingest.** ~~A retried OTLP batch duplicated every span in it, inflating counts, tokens and cost.~~ Deduped on `(workspace, trace_id, span_id)` behind a partial unique index; keyed by trace because OTel scopes span-id uniqueness to a trace. 🔴 S ✅
-2. **Durable accept.** Ingest writes straight through to the DB; a write failure loses the batch with no retry path. Accept → queue → persist, so a DB blip doesn't destroy data. 🔴 M ✖
+2. **Durable accept.** ~~Ingest wrote straight through to the DB; a write failure lost the batch with no retry path.~~ Every batch is fsynced to an on-disk spool before it is acknowledged and released only once the rows commit; a background drainer replays whatever a failed write or a killed worker left behind. Ingest stays synchronous, so a trace is still queryable the moment the POST returns. 🔴 M ✅
 3. **Orphan & late-span handling.** A child whose parent hasn't landed yet (or never will, if the process died) should render as a rooted partial tree with an explicit marker, not vanish from the flow. 🔴 M ◑
 4. **Incomplete-trace indicator.** ~~A run whose root never arrived was missing from the list entirely, not merely unbadged.~~ Rootless traces are listed via a stand-in span and badged **partial**, distinct from *failed*. 🔴 S ✅
 5. **Clock-skew defence.** The waterfall positions bars by client-supplied start offsets; a skewed client produces a nonsensical chart with no warning. Detect skew against server receipt time and flag it. 🟡 M ✖
@@ -40,7 +40,7 @@ data is worse than none — it produces confident wrong answers.
 11. **Dialect conformance suite.** ~20 instrumentors across 3 attribute dialects, one regression test. Capture golden OTLP payloads per instrumentor and assert the mapping — this is where genericness bugs keep coming from (see #177–#182). 🔴 M ◑
 12. **Migration integrity tests.** 9 migrations run automatically on boot against production data; nothing tests upgrade (or downgrade) on a *populated* database. 🔴 M ✖
 13. **Observable retention.** Pruning silently deletes at a cap. Report what was pruned and when, so "my trace is missing" has an answer. 🟡 S ◑
-14. **Self-observability.** [observability.py](../backend/provekit/observability.py) exists; extend it to ingest lag, dropped-batch count, and queue depth — ProveKit should be the first tool to tell you ProveKit is unhealthy. 🟡 M ◑
+14. **Self-observability.** ~~[observability.py](../backend/provekit/observability.py) reported liveness only.~~ `/healthz` carries an `ingest` block: queue depth, lag (age of the oldest un-drained batch), and counts of batches shed by backpressure or quarantined as corrupt. All zero on a healthy instance. 🟡 M ✅
 
 ## B. Scale & performance (15–26)
 
@@ -54,7 +54,7 @@ Everything here is fine on a demo instance and breaks on a real one.
 20. **Payload offload.** Big inputs/outputs live inline in the row. Move them to object storage past a threshold and keep rows narrow. 🟡 L ✖
 21. **Streaming trace updates.** ~~Every viewer refetched the whole list every 5s.~~ `GET /api/traces/stream` (SSE) announces new traces and the client refetches through its normal path; a 30s poll remains as a fallback. 🔴 M ✅
 22. **Large-trace virtualization.** A 1000-span trace renders every node. Virtualize the tree and waterfall. 🔴 M ✖
-23. **Ingest backpressure.** No queue between accept and write — a traffic spike becomes DB pressure and 5xx (which, per #1, then duplicate). 🔴 M ✖
+23. **Ingest backpressure.** ~~No queue between accept and write — a traffic spike became DB pressure and 5xx (which, per #1, then duplicated).~~ Once the spool backlog passes `SPOOL_MAX_DEPTH` the endpoint sheds with `503 + Retry-After` instead of taking work the database can't absorb; the depth check is TTL-cached so it costs no syscall per request. 🔴 M ✅
 24. **SDK-side durable buffer.** If the portal is unreachable the batch is dropped by design (fail-open). A bounded on-disk buffer would make brief outages lossless without ever blocking the app. 🟡 M ✖
 25. **Published load numbers.** No soak test, no "X spans/sec on Y hardware". Teams sizing a self-host deployment have nothing to go on. 🔴 M ✖
 26. **Frontend perf budget.** Bundle size and Lighthouse aren't gated in CI, so regressions land invisibly. 🟢 S ✖

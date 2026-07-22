@@ -40,6 +40,17 @@ class Settings(BaseSettings):
 
     thread_pool_size: int = 200
 
+    # Durable accept (services/spool.py). Every ingest batch is staged to disk before it is
+    # acknowledged, so a database outage can't destroy data the exporter believes was taken.
+    # Empty dir → a temp-dir default; on by default because losing spans is the one failure
+    # an observability tool cannot have.
+    spool_enabled: bool = True
+    spool_dir: str = ""
+    spool_drain_seconds: float = 5.0   # how often the background drainer retries staged batches
+    # Backpressure: refuse new batches once this many are already waiting to land. A spike
+    # then gets a retriable 503 instead of becoming unbounded disk and DB pressure. 0 = off.
+    spool_max_depth: int = 5000
+
     # Mask PII (emails, cards, SSNs, phones, common secret keys) in captured span
     # input/output/error before it's stored. Off by default; a safety net for hosted use.
     redact_pii: bool = False

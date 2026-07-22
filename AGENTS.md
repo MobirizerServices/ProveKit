@@ -28,6 +28,10 @@ evaluate it. Monorepo:
   (classified agent/llm/tool/step, with trace/span/parent ids). Every span is kept, so the
   full tree survives — not just LLM calls. `services/redact.py` optionally masks PII before
   storage; `services/limits.py` enforces ingest/login/playground rates and the spend cap.
+  `services/spool.py` fsyncs each batch to disk *before* it's acknowledged and releases it once
+  the rows commit, so a database blip can't destroy accepted data — a drain task in the lifespan
+  replays whatever is left staged. Ingest stays synchronous; the spool is a net under the write,
+  not a queue in front of it. Its depth also drives backpressure and the `/healthz` ingest block.
 - **Read APIs** — `routers/traces.py` serves three routers: `/v1` (key-authed ingest + read),
   `/api` (cookie-authed runs, feedback, notes, share links), and `/api/workspace`. The frontend
   rebuilds the tree from `parent_span_id`.

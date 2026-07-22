@@ -1,9 +1,11 @@
 """ProveKit — drop-in agent tracing. Add one decorator, get a project key, and review
 every run your agent makes. No connections to configure, no SDK to swap."""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
@@ -58,7 +60,32 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     init_db()
-    yield
+    drainer = asyncio.create_task(_drain_spool_forever())
+    try:
+        yield
+    finally:
+        drainer.cancel()
+
+
+async def _drain_spool_forever() -> None:
+    """Retry ingest batches that were staged but never landed (services/spool.py).
+
+    Runs once at startup — which is what recovers a batch that was in flight when the process
+    died — and then on an interval, so a database outage self-heals instead of needing an
+    operator to notice. The drain itself is blocking DB work, hence the threadpool.
+    """
+    from .routers.traces import drain_spool
+    from .services import spool
+    interval = max(1.0, settings.spool_drain_seconds)
+    while True:
+        try:
+            if spool.enabled() and spool.depth():
+                await run_in_threadpool(drain_spool)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger("provekit").exception("spool drain pass failed")
+        await asyncio.sleep(interval)
 
 
 app = FastAPI(title="ProveKit", version="0.1.0", lifespan=lifespan)

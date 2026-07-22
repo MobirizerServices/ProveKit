@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, Run, SpanNote, Workspace, iso_utc
-from ..services import apikey, deploy, limits, otel, redact, share
+from ..services import apikey, deploy, limits, otel, redact, share, spool
 from ..services.auth import get_current_user
 from ..services.workspace import current_workspace
 
@@ -45,6 +45,10 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     # Bound the total per account. Checked before the write so an over-quota account stops
     # consuming storage, rather than being told about it afterwards.
     limits.check_span_quota(ws.owner_user_id)
+    # Backpressure: if the spool is already deep, the database is not keeping up and taking
+    # more work makes it worse. 503 + Retry-After is the honest answer — OTLP exporters retry
+    # it, and #184's dedupe means that retry costs nothing.
+    _check_ingest_backpressure()
     try:
         payload = await request.json()
     except Exception:
@@ -52,13 +56,71 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     rows = otel.ingest(payload)
     if ws.redact_pii or get_settings().redact_pii:   # per-project toggle, or the global default
         rows = [redact.scrub_run(kw) for kw in rows]
-    stored = _persist_spans(db, ws, rows)
+    # Stage before persisting. From here the batch survives a failed commit, a killed worker,
+    # or a database that is briefly gone; the drainer replays whatever is still staged.
+    entry = spool.stage(ws.id, rows)
+    try:
+        stored = _persist_spans(db, ws, rows)
+    except Exception:
+        # Left staged on purpose: the drainer owns it now. Report the failure to the exporter
+        # so it doesn't treat a batch we haven't stored as delivered.
+        log.exception("ingest persist failed; batch retained in spool")
+        raise HTTPException(status_code=503, detail="ingest temporarily unavailable") from None
+    spool.release(entry)
     if stored:
         # Count what actually landed, not what was sent: a retried batch is deduped (#184) and
         # charging for the retry would make the quota depend on network luck.
         limits.record_spans(ws.owner_user_id, stored)
         _prune_runs(db, ws)           # enforce retention so the table doesn't grow forever
     return {"partialSuccess": {}}
+
+
+def _check_ingest_backpressure() -> None:
+    cap = get_settings().spool_max_depth
+    if cap > 0 and spool.enabled() and spool.depth_cached() >= cap:
+        spool.note_shed()
+        raise HTTPException(status_code=503, detail="ingest backlog is full; retry shortly",
+                            headers={"Retry-After": "5"})
+
+
+def drain_spool(limit: int = 200) -> int:
+    """Replay staged batches that never made it into the database. Returns how many entries
+    were cleared.
+
+    Safe to run repeatedly and from more than one worker: `_persist_spans` dedupes on
+    (trace_id, span_id), so replaying a batch that actually did land is a no-op rather than a
+    duplicate. An entry whose workspace has since been deleted is dropped — there is nowhere
+    for those rows to go, and retrying it forever would block everything behind it.
+    """
+    from ..database import SessionLocal
+    cleared = 0
+    for path in spool.pending()[:limit]:
+        entry = spool.load(path)
+        if entry is None:
+            continue                  # load() quarantined it
+        db = SessionLocal()
+        try:
+            ws = db.query(Workspace).filter(Workspace.id == entry.get("workspace_id")).first()
+            if ws is None:
+                spool.release(path)
+                cleared += 1
+                continue
+            stored = _persist_spans(db, ws, entry.get("rows") or [])
+            spool.release(path)
+            cleared += 1
+            if stored:
+                limits.record_spans(ws.owner_user_id, stored)
+        except Exception:
+            # Still broken. Leave it staged and stop the pass — if the database is down, the
+            # next entry will fail the same way and hammering it helps nobody.
+            db.rollback()
+            log.warning("spool drain failed for %s; will retry", path.name)
+            break
+        finally:
+            db.close()
+    if cleared:
+        log.info("drained %d staged ingest batch(es)", cleared)
+    return cleared
 
 
 def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:

@@ -151,4 +151,21 @@ def healthz() -> JSONResponse:
         except Exception:
             pass
     ok = checks["db"] and (checks["redis"] is not False)
-    return JSONResponse({"ok": ok, "checks": checks}, status_code=200 if ok else 503)
+    body = {"ok": ok, "checks": checks, "ingest": ingest_health()}
+    return JSONResponse(body, status_code=200 if ok else 503)
+
+
+def ingest_health() -> dict:
+    """Ingest backlog, as depth and lag.
+
+    ProveKit should be the first thing to tell you ProveKit is unhealthy. `queue_depth` is the
+    number of accepted-but-unlanded batches and `lag_seconds` the age of the oldest — both are
+    0 on a healthy instance, and a lag that keeps climbing is the signal that the database is
+    behind, which is otherwise invisible until someone notices missing traces.
+    """
+    from .services import spool
+    if not spool.enabled():
+        return {"spool": False}
+    return {"spool": True, "queue_depth": spool.depth(),
+            "lag_seconds": round(spool.oldest_age_seconds(), 3),
+            **spool.counters()}

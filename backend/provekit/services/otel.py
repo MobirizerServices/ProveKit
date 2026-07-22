@@ -20,6 +20,8 @@ import json
 import logging
 import re
 
+from . import pricing
+
 log = logging.getLogger("provekit.otel")
 
 
@@ -164,6 +166,11 @@ def map_span(span: dict) -> dict:
     # only needs per-span *offsets* within a trace (a small delta) — computed via BigInt.
     meta = {"provider": provider, "model": model, "usage": usage, "source": "otel",
             "start_ns": str(start)}
+    if model:
+        # Stamp the rate table in force at capture time. Without it, re-costing this span
+        # later applies whatever prices happen to be current, so a vendor repricing silently
+        # rewrites what last quarter cost (services/pricing.py).
+        meta["price_version"] = pricing.current_version()
     if session:
         meta["session_id"] = session
     if tool:

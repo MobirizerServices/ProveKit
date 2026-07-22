@@ -9,10 +9,23 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import MetricRollup, ModelRollup, Run, Workspace, _now, iso_utc
-from ..services import rollups
+from ..services import pricing, rollups
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+# Separate router: a rate card is not a metric, and it is not tenant data. Deliberately
+# unauthenticated — it contains published vendor prices and nothing about any workspace.
+pricing_router = APIRouter(prefix="/api/pricing", tags=["pricing"])
+
+
+@pricing_router.get("")
+def price_table(version: str | None = None):
+    """The rate table, so a client can price tokens without keeping its own copy.
+
+    `version` re-derives a historical cost card: spans carry `meta.price_version`, and asking
+    for that version returns the rates that were in force when the span was captured.
+    """
+    return pricing.as_dict(version)
 
 
 def _usage_pair(result) -> tuple[int, int, bool]:

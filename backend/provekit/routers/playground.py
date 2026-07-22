@@ -4,9 +4,12 @@ and manage the per-project provider connections (BYO keys, sealed at rest) it us
 The trace replay harness (POST /api/replay) is added in a later milestone and reuses the same
 connections + llm_client here.
 """
+import json
 import time
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,7 +17,7 @@ from ..database import get_db
 from ..models import DatasetItem, Experiment, ExperimentResult, Prompt, ProviderConnection, Workspace, _now, iso_utc
 from ..scorers import run_scorers
 from ..services import limits, pricing
-from ..services.llm_client import LLMError, complete, judge
+from ..services.llm_client import LLMError, approx_usage, complete, judge, stream_complete
 from ..services.replay import reconstruct
 from ..services.replay import webhook as replay_webhook
 from ..services.sealing import mask_key, seal, unseal
@@ -109,9 +112,13 @@ def _resolve(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, str, str]:
     raise HTTPException(422, "connection_id is required (or use provider='mock')")
 
 
-@router.post("/playground/run")
-async def playground_run(data: _RunIn, db: Session = Depends(get_db),
-                         ws: Workspace = Depends(current_workspace)):
+def _admit(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, str, str, list[dict], dict]:
+    """Everything that must happen *before* a re-run is allowed to call a provider: rate limit,
+    spend cap, validation, the max_tokens ceiling, and connection resolution.
+
+    Shared by both run endpoints on purpose — on the streamed path these have to run while a
+    real status code can still be returned, i.e. before the first byte of the response body.
+    """
     limits.check_playground_rate(ws.id)
     limits.check_spend_cap(ws.id)
     if not data.messages:
@@ -120,7 +127,13 @@ async def playground_run(data: _RunIn, db: Session = Depends(get_db),
     if params.get("max_tokens"):
         params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
     provider, api_key, base_url = _resolve(db, ws, data)
-    messages = [{"role": m.role, "content": m.content} for m in data.messages]
+    return provider, api_key, base_url, [{"role": m.role, "content": m.content} for m in data.messages], params
+
+
+@router.post("/playground/run")
+async def playground_run(data: _RunIn, db: Session = Depends(get_db),
+                         ws: Workspace = Depends(current_workspace)):
+    provider, api_key, base_url, messages, params = _admit(db, ws, data)
     t0 = time.monotonic()
     try:
         result = await complete(provider, data.model, messages, params,
@@ -133,6 +146,62 @@ async def playground_run(data: _RunIn, db: Session = Depends(get_db),
     limits.record_spend(ws.id, pricing.estimate(data.model, result["usage"].get("input_tokens"),
                                                 result["usage"].get("output_tokens")))
     return result
+
+
+# ---- the same re-run, streamed (SSE) so tokens appear as they arrive ----
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+async def _run_events(ws_id: int, model: str, provider: str, messages: list[dict], params: dict,
+                      api_key: str, base_url: str) -> AsyncIterator[str]:
+    """Relay provider chunks as SSE frames, then bill for the run.
+
+    A failure here can only be reported as an event, never as a status: by the time the first
+    token has been written the response is already committed as a 200. So a provider error is
+    emitted as an explicit `error` frame — simply dropping the connection would render as a
+    complete-looking short answer, which is a wrong result disguised as a right one. The client
+    treats a stream that ends with neither `done` nor `error` the same way.
+
+    Spend is recorded on both exits. Tokens the provider generated before it failed are tokens
+    it will still charge for, so an interrupted stream must not be a free way past the cap.
+    """
+    t0 = time.monotonic()
+    parts: list[str] = []
+    try:
+        async for ev in stream_complete(provider, model, messages, params,
+                                        api_key=api_key, base_url=base_url):
+            if ev.get("type") == "delta":
+                parts.append(ev.get("text") or "")
+                yield _sse(ev)
+                continue
+            usage = ev.get("usage") or {}
+            limits.record_spend(ws_id, pricing.estimate(model, usage.get("input_tokens"),
+                                                        usage.get("output_tokens")))
+            yield _sse({**ev, "latency_ms": round((time.monotonic() - t0) * 1000),
+                        "provider": provider, "model": model})
+    except LLMError as e:
+        if parts:
+            u = approx_usage(messages, "".join(parts))
+            limits.record_spend(ws_id, pricing.estimate(model, u["input_tokens"], u["output_tokens"]))
+        yield _sse({"type": "error", "error": str(e)})
+
+
+@router.post("/playground/run/stream")
+async def playground_run_stream(data: _RunIn, db: Session = Depends(get_db),
+                                ws: Workspace = Depends(current_workspace)):
+    """Server-sent events for one re-run: `delta` frames, then `done` (same body as
+    /playground/run) or `error`. Limits and validation still answer with a real status code —
+    they run before the response starts."""
+    provider, api_key, base_url, messages, params = _admit(db, ws, data)
+    return StreamingResponse(
+        _run_events(ws.id, data.model, provider, messages, params, api_key, base_url),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive",
+                 # nginx and friends buffer by default, which would collapse the stream into
+                 # one delayed blob and undo the point of it.
+                 "X-Accel-Buffering": "no"},
+    )
 
 
 # ---- the replay harness: fork a trace at a span, re-run the flow with the edit ----

@@ -53,11 +53,11 @@ Everything here is fine on a demo instance and breaks on a real one.
 19. **Time-partitioned span storage.** Spans grow without bound and dominate the schema. Partition by time so retention becomes a partition drop, not a delete storm. 🟡 L ✖
 20. **Payload offload.** Big inputs/outputs live inline in the row. Move them to object storage past a threshold and keep rows narrow. 🟡 L ✖
 21. **Streaming trace updates.** ~~Every viewer refetched the whole list every 5s.~~ `GET /api/traces/stream` (SSE) announces new traces and the client refetches through its normal path; a 30s poll remains as a fallback. 🔴 M ✅
-22. **Large-trace virtualization.** A 1000-span trace renders every node. Virtualize the tree and waterfall. 🔴 M ✖
+22. **Large-trace virtualization.** ~~A 1000-span trace rendered every node.~~ A hand-rolled windowing hook (no new dependency) mounts ~29 rows whether the trace has 120 spans or 1000; below the threshold the markup is byte-identical to before. Keyboard navigation became a proper roving-tabindex tree and deep links still reveal an unmounted span. 🔴 M ✅
 23. **Ingest backpressure.** ~~No queue between accept and write — a traffic spike became DB pressure and 5xx (which, per #1, then duplicated).~~ Once the spool backlog passes `SPOOL_MAX_DEPTH` the endpoint sheds with `503 + Retry-After` instead of taking work the database can't absorb; the depth check is TTL-cached so it costs no syscall per request. 🔴 M ✅
 24. **SDK-side durable buffer.** ~~If the portal was unreachable the batch was dropped by design (fail-open).~~ A failed export is written to a bounded on-disk buffer and retried on the next export or flush, oldest evicted first. Still fail-open: an unwritable directory degrades to the old behaviour rather than raising. The TS SDK re-queues in memory (no disk in a browser). 🟡 M ✅
 25. **Published load numbers.** No soak test, no "X spans/sec on Y hardware". Teams sizing a self-host deployment have nothing to go on. 🔴 M ✖
-26. **Frontend perf budget.** Bundle size and Lighthouse aren't gated in CI, so regressions land invisibly. 🟢 S ✖
+26. **Frontend perf budget.** ~~Nothing gated bundle size.~~ `frontend/perf-budget.json` + a build-output checker, wired to CI, with budgets set from measured sizes plus headroom. Lighthouse still uncovered — it needs a browser in CI, and a step nobody has run is worse than an absent one. 🟢 S ◑
 
 ## C. Onboarding & time-to-first-trace (27–38)
 
@@ -104,9 +104,9 @@ The strongest differentiator ProveKit has — edit-and-re-run, reconstructed rep
 55. **Sandboxed live tool calls.** ~~Nothing bounded real execution during replay.~~ `mode="live"` takes an `allow={...}` set and refuses anything outside it; `mode="dry-run"` executes nothing and returns a marker, so you can see what *would* have fired before letting it. 🔴 M ✅
 56. **Step-through / time-travel.** Pause at a span, inspect state, advance. The natural end state of the fork tree. 🟡 XL ✖
 57. **Multi-span editing.** Edit two prompts and re-run once; today each edit is a separate re-run. 🟡 M ✖
-58. **Structural trace diff.** Compare is side-by-side and visual; a diff that aligns trees and highlights *first divergence* is what you actually want. 🔴 M ◑
-59. **Root-cause hinting.** Given a failed trace and a passing one, point at the first divergent span. 🟡 M ✖
-60. **Streaming playground output.** Re-runs block until complete; streaming makes the loop feel interactive. 🟡 S ✖
+58. **Structural trace diff.** ~~Compare was side-by-side and visual.~~ `lib/traceDiff.ts` aligns the two trees, classifies each node same/changed/only-in-A/only-in-B, and leads with the first structural divergence. A differing duration is not divergence; a differing output or a missing span is. 🔴 M ✅
+59. **Root-cause hinting.** ~~Nothing pointed at where two runs parted ways.~~ The first divergence is surfaced as a callout above the comparison. 🟡 M ✅
+60. **Streaming playground output.** ~~Re-runs blocked until complete.~~ An SSE variant streams tokens as they arrive, following the pattern `/api/traces/stream` already established. The blocking endpoint is unchanged (replay and experiments share the layer), spend is still metered on the streamed path, and a mid-stream provider error surfaces instead of truncating into what looks like a short answer. 🟡 S ✅
 61. **Runtime prompt fetch.** Prompt versions can be saved and restored in the portal, but there's no `pk.get_prompt("name", label="production")` — so a prompt change still needs a deploy. 🔴 M ◑
 62. **Prompt A/B in production.** Serve two versions by traffic split and compare on live scores. 🟡 L ✖
 63. **Agent/tool playground.** The playground edits single LLM calls; editing a tool's arguments and re-running the step is the missing sibling. 🟡 M ✖
@@ -118,7 +118,7 @@ ProveKit is currently a single-player tool with multi-user auth.
 
 65. **Comment threads with @mentions.** Span notes exist but are flat and silent — no replies, no notification, no resolve. 🔴 M ◑
 66. **Slack / Discord alerting.** ~~Alerts emailed only.~~ A rule can carry a webhook URL, SSRF-guarded and validated at save time, with the body shape chosen per host. 🔴 S ✅
-67. **PagerDuty / Opsgenie.** For anyone treating agent failures as on-call. 🟡 S ✖
+67. **PagerDuty / Opsgenie.** ~~Email and chat webhooks only.~~ `notify.payload_for` dispatches on host, so both slot in behind the existing `webhook_url` with no schema change. Alias is stable per rule, so repeated breaches deduplicate into one incident rather than paging someone twenty times. 🟡 S ✅
 68. **Saved views.** Filter + time-window + search combinations are ephemeral; teams want "our failing checkout traces" as a shareable URL. 🔴 S ✖
 69. **Issue-tracker handoff.** One click from a trace to a GitHub issue with the shared link and context embedded. 🟡 S ✖
 70. **Redaction on share.** Signed `/shared/{token}` links expose the full payload; sharing a trace externally needs field-level masking. 🔴 M ◑

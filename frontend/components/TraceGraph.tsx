@@ -18,6 +18,7 @@ const MINI_COLOR: Record<string, string> = {
 
 const NODE_W = 210;  // node box width for the layout engine
 const NODE_H = 60;   // approximate node box height
+const LARGE_GRAPH = 200;  // node count at which the canvas starts windowing (see ReactFlow below)
 
 // Latency heat: 0 (fastest) → green, 0.5 → amber, 1 (slowest) → red. Used by the optional
 // "Heat" overlay so the eye lands on the expensive spans without reading every number.
@@ -246,6 +247,10 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
       )}
       <ReactFlow
         nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+        // Windowing for the canvas: past a few hundred spans fitView bottoms out at minZoom and
+        // most of the graph sits outside the viewport, so mounting every node box is pure waste.
+        // Off for small graphs — the visibility bookkeeping costs more than the nodes do.
+        onlyRenderVisibleElements={nodes.length >= LARGE_GRAPH}
         fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.15} maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
         nodesDraggable nodesConnectable={false} elementsSelectable

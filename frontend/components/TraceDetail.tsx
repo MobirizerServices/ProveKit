@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, Feedback, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
+import { useVirtualRows } from "@/lib/useVirtualRows";
 import TraceGraph, { heatColor } from "@/components/TraceGraph";
 import Playground from "@/components/Playground";
 
@@ -94,6 +95,22 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [pgSpan, setPgSpan] = useState<TraceSpan | null>(null);
   const [tip, setTip] = useState(false);
+  // Deep link: `#span-<id>` points at one span. Read on mount *and* on hashchange so a pasted
+  // link works without a reload, and re-read per trace so the target is resolved against the
+  // spans actually loaded.
+  const [hashSpan, setHashSpan] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => {
+      const m = /^#span-(.+)$/.exec(window.location.hash || "");
+      setHashSpan(m ? decodeURIComponent(m[1]) : null);
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+  useEffect(() => {
+    if (hashSpan && spans.some((s) => s.span_id === hashSpan)) setPicked(hashSpan);
+  }, [hashSpan, spans]);
   useEffect(() => { try { setTip(!localStorage.getItem("pk_debug_tip")); } catch { /* no storage */ } }, []);
   const dismissTip = () => { setTip(false); try { localStorage.setItem("pk_debug_tip", "1"); } catch { /* no storage */ } };
   const totalTok = spans.reduce((n, s) => n + (s.result?.meta?.usage?.input_tokens || 0) + (s.result?.meta?.usage?.output_tokens || 0), 0);
@@ -171,7 +188,7 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
           {pgSpan && <Playground span={pgSpan} traceId={traceId} onClose={() => setPgSpan(null)} />}
         </div>
       ) : (
-        <Tree spans={spans} />
+        <Tree spans={spans} focusSpan={hashSpan} />
       )}
 
       {!readOnly && traceId && <FeedbackPanel traceId={traceId} />}
@@ -391,46 +408,151 @@ function fmtDur(ms: number): string {
   return `${Math.round(ms)}ms`;
 }
 
-function Tree({ spans }: { spans: TraceSpan[] }) {
+// Waterfall row height before it's measured. Only the estimate for off-screen rows depends on
+// this, so being a pixel or two out costs nothing but scrollbar precision while scrolling fast.
+const ROW_H = 30;
+// Below this many rows the list renders exactly as it always has: no scroll container, no
+// spacers, every row in the page flow. Windowing a 40-span trace would only add a scrollbar.
+const VIRTUALIZE_FROM = 120;
+
+const rowDomId = (spanId: string) => `pk-span-${spanId}`;
+
+function Tree({ spans, focusSpan }: { spans: TraceSpan[]; focusSpan?: string | null }) {
   const [open, setOpen] = useState<string | null>(spans[0]?.span_id ?? null);
   const [heat, setHeat] = useState(false);
+  // Roving-tabindex cursor. Virtualization unmounts off-screen rows, so Tab alone can no longer
+  // reach every span — the arrow keys drive the list and only the cursor row is tabbable.
+  const [cursor, setCursor] = useState(0);
   const maxDur = Math.max(1, ...spans.map((s) => s.duration_ms || 0));
-  const kids: Record<string, TraceSpan[]> = {};
-  const ids = new Set(spans.map((s) => s.span_id));
-  for (const s of spans) {
-    const p = s.parent_span_id && ids.has(s.parent_span_id) ? s.parent_span_id : "__root__";
-    (kids[p] ||= []).push(s);
-  }
-  const startNs = (s: TraceSpan): bigint | null => {
-    const v = s.result?.meta?.start_ns;
-    return v ? BigInt(v) : null;
-  };
-  const starts = spans.map(startNs).filter((x): x is bigint => x !== null);
-  const hasReal = starts.length > 0;
-  const t0 = starts.length ? starts.reduce((a, b) => (b < a ? b : a)) : 0n;
 
-  // Synthetic fallback timing: when spans carry no wall-clock timestamps we still want a
-  // readable waterfall, so lay siblings out sequentially (each starts when the previous ends)
-  // nested under their parent's start. It's an approximation — flagged in the UI below —
-  // because without timestamps we can't know which siblings actually ran in parallel.
-  const synth: Record<string, number> = {};
-  {
-    let cursor = 0;
-    const layout = (s: TraceSpan, start: number) => {
-      synth[s.span_id] = start;
-      let c = start;
-      for (const ch of kids[s.span_id] || []) { layout(ch, c); c += ch.duration_ms || 0; }
+  // Tree shape + timing, flattened to a row list. Memoised because the virtualizer re-renders on
+  // every scroll frame and none of this depends on scroll position.
+  const { rows, offsetMs, totalMs, hasReal } = useMemo(() => {
+    const kids: Record<string, TraceSpan[]> = {};
+    const ids = new Set(spans.map((s) => s.span_id));
+    for (const s of spans) {
+      const p = s.parent_span_id && ids.has(s.parent_span_id) ? s.parent_span_id : "__root__";
+      (kids[p] ||= []).push(s);
+    }
+    const startNs = (s: TraceSpan): bigint | null => {
+      const v = s.result?.meta?.start_ns;
+      return v ? BigInt(v) : null;
     };
-    for (const r of kids["__root__"] || []) { layout(r, cursor); cursor += r.duration_ms || 0; }
-  }
+    const starts = spans.map(startNs).filter((x): x is bigint => x !== null);
+    const hasReal = starts.length > 0;
+    const t0 = starts.length ? starts.reduce((a, b) => (b < a ? b : a)) : 0n;
 
-  // A span's start offset (ms from trace start): real timestamp if present, else synthetic.
-  const offsetMs = (s: TraceSpan): number => {
-    const st = startNs(s);
-    if (st !== null) return Number(st - t0) / 1e6;
-    return synth[s.span_id] ?? 0;
+    // Synthetic fallback timing: when spans carry no wall-clock timestamps we still want a
+    // readable waterfall, so lay siblings out sequentially (each starts when the previous ends)
+    // nested under their parent's start. It's an approximation — flagged in the UI below —
+    // because without timestamps we can't know which siblings actually ran in parallel.
+    const synth: Record<string, number> = {};
+    {
+      let cursor = 0;
+      const layout = (s: TraceSpan, start: number) => {
+        synth[s.span_id] = start;
+        let c = start;
+        for (const ch of kids[s.span_id] || []) { layout(ch, c); c += ch.duration_ms || 0; }
+      };
+      for (const r of kids["__root__"] || []) { layout(r, cursor); cursor += r.duration_ms || 0; }
+    }
+
+    // A span's start offset (ms from trace start): real timestamp if present, else synthetic.
+    const offsetMs = (s: TraceSpan): number => {
+      const st = startNs(s);
+      if (st !== null) return Number(st - t0) / 1e6;
+      return synth[s.span_id] ?? 0;
+    };
+    const totalMs = Math.max(1, ...spans.map((s) => offsetMs(s) + (s.duration_ms || 0)));
+
+    // Depth-first flatten, in exactly the order the recursive renderer used to emit: a span, then
+    // its whole subtree. Indentation was always a paddingLeft, never real nesting, so the flat
+    // list is pixel-identical — and a row's index is now all the virtualizer needs to place it.
+    const rows: { span: TraceSpan; depth: number }[] = [];
+    const walk = (parent: string, depth: number) => {
+      for (const s of kids[parent] || []) { rows.push({ span: s, depth }); walk(s.span_id, depth + 1); }
+    };
+    walk("__root__", 0);
+
+    return { rows, offsetMs, totalMs, hasReal };
+  }, [spans]);
+
+  const virtual = rows.length >= VIRTUALIZE_FROM;
+  const v = useVirtualRows(rows.length, { estimate: ROW_H, overscan: 8, enabled: virtual });
+  const { scrollToIndex, scrollRef } = v;
+
+  // The virtualized list scrolls, so it may carry a scrollbar that the (non-scrolling) time
+  // ruler above it doesn't. Reserve the same width on the ruler or its ticks drift off the bars.
+  const [gutter, setGutter] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!virtual || !el || typeof ResizeObserver === "undefined") { setGutter(0); return; }
+    const m = () => setGutter(el.offsetWidth - el.clientWidth);
+    m();
+    const ro = new ResizeObserver(m);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [virtual, scrollRef]);
+
+  const indexOf = useMemo(() => {
+    const m = new Map<string, number>();
+    rows.forEach((r, i) => m.set(r.span.span_id, i));
+    return m;
+  }, [rows]);
+
+  // Bring a row into view whether or not it's mounted: scrollToIndex puts it inside the window
+  // (so React mounts it), and the node itself then does the fine alignment — which also scrolls
+  // the *page* when the list isn't virtualized and so has no scroll container of its own.
+  const reveal = useCallback((index: number, focus = false) => {
+    const id = rows[index]?.span.span_id;
+    if (!id) return;
+    scrollToIndex(index, "center");
+    requestAnimationFrame(() => {
+      const el = document.getElementById(rowDomId(id));
+      el?.scrollIntoView({ block: "nearest" });
+      if (focus) el?.focus({ preventScroll: true });
+    });
+  }, [rows, scrollToIndex]);
+
+  // Deep link — open and scroll to the linked span even if it sits 800 rows down.
+  useEffect(() => {
+    if (!focusSpan) return;
+    const i = indexOf.get(focusSpan);
+    if (i == null) return;
+    setOpen(focusSpan);
+    setCursor(i);
+    reveal(i);
+  }, [focusSpan, indexOf, reveal]);
+
+  const select = (index: number) => {
+    const id = rows[index]?.span.span_id;
+    if (!id) return;
+    setCursor(index);
+    setOpen((cur) => (cur === id ? null : id));
+    // Keep the URL on the span under inspection so "look at this one" is a paste-able link.
+    // replaceState, not push — expanding rows shouldn't fill up the back button.
+    try { window.history.replaceState(null, "", `#span-${encodeURIComponent(id)}`); } catch { /* no history */ }
   };
-  const totalMs = Math.max(1, ...spans.map((s) => offsetMs(s) + (s.duration_ms || 0)));
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const move = (to: number) => {
+      e.preventDefault();
+      const i = Math.max(0, Math.min(to, rows.length - 1));
+      setCursor(i);
+      reveal(i, true);
+    };
+    const at = rows[cursor]?.span.span_id;
+    switch (e.key) {
+      case "ArrowDown": return move(cursor + 1);
+      case "ArrowUp": return move(cursor - 1);
+      case "PageDown": return move(cursor + 10);
+      case "PageUp": return move(cursor - 10);
+      case "Home": return move(0);
+      case "End": return move(rows.length - 1);
+      case "ArrowRight": e.preventDefault(); if (at) setOpen(at); return;
+      case "ArrowLeft": e.preventDefault(); setOpen(null); return;
+    }
+  };
 
   const bar = (s: TraceSpan) => {
     const left = (offsetMs(s) / totalMs) * 100;
@@ -442,43 +564,50 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
   // Vertical gridlines at each quarter, drawn behind every bar track so they line up.
   const gridBg = "repeating-linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), var(--border) calc(25% - 1px), var(--border) 25%)";
 
-  const render = (parent: string, depth: number): React.ReactNode =>
-    (kids[parent] || []).map((s) => {
-      const b = bar(s);
-      const off = offsetMs(s);
-      const pct = Math.round(((s.duration_ms || 0) / totalMs) * 100);
-      const failed = s.status === "failed";
-      return (
-        <div key={s.span_id}>
-          <button onClick={() => setOpen(open === s.span_id ? null : s.span_id)} style={spanRow(open === s.span_id)}>
-            <span style={{ paddingLeft: depth * 16, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, flex: "0 0 42%" }}>
-              <span style={badge(s.type)}>{s.type}</span>
-              <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
-            </span>
-            <span title={`start +${fmtDur(off)} · ${s.duration_ms}ms · ${pct}% of trace`}
-              style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", backgroundImage: gridBg, borderRadius: 4 }}>
-              <span style={{ position: "absolute", top: 3, height: 10, borderRadius: 3,
-                left: `${b.left}%`, width: `${b.width}%`, minWidth: 3,
-                background: failed ? "var(--red)" : heat ? heatColor((s.duration_ms || 0) / maxDur) : (TYPE_COLOR[s.type] || "var(--muted)"),
-                opacity: 0.9, boxShadow: open === s.span_id ? "0 0 0 1px var(--text)" : "none" }} />
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-              {tokens(s) && <span className="muted mono" style={{ fontSize: 10.5 }} title="input → output tokens">{tokens(s)}</span>}
-              <span className="mono" style={{ fontSize: 11, width: 58, textAlign: "right", color: failed ? "var(--red)" : "var(--muted)" }}>{fmtDur(s.duration_ms || 0)}</span>
-            </span>
-          </button>
-          {open === s.span_id && (
-            <div style={{ padding: `4px 0 10px ${depth * 16 + 14}px` }}>
-              {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
-              <IO label="Input" value={s.request?.input} />
-              <IO label="Output" value={s.result?.text} />
-              {(s.error || failed) && <ErrorBlock error={s.error} />}
-            </div>
-          )}
-          {render(s.span_id, depth + 1)}
-        </div>
-      );
-    });
+  // Exactly one row must be tabbable, and it has to be one that's mounted — otherwise a cursor
+  // that has scrolled out of the window would make Tab skip the whole tree.
+  const tabRow = virtual ? Math.min(Math.max(cursor, v.start), Math.max(v.start, v.end - 1)) : cursor;
+
+  const renderRow = ({ span: s, depth }: { span: TraceSpan; depth: number }, i: number) => {
+    const b = bar(s);
+    const off = offsetMs(s);
+    const pct = Math.round(((s.duration_ms || 0) / totalMs) * 100);
+    const failed = s.status === "failed";
+    const isOpen = open === s.span_id;
+    // role=none keeps the measurement wrapper out of the a11y tree, so the button below stays a
+    // direct treeitem of the list it's announced in.
+    return (
+      <div key={s.span_id} role="none" ref={virtual ? v.rowRef(i) : undefined}>
+        <button id={rowDomId(s.span_id)} onClick={() => select(i)} onFocus={() => setCursor(i)} style={spanRow(isOpen)}
+          role="treeitem" aria-level={depth + 1} aria-expanded={isOpen}
+          aria-posinset={i + 1} aria-setsize={rows.length} tabIndex={i === tabRow ? 0 : -1}>
+          <span style={{ paddingLeft: depth * 16, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, flex: "0 0 42%" }}>
+            <span style={badge(s.type)}>{s.type}</span>
+            <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
+          </span>
+          <span title={`start +${fmtDur(off)} · ${s.duration_ms}ms · ${pct}% of trace`}
+            style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", backgroundImage: gridBg, borderRadius: 4 }}>
+            <span style={{ position: "absolute", top: 3, height: 10, borderRadius: 3,
+              left: `${b.left}%`, width: `${b.width}%`, minWidth: 3,
+              background: failed ? "var(--red)" : heat ? heatColor((s.duration_ms || 0) / maxDur) : (TYPE_COLOR[s.type] || "var(--muted)"),
+              opacity: 0.9, boxShadow: isOpen ? "0 0 0 1px var(--text)" : "none" }} />
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {tokens(s) && <span className="muted mono" style={{ fontSize: 10.5 }} title="input → output tokens">{tokens(s)}</span>}
+            <span className="mono" style={{ fontSize: 11, width: 58, textAlign: "right", color: failed ? "var(--red)" : "var(--muted)" }}>{fmtDur(s.duration_ms || 0)}</span>
+          </span>
+        </button>
+        {isOpen && (
+          <div style={{ padding: `4px 0 10px ${depth * 16 + 14}px` }}>
+            {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
+            <IO label="Input" value={s.request?.input} />
+            <IO label="Output" value={s.result?.text} />
+            {(s.error || failed) && <ErrorBlock error={s.error} />}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -496,7 +625,7 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
         )}
       </div>
       {/* time ruler aligned with the bar tracks */}
-      <div style={{ display: "flex", alignItems: "center", padding: "0 0 6px", fontSize: 10, color: "var(--muted)" }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "0 0 6px", paddingRight: gutter || undefined, fontSize: 10, color: "var(--muted)" }}>
         <span style={{ flex: "0 0 42%" }} />
         <span style={{ position: "relative", flex: 1, height: 12 }}>
           {ticks.map((f) => (
@@ -508,7 +637,15 @@ function Tree({ spans }: { spans: TraceSpan[] }) {
         </span>
         <span style={{ flex: "0 0 82px" }} />
       </div>
-      {render("__root__", 0)}
+      {/* Row list. Virtualized above VIRTUALIZE_FROM rows: only the visible slice is mounted and
+          two spacers hold the scrollbar honest. Below it, every row renders as it always did. */}
+      <div role="tree" aria-label="Trace spans" onKeyDown={onKeyDown}
+        ref={virtual ? scrollRef : undefined}
+        style={virtual ? { maxHeight: "62vh", overflowY: "auto", position: "relative" } : undefined}>
+        {virtual && v.padTop > 0 && <div aria-hidden style={{ height: v.padTop }} />}
+        {(virtual ? rows.slice(v.start, v.end) : rows).map((r, k) => renderRow(r, virtual ? v.start + k : k))}
+        {virtual && v.padBottom > 0 && <div aria-hidden style={{ height: v.padBottom }} />}
+      </div>
       {!hasReal && (
         <div className="muted" style={{ fontSize: 11, marginTop: 12, display: "flex", alignItems: "flex-start", gap: 6, lineHeight: 1.5 }}>
           <span style={{ flexShrink: 0 }}>ⓘ</span>

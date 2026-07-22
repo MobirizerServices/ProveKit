@@ -1,0 +1,52 @@
+name: Frontend perf budget
+
+# Bundle growth never shows up in a diff, so it is gated here instead: a production build, then
+# per-route first-load JS checked against frontend/perf-budget.json. Separate from the CI
+# workflow because it needs the build *output*, not just a build that succeeded.
+#
+# Scope: bundle size only. Lighthouse (LCP/CLS/TBT) is deliberately NOT gated here — it needs a
+# headless browser against a running app plus the backend it proxies to, and a runner-timed
+# score is noisy enough that a threshold gets muted rather than fixed. Add it as its own job,
+# with its own budget file, when someone can hold it green.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-perf.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-perf.yml"
+
+jobs:
+  bundle-size:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+      # The measured table goes to the job summary as well as the log, so a reviewer can see what
+      # each route costs without expanding a failed step.
+      - name: Check bundle budget
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          status=0
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # `|| status=$?` rather than a bare pipeline: the runner shell is `bash -e`, which would
+          # abort on failure and leave the summary's code fence unclosed.
+          npm run --silent perf:budget 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $status

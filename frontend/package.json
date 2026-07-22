@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start -p 3000"
+    "start": "next start -p 3000",
+    "perf:budget": "node scripts/bundle-budget.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

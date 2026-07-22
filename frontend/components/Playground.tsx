@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, Dataset, ExperimentSummary, PlaygroundResult, ProviderConnection, SavedPrompt, TraceSpan } from "@/lib/api";
+import { api, API_BASE, Dataset, ExperimentSummary, getProjectId, PlaygroundResult, ProviderConnection, SavedPrompt, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import { parseMessages } from "@/components/TraceDetail";
 import { DiffText } from "@/components/DiffText";
@@ -23,6 +23,62 @@ function seedMessages(span: TraceSpan): Msg[] {
   const raw = span.request?.input;
   const content = typeof raw === "string" ? raw : raw == null ? "" : JSON.stringify(raw, null, 2);
   return [{ role: "user", content }];
+}
+
+// A streamed re-run: deltas as they arrive, then exactly one terminal frame. `done` carries the
+// same body the blocking endpoint returns, so a finished stream slots straight into the history.
+type StreamEvent =
+  | { type: "delta"; text: string }
+  | ({ type: "done" } & PlaygroundResult)
+  | { type: "error"; error: string };
+
+// SSE framing by hand: EventSource is GET-only and a re-run is a POST body, so the response is
+// read off fetch instead. `text` is one or more complete blank-line-separated records.
+function framesFrom(text: string): StreamEvent[] {
+  const out: StreamEvent[] = [];
+  for (const chunk of text.split("\n\n")) {
+    const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+    if (!data) continue;               // blank framing or a `: keepalive` comment
+    try { out.push(JSON.parse(data) as StreamEvent); } catch { /* not a frame we understand */ }
+  }
+  return out;
+}
+
+async function* sseFrames(res: Response): AsyncGenerator<StreamEvent> {
+  if (!res.body) {
+    // No readable stream (old browser, or a proxy that buffered the whole response): the events
+    // are all here already. Parse them rather than re-running — the run has been made and billed
+    // once, and a second request would charge for it twice.
+    yield* framesFrom(await res.text());
+    return;
+  }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const cut = buf.lastIndexOf("\n\n");
+      if (cut < 0) continue;           // nothing complete yet — a frame can split across chunks
+      yield* framesFrom(buf.slice(0, cut));
+      buf = buf.slice(cut + 2);
+    }
+  } finally {
+    // The consumer abandons the loop on an error frame; release the connection rather than
+    // leaving it open until the reader is collected.
+    reader.cancel().catch(() => {});
+  }
+}
+
+// Match the fetch wrapper's error text: limits and validation still arrive as real statuses,
+// because the backend runs them before the response body starts.
+async function statusError(res: Response): Promise<string> {
+  if (res.status === 429) return "Rate limit reached — wait a moment and try again.";
+  const body = (await res.text()).slice(0, 300);
+  try { const p = JSON.parse(body); if (typeof p?.detail === "string") return `${res.status}: ${p.detail}`; } catch { /* not JSON */ }
+  return `${res.status}: ${body}`;
 }
 
 // Find {{variable}} placeholders across all messages so they can be edited as fields.
@@ -54,6 +110,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const [useJudge, setUseJudge] = useState(false);
   const [exp, setExp] = useState<ExperimentSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stream, setStream] = useState("");   // tokens of the in-flight run, as they arrive
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -85,12 +142,35 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     };
   };
 
+  // Stream the single re-run so tokens appear as they are generated — a long completion is the
+  // difference between a loop that feels interactive and one that feels stuck. Everything else
+  // (compare, replay, dataset runs) needs a whole value before it can do its job, so those stay
+  // on the blocking endpoint.
   const run = async () => {
-    setErr(""); setBusy(true);
+    setErr(""); setStream(""); setBusy(true);
     try {
-      const r = await api.playgroundRun(payload());
-      setRuns((rs) => [r, ...rs]);   // keep prior runs as comparison columns
-    } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
+      const pid = getProjectId();
+      const res = await fetch(`${API_BASE}/api/playground/run/stream`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", ...(pid ? { "X-Project-Id": pid } : {}) },
+        body: JSON.stringify(payload()),
+      });
+      if (!res.ok) throw new Error(await statusError(res));
+      let done: PlaygroundResult | null = null;
+      for await (const ev of sseFrames(res)) {
+        if (ev.type === "delta") setStream((s) => s + ev.text);
+        else if (ev.type === "error") throw new Error(ev.error);
+        else done = ev;
+      }
+      // No terminal frame means the connection was cut, not that the model stopped early.
+      // Keeping the partial text as a finished run would present a truncated answer as a
+      // complete one — the failure mode streaming most easily hides.
+      if (!done) throw new Error("The stream ended before the model finished — the partial answer is marked incomplete.");
+      setRuns((rs) => [done, ...rs]);   // keep prior runs as comparison columns
+      setStream("");
+    } catch (e: any) {
+      setErr(String(e.message || e));   // leave whatever streamed on screen, labelled incomplete
+    } finally { setBusy(false); }
   };
 
   // Run the same prompt across several models at once and stack them as columns.
@@ -302,8 +382,15 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
           <Panel title="Original" meta={`${(origUsage.input_tokens || 0)}→${(origUsage.output_tokens || 0)} tok${origCost ? ` · ${origCost}` : ""} · ${span.duration_ms}ms`}>
             {origOut || <span className="muted">—</span>}
           </Panel>
-          {busy && <Panel title="Running…" accent><span className="muted">Calling the model…</span></Panel>}
-          {runs.length === 0 && !busy && (
+          {(busy || stream) && (
+            <Panel accent title={!busy ? "Incomplete" : stream ? "Streaming…" : "Running…"}
+              meta={stream ? `${stream.length} chars so far` : undefined}>
+              {stream
+                ? <span className="stream-text">{stream}{busy && <span className="caret">&nbsp;</span>}</span>
+                : <span className="muted">Calling the model…</span>}
+            </Panel>
+          )}
+          {runs.length === 0 && !busy && !stream && (
             <Panel title="New" accent><span className="muted">Edit the prompt and press Run. Each run is kept here to compare.</span></Panel>
           )}
           {runs.map((r, i) => {

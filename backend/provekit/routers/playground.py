@@ -20,7 +20,7 @@ from ..models import (
     Workspace, _now, iso_utc,
 )
 from ..scorers import run_scorers
-from ..services import limits, pricing
+from ..services import errors, limits, pricing, share
 from ..services.llm_client import LLMError, approx_usage, complete, judge, stream_complete
 # The multi-span walk below deliberately reuses the single-fork path's helpers rather than
 # copying them: `_messages`/`_text_of`/`_apply` are how ProveKit decides that a span's input
@@ -31,6 +31,10 @@ from ..services.replay import webhook as replay_webhook
 from ..services.sealing import mask_key, seal, unseal
 from ..services.workspace import current_workspace
 from .experiments import _experiment_row
+# The redacted share below must serve exactly the rows the authenticated read serves, minus the
+# withheld fields. Rebuilding the row shape here would let the two drift, and a shared view that
+# quietly omits a column is indistinguishable from one that masked it.
+from .traces import _span_rows, _trace_spans
 
 router = APIRouter(prefix="/api", tags=["playground"])
 
@@ -64,11 +68,11 @@ def create_connection(data: _ConnIn, db: Session = Depends(get_db),
                       ws: Workspace = Depends(current_workspace)):
     provider = data.provider.lower()
     if provider not in _PROVIDERS:
-        raise HTTPException(422, f"provider must be one of {sorted(_PROVIDERS)}")
+        raise HTTPException(422, errors.bad_provider(provider, _PROVIDERS))
     if provider != "mock" and not data.key.strip():
-        raise HTTPException(422, "an API key is required for this provider")
+        raise HTTPException(422, errors.provider_key_required(provider))
     if provider == "openai_compatible" and not data.base_url.strip():
-        raise HTTPException(422, "base_url is required for an OpenAI-compatible connection")
+        raise HTTPException(422, errors.BASE_URL_REQUIRED)
     key = data.key.strip()
     c = ProviderConnection(
         workspace_id=ws.id, provider=provider,
@@ -85,7 +89,7 @@ def delete_connection(cid: int, db: Session = Depends(get_db),
                       ws: Workspace = Depends(current_workspace)):
     c = db.get(ProviderConnection, cid)
     if not c or c.workspace_id != ws.id:
-        raise HTTPException(404, "Connection not found")
+        raise HTTPException(404, errors.not_in_project("model connection", "GET /api/connections"))
     db.delete(c); db.commit()
     return {"ok": True}
 
@@ -111,13 +115,13 @@ def _resolve(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, str, str]:
     if data.connection_id is not None:
         c = db.get(ProviderConnection, data.connection_id)
         if not c or c.workspace_id != ws.id:
-            raise HTTPException(404, "Connection not found")
+            raise HTTPException(404, errors.not_in_project("model connection", "GET /api/connections"))
         c.last_used_at = _now(); db.commit()
         key = unseal(c.key_sealed) if c.key_sealed else ""
         return c.provider, key, c.base_url
     if (data.provider or "").lower() == "mock":
         return "mock", "", ""
-    raise HTTPException(422, "connection_id is required (or use provider='mock')")
+    raise HTTPException(422, errors.NO_MODEL_CHOSEN)
 
 
 def _admit(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, str, str, list[dict], dict]:
@@ -130,7 +134,7 @@ def _admit(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, str, str, lis
     limits.check_playground_rate(ws.id)
     limits.check_spend_cap(ws.id)
     if not data.messages:
-        raise HTTPException(422, "at least one message is required")
+        raise HTTPException(422, errors.NO_MESSAGES)
     params = dict(data.params or {})
     if params.get("max_tokens"):
         params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
@@ -147,7 +151,7 @@ async def playground_run(data: _RunIn, db: Session = Depends(get_db),
         result = await complete(provider, data.model, messages, params,
                                 api_key=api_key, base_url=base_url)
     except LLMError as e:
-        raise HTTPException(502, str(e))
+        raise HTTPException(502, errors.provider_failed(str(e)))
     result["latency_ms"] = round((time.monotonic() - t0) * 1000)
     result["provider"] = provider
     result["model"] = data.model
@@ -230,7 +234,7 @@ async def replay(data: _ReplayIn, db: Session = Depends(get_db),
     limits.check_playground_rate(ws.id)
     limits.check_spend_cap(ws.id)
     if not data.messages:
-        raise HTTPException(422, "at least one message is required")
+        raise HTTPException(422, errors.NO_MESSAGES)
     params = dict(data.params or {})
     if params.get("max_tokens"):
         params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
@@ -246,9 +250,9 @@ async def replay(data: _ReplayIn, db: Session = Depends(get_db),
                                  data.model, messages, params,
                                  provider=provider, api_key=api_key, base_url=base_url)
     except LLMError as e:
-        raise HTTPException(502, str(e))
+        raise HTTPException(502, errors.provider_failed(str(e)))
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, errors.replay_target_missing(str(e)))
 
 
 # ---- multi-span replay: several edits, ONE re-run (#57), including tool arguments (#63) ----
@@ -515,21 +519,21 @@ async def _multi_reconstruct(db: Session, ws: Workspace, origin_trace_id: str,
 def _validate_edits(data: _MultiReplayIn) -> dict[str, _EditIn]:
     out: dict[str, _EditIn] = {}
     if not data.edits:
-        raise HTTPException(422, "at least one edit is required")
+        raise HTTPException(422, errors.NO_EDITS)
     if len(data.edits) > _MAX_EDITS:
-        raise HTTPException(422, f"at most {_MAX_EDITS} spans can be edited in one replay")
+        raise HTTPException(422, errors.too_many_edits(len(data.edits), _MAX_EDITS))
     for e in data.edits:
         if not e.span_id:
-            raise HTTPException(422, "each edit needs a span_id")
+            raise HTTPException(422, errors.EDIT_NEEDS_SPAN_ID)
         if e.span_id in out:
             # Two edits of one span have no defined order and would silently drop one of them.
-            raise HTTPException(422, f"span {e.span_id} is edited twice")
+            raise HTTPException(422, errors.duplicate_edit(e.span_id))
         if e.kind not in ("llm", "tool"):
-            raise HTTPException(422, "edit kind must be 'llm' or 'tool'")
+            raise HTTPException(422, errors.bad_edit_kind(e.kind))
         if e.kind == "llm" and not e.messages:
-            raise HTTPException(422, f"span {e.span_id}: at least one message is required")
+            raise HTTPException(422, errors.span_no_messages(e.span_id))
         if e.kind == "tool" and e.arguments is None:
-            raise HTTPException(422, f"span {e.span_id}: tool edits need `arguments`")
+            raise HTTPException(422, errors.tool_edit_needs_arguments(e.span_id))
         if e.kind == "llm" and e.params.get("max_tokens"):
             e.params = {**e.params, "max_tokens": min(int(e.params["max_tokens"]), _MAX_TOKENS_CAP)}
         out[e.span_id] = e
@@ -566,9 +570,9 @@ async def replay_multi(data: _MultiReplayIn, db: Session = Depends(get_db),
         return await _multi_reconstruct(db, ws, data.origin_trace_id, edits,
                                         provider=provider, api_key=api_key, base_url=base_url)
     except LLMError as e:
-        raise HTTPException(502, str(e))
+        raise HTTPException(502, errors.provider_failed(str(e)))
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, errors.replay_target_missing(str(e)))
 
 
 # ---- saved prompt versions ----
@@ -595,7 +599,7 @@ def list_prompts(db: Session = Depends(get_db), ws: Workspace = Depends(current_
 def save_prompt(data: _PromptIn, db: Session = Depends(get_db),
                 ws: Workspace = Depends(current_workspace)):
     if not data.name.strip():
-        raise HTTPException(422, "a name is required")
+        raise HTTPException(422, errors.PROMPT_NAME_REQUIRED)
     # auto-increment the version for this name within the project
     prev = (db.query(Prompt).filter(Prompt.workspace_id == ws.id, Prompt.name == data.name.strip())
             .order_by(Prompt.version.desc()).first())
@@ -610,7 +614,7 @@ def delete_prompt(pid: int, db: Session = Depends(get_db),
                   ws: Workspace = Depends(current_workspace)):
     p = db.get(Prompt, pid)
     if not p or p.workspace_id != ws.id:
-        raise HTTPException(404, "Prompt not found")
+        raise HTTPException(404, errors.not_in_project("saved prompt", "GET /api/prompts"))
     db.delete(p); db.commit()
     return {"ok": True}
 
@@ -657,7 +661,7 @@ async def playground_experiment(data: _ExpIn, db: Session = Depends(get_db),
              .filter(DatasetItem.workspace_id == ws.id, DatasetItem.dataset_id == data.dataset_id)
              .order_by(DatasetItem.id.asc()).limit(_EXP_ITEM_CAP).all())
     if not items:
-        raise HTTPException(404, "dataset is empty or not found")
+        raise HTTPException(404, errors.dataset_unusable(data.dataset_id))
     params = dict(data.params or {})
     if params.get("max_tokens"):
         params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
@@ -686,5 +690,97 @@ async def playground_experiment(data: _ExpIn, db: Session = Depends(get_db),
         db.commit()
     except LLMError as e:
         db.commit()   # keep whatever scored before the failure
-        raise HTTPException(502, str(e))
+        raise HTTPException(502, errors.provider_failed(str(e)))
     return _experiment_row(db, exp)
+
+
+# ---- sharing a trace outside the company: redacted links (#70) + issue handoff (#69) ----
+#
+# `POST /api/traces/{id}/share` (routers/traces.py) mints a link to the WHOLE payload. These
+# three routes are the redacted path: the caller says what to withhold, the choice is signed
+# into the token, and the public read below strips those fields server-side — the response body
+# a recipient can open in devtools never contains them.
+
+
+class _RedactedShareIn(BaseModel):
+    ttl_days: int = share.DEFAULT_TTL_DAYS
+    withhold: list[str] = []         # any of share.MASKABLE_FIELDS
+    spans: list[str] = []            # span ids to mask; empty = the whole trace
+
+
+class _IssueLinkIn(_RedactedShareIn):
+    tracker: str = "github"
+    repo: str = ""                   # owner/name or a full project URL
+    template: str = ""               # any other tracker, via {title}/{body} placeholders
+
+
+def _mask_of(data: _RedactedShareIn) -> share.ShareMask:
+    try:
+        return share.normalize_mask(data.withhold, data.spans)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+def _rows_for_share(db: Session, ws: Workspace, trace_id: str) -> list[dict]:
+    spans = _trace_spans(db, ws.id, trace_id)
+    if not spans:
+        raise HTTPException(404, "Trace not found")
+    return _span_rows(spans)
+
+
+def _share_response(ws_id: int, trace_id: str, data: _RedactedShareIn,
+                    mask: share.ShareMask) -> dict:
+    token = share.make_share_token(ws_id, trace_id, data.ttl_days, mask)
+    return {"token": token, "url": share.share_url(token), "trace_id": trace_id,
+            "expires_in_days": data.ttl_days if data.ttl_days > 0 else None,
+            "withheld": list(mask.fields), "spans": list(mask.spans)}
+
+
+@router.post("/traces/{trace_id}/share/redacted")
+def share_trace_redacted(trace_id: str, data: _RedactedShareIn, db: Session = Depends(get_db),
+                         ws: Workspace = Depends(current_workspace)):
+    """Mint a share link that withholds named fields (`withhold: ["input","output"]`).
+
+    The mask travels inside the signed token, so a recipient cannot widen their own grant by
+    editing the link, and there is no share table to keep in step with it.
+    """
+    mask = _mask_of(data)
+    _rows_for_share(db, ws, trace_id)
+    return _share_response(ws.id, trace_id, data, mask)
+
+
+@router.get("/share/{token}")
+def read_shared_trace_redacted(token: str, db: Session = Depends(get_db)):
+    """Public, read-only view of a shared trace with its mask applied. No auth — the signature
+    is the credential. Masking happens here, on the way out of the database, so the withheld
+    content is never in the response at all."""
+    resolved = share.verify_share_token(token, allow_masked=True)
+    if not resolved:
+        raise HTTPException(404, "Invalid or expired share link")
+    ws_id, trace_id = resolved
+    spans = _trace_spans(db, ws_id, trace_id)
+    if not spans:
+        raise HTTPException(404, "Trace not found")
+    return share.mask_span_rows(_span_rows(spans), token)
+
+
+@router.post("/traces/{trace_id}/issue-link")
+def trace_issue_link(trace_id: str, data: _IssueLinkIn, db: Session = Depends(get_db),
+                     ws: Workspace = Depends(current_workspace)):
+    """One click from a trace to a filed bug: returns a prefilled "new issue" URL carrying the
+    share link, the failing span, the error and the model.
+
+    A URL, not an API call — ProveKit stores no tracker credential and makes no outbound
+    request, and the issue is authored by the human who clicks it rather than by a bot.
+    The body is built from the MASKED rows, so a field withheld from the link is not handed
+    over in the issue instead.
+    """
+    mask = _mask_of(data)
+    rows = share.apply_mask(_rows_for_share(db, ws, trace_id), mask)
+    resp = _share_response(ws.id, trace_id, data, mask)
+    title, body = share.issue_draft(share.issue_context(rows), resp["url"], mask)
+    try:
+        url = share.issue_url(data.tracker, data.repo, title, body, data.template)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {**resp, "issue_url": url, "title": title, "body": body}

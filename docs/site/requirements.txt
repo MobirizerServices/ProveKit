@@ -1,0 +1,9 @@
+# Docs-site toolchain. Deliberately separate from backend/requirements*.txt: rendering the
+# docs must never be a reason to install a package into the API's environment.
+#
+#   python -m venv docs/site/.venv && docs/site/.venv/bin/pip install -r docs/site/requirements.txt
+#   docs/site/.venv/bin/mkdocs build --strict -f docs/site/mkdocs.yml
+#
+# Pinned so a theme release cannot turn a green docs build red on an unrelated PR.
+mkdocs==1.6.1
+mkdocs-material==9.7.7

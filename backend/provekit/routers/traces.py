@@ -521,14 +521,19 @@ def share_trace(trace_id: str, db: Session = Depends(get_db),
 @router.get("/share/{token}")
 def read_shared_trace(token: str, db: Session = Depends(get_db)):
     """Public, read-only view of a shared trace. Verifies the signature — no auth."""
-    resolved = share.verify_share_token(token)
+    # allow_masked: this route applies the mask on the way out, so it is allowed to resolve a
+    # masked token. verify_share_token refuses one by default, which is what keeps a reader
+    # that predates masking from serving the payloads a link's author asked to withhold.
+    resolved = share.verify_share_token(token, allow_masked=True)
     if not resolved:
         raise HTTPException(404, "Invalid or expired share link")
     ws_id, trace_id = resolved
     spans = _trace_spans(db, ws_id, trace_id)
     if not spans:
         raise HTTPException(404, "Trace not found")
-    return _span_rows(spans)
+    # Masked server-side, never hidden in the client: the withheld text must not be in this
+    # response body at all, or the link still hands it to anyone who opens devtools.
+    return share.mask_span_rows(_span_rows(spans), token)
 
 
 @runs_router.get("/traces")

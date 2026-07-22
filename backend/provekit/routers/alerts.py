@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Alert, Workspace, _now, iso_utc
-from ..services import email, notify
+from ..services import email, errors, notify
 from ..services.netguard import guard_url
 from ..services.workspace import current_workspace
 from .metrics import compute_metrics
@@ -47,7 +47,7 @@ def _row(a: Alert) -> dict:
 def _get(db: Session, ws: Workspace, aid: int) -> Alert:
     a = db.get(Alert, aid)
     if not a or a.workspace_id != ws.id:
-        raise HTTPException(404, "Alert not found")
+        raise HTTPException(404, errors.not_in_project("alert", "GET /api/alerts"))
     return a
 
 
@@ -55,9 +55,9 @@ def _get(db: Session, ws: Workspace, aid: int) -> Alert:
 def create_alert(data: _AlertIn, db: Session = Depends(get_db),
                  ws: Workspace = Depends(current_workspace)):
     if data.metric not in _METRICS:
-        raise HTTPException(422, f"metric must be one of {sorted(_METRICS)}")
+        raise HTTPException(422, errors.bad_alert_metric(data.metric, _METRICS))
     if data.comparator not in _COMPARATORS:
-        raise HTTPException(422, "comparator must be 'gt' or 'lt'")
+        raise HTTPException(422, errors.bad_comparator(data.comparator))
     hook = data.webhook_url.strip()[:500]
     if hook:
         # Reject a bad or internal URL now, while someone is looking at the form. Discovering
@@ -65,7 +65,7 @@ def create_alert(data: _AlertIn, db: Session = Depends(get_db),
         try:
             guard_url(hook)
         except Exception as exc:
-            raise HTTPException(422, f"webhook_url rejected: {exc}")
+            raise HTTPException(422, errors.bad_webhook(str(exc)))
     a = Alert(workspace_id=ws.id, name=data.name[:160] or data.metric, metric=data.metric,
               comparator=data.comparator, threshold=data.threshold,
               window_hours=max(1, data.window_hours), email=data.email[:255],

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import (Alert, ApiKey, Dataset, DatasetItem, Experiment, ExperimentResult,
                       Feedback, Run, User, Workspace, WorkspaceMember, iso_utc)
-from ..services import audit, limits, roles
+from ..services import audit, errors, limits, roles
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
 
@@ -35,12 +35,12 @@ class _MemberIn(BaseModel):
 def _require_owner(db: Session, workspace_id: int, user: User) -> Workspace:
     ws = db.get(Workspace, workspace_id)
     if not ws:
-        raise HTTPException(404, "Project not found")
+        raise HTTPException(404, errors.PROJECT_NOT_FOUND)
     m = is_member(db, workspace_id, user.id)
     if not m:
-        raise HTTPException(404, "Project not found")   # don't reveal projects you're not in
+        raise HTTPException(404, errors.PROJECT_NOT_FOUND)   # don't reveal projects you're not in
     if m.role != "owner":
-        raise HTTPException(403, "Only an owner can do that")
+        raise HTTPException(403, errors.OWNER_ONLY)
     return ws
 
 
@@ -133,7 +133,7 @@ def delete_project(pid: int, request: Request, user: User = Depends(get_current_
 @router.get("/{pid}/members")
 def list_members(pid: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not is_member(db, pid, user.id):
-        raise HTTPException(404, "Project not found")
+        raise HTTPException(404, errors.PROJECT_NOT_FOUND)
     rows = (db.query(WorkspaceMember, User)
             .join(User, User.id == WorkspaceMember.user_id)
             .filter(WorkspaceMember.workspace_id == pid)
@@ -147,9 +147,9 @@ def add_member(pid: int, data: _MemberIn, request: Request,
     _require_owner(db, pid, user)
     target = db.query(User).filter(func.lower(User.email) == data.email.strip().lower()).first()
     if not target:
-        raise HTTPException(404, "No account with that email — they must sign up first")
+        raise HTTPException(404, errors.NO_SUCH_ACCOUNT)
     if is_member(db, pid, target.id):
-        raise HTTPException(409, "Already a member")
+        raise HTTPException(409, errors.ALREADY_MEMBER)
     # Anything unrecognised becomes viewer, not member. If a caller sends a role we don't
     # know, the safe reading is the least privilege it could have meant — defaulting the other
     # way turns a typo into write access.
@@ -168,11 +168,11 @@ def remove_member(pid: int, uid: int, request: Request,
     _require_owner(db, pid, user)
     m = is_member(db, pid, uid)
     if not m:
-        raise HTTPException(404, "Not a member")
+        raise HTTPException(404, errors.NOT_A_MEMBER)
     owners = db.query(WorkspaceMember).filter(WorkspaceMember.workspace_id == pid,
                                               WorkspaceMember.role == "owner").count()
     if m.role == "owner" and owners <= 1:
-        raise HTTPException(400, "Can't remove the last owner")
+        raise HTTPException(400, errors.LAST_OWNER)
     removed = db.get(User, uid)
     role = m.role
     db.delete(m)

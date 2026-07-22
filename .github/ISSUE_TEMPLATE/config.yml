@@ -1,0 +1,14 @@
+# Blank issues stay ON. A form that blocks someone from reporting the thing that doesn't fit
+# any form costs more than the tidiness it buys.
+blank_issues_enabled: true
+
+contact_links:
+  - name: Add support for a framework (best first contribution)
+    url: https://github.com/MobirizerServices/ProveKit/blob/main/docs/CONTRIBUTING_INSTRUMENTORS.md
+    about: One JSON fixture proves ProveKit maps your framework's spans correctly. No LLM key needed.
+  - name: Security vulnerability
+    url: https://github.com/MobirizerServices/ProveKit/blob/main/SECURITY.md
+    about: Do NOT open a public issue. Follow the private disclosure process here.
+  - name: Getting set up
+    url: https://github.com/MobirizerServices/ProveKit/blob/main/CONTRIBUTING.md
+    about: Clone to running in about two minutes, plus the checks CI gates on.

@@ -483,6 +483,48 @@
         "title": "_ImpersonateIn",
         "type": "object"
       },
+      "_IssueLinkIn": {
+        "properties": {
+          "repo": {
+            "default": "",
+            "title": "Repo",
+            "type": "string"
+          },
+          "spans": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Spans",
+            "type": "array"
+          },
+          "template": {
+            "default": "",
+            "title": "Template",
+            "type": "string"
+          },
+          "tracker": {
+            "default": "github",
+            "title": "Tracker",
+            "type": "string"
+          },
+          "ttl_days": {
+            "default": 30,
+            "title": "Ttl Days",
+            "type": "integer"
+          },
+          "withhold": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Withhold",
+            "type": "array"
+          }
+        },
+        "title": "_IssueLinkIn",
+        "type": "object"
+      },
       "_ItemIn": {
         "properties": {
           "expected": {
@@ -708,6 +750,33 @@
           "name"
         ],
         "title": "_PromptIn",
+        "type": "object"
+      },
+      "_RedactedShareIn": {
+        "properties": {
+          "spans": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Spans",
+            "type": "array"
+          },
+          "ttl_days": {
+            "default": 30,
+            "title": "Ttl Days",
+            "type": "integer"
+          },
+          "withhold": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Withhold",
+            "type": "array"
+          }
+        },
+        "title": "_RedactedShareIn",
         "type": "object"
       },
       "_ReplayIn": {
@@ -3658,6 +3727,47 @@
         ]
       }
     },
+    "/api/share/{token}": {
+      "get": {
+        "description": "Public, read-only view of a shared trace with its mask applied. No auth — the signature\nis the credential. Masking happens here, on the way out of the database, so the withheld\ncontent is never in the response at all.",
+        "operationId": "read_shared_trace_redacted_api_share__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Shared Trace Redacted",
+        "tags": [
+          "playground"
+        ]
+      }
+    },
     "/api/traces": {
       "get": {
         "description": "One row per trace: its root span (the decorated entrypoint), with a span count and\ntotal token usage (so the list is scannable at a glance). `status=failed` filters to\nfailures; `window_hours=N` limits to the last N hours; `q=text` full-text-searches span\nlabels and input/output content; `cursor=<id of the last row you got>` returns the next\npage (a full `limit` back means there is more).",
@@ -3914,6 +4024,57 @@
         ]
       }
     },
+    "/api/traces/{trace_id}/issue-link": {
+      "post": {
+        "description": "One click from a trace to a filed bug: returns a prefilled \"new issue\" URL carrying the\nshare link, the failing span, the error and the model.\n\nA URL, not an API call — ProveKit stores no tracker credential and makes no outbound\nrequest, and the issue is authored by the human who clicks it rather than by a bot.\nThe body is built from the MASKED rows, so a field withheld from the link is not handed\nover in the issue instead.",
+        "operationId": "trace_issue_link_api_traces__trace_id__issue_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_IssueLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace Issue Link",
+        "tags": [
+          "playground"
+        ]
+      }
+    },
     "/api/traces/{trace_id}/notes": {
       "get": {
         "operationId": "list_notes_api_traces__trace_id__notes_get",
@@ -4040,6 +4201,57 @@
         "summary": "Share Trace",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/traces/{trace_id}/share/redacted": {
+      "post": {
+        "description": "Mint a share link that withholds named fields (`withhold: [\"input\",\"output\"]`).\n\nThe mask travels inside the signed token, so a recipient cannot widen their own grant by\nediting the link, and there is no share table to keep in step with it.",
+        "operationId": "share_trace_redacted_api_traces__trace_id__share_redacted_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_RedactedShareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Share Trace Redacted",
+        "tags": [
+          "playground"
         ]
       }
     },

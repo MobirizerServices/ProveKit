@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import User
-from ..services import auth, email
+from ..services import auth, email, errors
 from ..services.limits import check_login_rate
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -44,9 +44,9 @@ def _send_verify(u: User) -> None:
 @router.post("/register")
 def register(body: Credentials, response: Response, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
-        raise HTTPException(409, "An account with that email already exists")
+        raise HTTPException(409, errors.EMAIL_TAKEN)
     if len(body.password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
+        raise HTTPException(400, errors.WEAK_PASSWORD)
     u = User(email=body.email, name=body.name or body.email.split("@")[0],
              password_hash=auth.hash_password(body.password))
     db.add(u); db.commit(); db.refresh(u)
@@ -68,11 +68,11 @@ def login(body: Credentials, request: Request, response: Response, db: Session =
         # Spend the same PBKDF2 cost on a missing/OAuth account so response time doesn't
         # reveal whether the email exists (timing-based account enumeration).
         auth.verify_password(body.password, auth.DUMMY_HASH)
-        raise HTTPException(401, "Invalid email or password")
+        raise HTTPException(401, errors.BAD_CREDENTIALS)
     if not auth.verify_password(body.password, u.password_hash):
-        raise HTTPException(401, "Invalid email or password")
+        raise HTTPException(401, errors.BAD_CREDENTIALS)
     if get_settings().require_email_verification and not u.email_verified:
-        raise HTTPException(403, "Please verify your email before signing in.")
+        raise HTTPException(403, errors.EMAIL_UNVERIFIED)
     _set_cookie(response, u)
     return _public(u)
 
@@ -116,13 +116,13 @@ class ResetIn(BaseModel):
 def reset(body: ResetIn, db: Session = Depends(get_db)):
     claims = auth.read_token(body.token, purpose="reset")
     if claims is None:
-        raise HTTPException(400, "This reset link is invalid or has expired.")
+        raise HTTPException(400, errors.RESET_LINK_DEAD)
     if len(body.password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
+        raise HTTPException(400, errors.WEAK_PASSWORD)
     uid, ver = claims
     u = db.get(User, uid)
     if not u or u.token_version != ver:  # a reset link is single-use and dies on the next reset
-        raise HTTPException(400, "This reset link is invalid or has expired.")
+        raise HTTPException(400, errors.RESET_LINK_DEAD)
     u.password_hash = auth.hash_password(body.password)
     # Receiving this link proves control of the mailbox — the same proof the verify link
     # provides — so consume it as verification too. Without this, bumping token_version
@@ -142,11 +142,11 @@ class TokenIn(BaseModel):
 def verify(body: TokenIn, response: Response, db: Session = Depends(get_db)):
     claims = auth.read_token(body.token, purpose="verify")
     if claims is None:
-        raise HTTPException(400, "This verification link is invalid or has expired.")
+        raise HTTPException(400, errors.VERIFY_LINK_DEAD)
     uid, ver = claims
     u = db.get(User, uid)
     if not u or u.token_version != ver:
-        raise HTTPException(400, "This verification link is invalid or has expired.")
+        raise HTTPException(400, errors.VERIFY_LINK_DEAD)
     u.email_verified = True
     db.commit()
     _set_cookie(response, u)  # verifying signs you in

@@ -56,7 +56,7 @@ Everything here is fine on a demo instance and breaks on a real one.
 22. **Large-trace virtualization.** ~~A 1000-span trace rendered every node.~~ A hand-rolled windowing hook (no new dependency) mounts ~29 rows whether the trace has 120 spans or 1000; below the threshold the markup is byte-identical to before. Keyboard navigation became a proper roving-tabindex tree and deep links still reveal an unmounted span. 🔴 M ✅
 23. **Ingest backpressure.** ~~No queue between accept and write — a traffic spike became DB pressure and 5xx (which, per #1, then duplicated).~~ Once the spool backlog passes `SPOOL_MAX_DEPTH` the endpoint sheds with `503 + Retry-After` instead of taking work the database can't absorb; the depth check is TTL-cached so it costs no syscall per request. 🔴 M ✅
 24. **SDK-side durable buffer.** ~~If the portal was unreachable the batch was dropped by design (fail-open).~~ A failed export is written to a bounded on-disk buffer and retried on the next export or flush, oldest evicted first. Still fail-open: an unwritable directory degrades to the old behaviour rather than raising. The TS SDK re-queues in memory (no disk in a browser). 🟡 M ✅
-25. **Published load numbers.** No soak test, no "X spans/sec on Y hardware". Teams sizing a self-host deployment have nothing to go on. 🔴 M ✖
+25. **Published load numbers.** ~~No soak test and no figures at all.~~ `testkit/loadtest.py` drives real `POST /v1/traces` and [PERFORMANCE.md](PERFORMANCE.md) publishes what was measured: ~10.3k spans/sec on SQLite on a *laptop*, a 10-minute 5.95M-span soak, and stock-config throughput showing the rate limit binds first. Postgres was measured and deliberately **not** published as a capability — too noisy on that hardware. Numbers from real server hardware are still missing, which is why this stays partial. 🔴 M ◑
 26. **Frontend perf budget.** ~~Nothing gated bundle size.~~ `frontend/perf-budget.json` + a build-output checker, wired to CI, with budgets set from measured sizes plus headroom. Lighthouse still uncovered — it needs a browser in CI, and a step nobody has run is worse than an absent one. 🟢 S ◑
 
 ## C. Onboarding & time-to-first-trace (27–38)
@@ -69,8 +69,8 @@ The single strongest lever on adoption. ProveKit's pitch is "one import" — the
 30. **Instrumentation coverage report.** ~~No way to see which installed libraries aren't instrumented.~~ Reported by `provekit-doctor`; not yet surfaced in the portal. 🟡 S ◑
 31. **Diagnostic empty state.** The "listening for your first trace…" state is good; make it say *why* nothing has arrived (no key seen, key seen but no spans, spans rejected). 🔴 S ◑
 32. **Preloaded sample project.** ~~`provekit-demo` did this from the CLI only.~~ Registration seeds a "Sample data (demo)" project — 18 spans including a failure, a two-turn session and retrieval steps — so the portal is legible before there is an integration. Best-effort and silent: a demo that can break signup is not a demo. 🟡 S ✅
-33. **Versioned docs site.** Docs are markdown in the repo; there's no searchable, versioned site, which is table-stakes for evaluation. 🔴 M ✖
-34. **Actionable error messages.** Every rejection (bad key, malformed OTLP, rate limit) should name the fix, not the failure. 🟡 S ◑
+33. **Versioned docs site.** ~~Markdown in the repo with no searchable site.~~ A generator config that builds from the *existing* `docs/*.md` rather than duplicating them — a second copy is a second thing to keep true — with CI building it so a broken docs build is caught. Hosting is not set up, and nothing claims a live site exists. 🔴 M ◑
+34. **Actionable error messages.** ~~Rejections named the symptom.~~ Phrasing centralised in `services/errors.py` so a message can't drift per-router, rewritten to name the fix. Status codes and response shapes unchanged — clients depend on them and this item is about the text. 🟡 S ✅
 35. **One-click deploy.** ~~No blueprints.~~ `render.yaml`, `railway.json`, `fly.toml` and [ONE_CLICK.md](../deploy/ONE_CLICK.md). Not yet deployed against real accounts — flagged as such in the doc rather than implied working. 🟡 S ◑
 36. **Migration guides.** ~~Nothing for people switching.~~ [MIGRATING.md](MIGRATING.md) — concept mapping for LangSmith and Langfuse, what moves cleanly, what doesn't, and the OTLP endpoint as the fastest path. 🟡 M ✅
 37. **Interactive product tour.** First visit to a populated portal should teach the flow graph, not present it cold. 🟢 M ✖
@@ -120,8 +120,8 @@ ProveKit is currently a single-player tool with multi-user auth.
 66. **Slack / Discord alerting.** ~~Alerts emailed only.~~ A rule can carry a webhook URL, SSRF-guarded and validated at save time, with the body shape chosen per host. 🔴 S ✅
 67. **PagerDuty / Opsgenie.** ~~Email and chat webhooks only.~~ `notify.payload_for` dispatches on host, so both slot in behind the existing `webhook_url` with no schema change. Alias is stable per rule, so repeated breaches deduplicate into one incident rather than paging someone twenty times. 🟡 S ✅
 68. **Saved views.** ~~Filter combinations were ephemeral, so "our failing checkout traces" could be described but not handed over.~~ `/api/views` stores a named filter using the same parameters `/api/traces` already accepts — replayed through the normal read path, so a saved query can't drift from what the live one means. Names are unique per project; params are allowlisted. 🔴 S ✅
-69. **Issue-tracker handoff.** One click from a trace to a GitHub issue with the shared link and context embedded. 🟡 S ✖
-70. **Redaction on share.** Signed `/shared/{token}` links expose the full payload; sharing a trace externally needs field-level masking. 🔴 M ◑
+69. **Issue-tracker handoff.** ~~No path from a trace to a ticket.~~ A prefilled "new issue" URL carrying the share link, the failing span and the error — no credentials stored, nothing to leak, and it works for GitLab/Linear by URL too. 🟡 S ✅
+70. **Redaction on share.** ~~A signed link handed over every prompt and completion, including whatever redaction missed.~~ The token itself carries what to withhold — signed, so a recipient can't widen it — and masking happens **server-side**, asserted against the raw response bytes. A masked token fails closed for any reader that doesn't opt into applying the mask. 🔴 M ✅
 71. **Scheduled digests.** A weekly "here's what regressed" email or Slack post. 🟡 M ✖
 72. **Finer roles.** ~~Owner/member only, and both could write — so a PM or support lead had to be handed a role that can delete the project's data.~~ A `viewer` role, enforced in `workspace.current_workspace` immediately after the project is resolved, method-based so a new mutating endpoint is covered the day it is written. An unrecognised role falls to viewer, not member. 🔴 M ✅
 73. **Pending-invite state.** Members are invited by email; there's no visible pending/expired invite lifecycle. 🟡 S ◑
@@ -161,7 +161,7 @@ ProveKit is OTel-native, which is real leverage — but the surface a team build
 97. **Terraform provider.** Declarative projects, keys, and alerts for teams that manage infra as code. 🟢 L ✖
 98. **API stability policy.** ~~No stated deprecation policy.~~ [API_STABILITY.md](API_STABILITY.md) — three tiers (stable `/v1` + SDK surface, experimental, internal `/api`), what counts as breaking, and the deprecation window with a worked example. 🔴 S ✅
 99. **Custom span renderers.** A plugin hook so a team can render *their* domain span (a retrieval, a simulation, a game state) natively. 🟢 L ✖
-100. **Contribution ladder.** Good-first-issues, an instrumentor contribution guide, and a template gallery — an OSS tool's ecosystem is its moat or its ceiling. 🟡 M ◑
+100. **Contribution ladder.** ~~No on-ramp.~~ Issue/PR templates plus an instrumentor guide that routes contributors at the dialect conformance suite (#11) — add a fixture, and the mapping it must satisfy is asserted for you. That suite is the best on-ramp this project has. 🟡 M ✅
 
 ---
 

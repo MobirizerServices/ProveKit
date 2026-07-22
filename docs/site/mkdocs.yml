@@ -1,0 +1,137 @@
+# MkDocs config for the ProveKit docs site (roadmap #33).
+#
+# WHY the config lives here and the pages do not: the docs are the markdown already in `docs/`.
+# `docs_dir: ..` points the generator straight at that tree, so there is exactly ONE copy of
+# every guide. A second, site-only copy would be a second thing to keep true, and the copy
+# always loses. Nothing rendered is committed either — `site_dir` writes into the repo's
+# gitignored `build/`.
+#
+# Build it:   mkdocs build --strict -f docs/site/mkdocs.yml
+# Serve it:   mkdocs serve -f docs/site/mkdocs.yml     # http://127.0.0.1:8000
+#
+# NOTHING IS DEPLOYED. There is no provekit docs site on the internet; CI builds this to catch
+# a broken build, and stops there. See docs/site/README.md for what publishing would take.
+
+site_name: ProveKit docs
+site_description: Drop-in tracing, debugging and evaluation for AI agents.
+repo_url: https://github.com/MobirizerServices/ProveKit
+repo_name: MobirizerServices/ProveKit
+edit_uri: edit/main/docs/
+
+docs_dir: ..
+# Must sit outside docs_dir (mkdocs refuses otherwise) and stay out of git. `**/build/` is
+# already in .gitignore, so rendered HTML cannot be committed by accident.
+site_dir: ../../build/docs-site
+
+# This directory holds the scaffold, not documentation. Excluding it keeps mkdocs.yml and the
+# hook out of the rendered site; docs/site/README.md is read on GitHub, not published.
+exclude_docs: |
+  site/
+
+theme:
+  name: material
+  palette:
+    # Terminal-dark by default, to match the portal (frontend/app/globals.css).
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: green
+      toggle: {icon: material/weather-sunny, name: Switch to light}
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: green
+      toggle: {icon: material/weather-night, name: Switch to dark}
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+plugins:
+  # The one thing a markdown tree in a repo cannot give you: full-text search over every guide.
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed: {alternate_style: true}
+  - pymdownx.inlinehilite
+# No `pymdownx.snippets`: it would let a page transclude a file, which is the one thing this
+# setup exists to prevent — a guide whose rendered content lives somewhere other than the .md
+# you edit on GitHub.
+
+# What --strict is allowed to fail on. Kept narrow on purpose: this job exists to catch a
+# BROKEN BUILD, and a gate that cries about pre-existing prose would just get switched off.
+validation:
+  nav:
+    omitted_files: info      # a new doc still builds; it is just not in the sidebar until listed
+    not_found: warn          # a nav entry pointing at a file that does not exist IS a break
+  links:
+    # Many guides link sideways out of docs/ (../CONTRIBUTING.md, ../examples/README.md,
+    # ../deploy/ONE_CLICK.md). Those targets are real and resolve on GitHub; they are simply
+    # outside docs_dir, so mkdocs cannot see them. Failing on them would mean rewriting working
+    # links to please the renderer.
+    not_found: info
+    unrecognized_links: info
+    absolute_links: info
+    # Should be `warn` — a broken same-page anchor is a real defect. It is `info` only because
+    # docs/ADMIN.md ships two stale ones today (#revoking-actually-revoking and
+    # #impersonation--read-only-view-as-tenant, both renamed headings). Fix those and flip this.
+    anchors: info
+
+nav:
+  - Start here:
+      - Overview: README.md
+      - Framework quickstarts: QUICKSTARTS.md
+      - Migrating here: MIGRATING.md
+  - Guides:
+      - Tracing: TRACING.md
+      - Debugging: DEBUGGING.md
+      - Evaluation: EVALUATION.md
+      - MCP debug channel: MCP.md
+      - CLI: CLI.md
+      - CI eval gate: CI_GATE.md
+  - API:
+      - HTTP API: API.md
+      - API stability: API_STABILITY.md
+      - Go & Java (no SDK): SDK_OTHER_LANGUAGES.md
+  - Operate:
+      - Deployment: DEPLOY.md
+      - Dedicated VPS (canonical): DEPLOY_PROVEKIT_ONLINE.md
+      - Shared VPS: DEPLOY_CONTABO_SHARED.md
+      - Host toggle: DEPLOY_CONTABO_TOGGLE.md
+      - Admin console: ADMIN.md
+      - Backup & restore: BACKUP.md
+      - Data residency: RESIDENCY.md
+      - Publishing to PyPI: PUBLISHING.md
+  - Contribute:
+      - Adding an instrumentor: CONTRIBUTING_INSTRUMENTORS.md
+  - Design & planning:
+      - Interactive debugging: design/INTERACTIVE_DEBUGGING.md
+      - Roadmap (100): ROADMAP_100.md
+      - Roadmap (original): ROADMAP.md
+      - Landing roadmap: LANDING_ROADMAP.md
+      - UI roadmap (200): UI_ROADMAP_200.md
+      - Agent flow (50): AGENTFLOW_50.md
+      - Launch kit: launch/LAUNCH_KIT.md
+      - Launch plan: launch/LAUNCH.md
+
+hooks:
+  - hooks/version_stamp.py
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/MobirizerServices/ProveKit

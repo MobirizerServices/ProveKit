@@ -1,0 +1,70 @@
+# For MAINTAINERS filing a starter task. The label is not the work — a "good first issue" that
+# says only "add Groq support" is a research project wearing a friendly label. This form makes
+# the four things a newcomer actually needs mandatory: where the code is, what done looks like,
+# the command that proves it, and who to ask.
+name: "Good first issue (maintainers)"
+description: File a scoped starter task. Every field below is what makes it startable by someone new.
+title: "[good first issue] "
+labels: ["good first issue", "help wanted"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context — why this matters
+      description: Two or three sentences. A newcomer should be able to tell whether the work is worth doing.
+    validations: {required: true}
+
+  - type: textarea
+    id: files
+    attributes:
+      label: The files to touch
+      description: Exact paths. "Somewhere in the backend" is what makes a starter issue rot unclaimed.
+      placeholder: |
+        backend/tests/fixtures/otlp/groq_chat_openinference.json   (new)
+        backend/provekit/services/otel.py                          (only if the mapping is wrong)
+    validations: {required: true}
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done looks like
+      description: Observable outcome, not a task list.
+      placeholder: A fixture pins the Groq span's type/model/usage, and `test_required_instrumentor_families_are_covered` still passes.
+    validations: {required: true}
+
+  - type: textarea
+    id: verify
+    attributes:
+      label: The command that proves it
+      description: Copy-pasteable, and it must fail before the change and pass after.
+      render: shell
+      placeholder: |
+        cd backend && ./venv/bin/python -m pytest tests/test_dialects.py -q
+        cd backend && ./venv/bin/python -m ruff check provekit
+    validations: {required: true}
+
+  - type: input
+    id: mentor
+    attributes:
+      label: Who to ask
+      description: A person, not "the maintainers". An unanswered first question is where most first contributions end.
+      placeholder: "@handle — comment on this issue"
+    validations: {required: true}
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options:
+        - XS — one file, under an hour
+        - S — a couple of files, an afternoon
+      description: >
+        Anything bigger is not a good first issue. File it as a normal issue with the
+        "help wanted" label instead.
+    validations: {required: true}
+
+  - type: input
+    id: prereq
+    attributes:
+      label: What you need installed
+      placeholder: "`make setup` only — no LLM key, no Docker"

@@ -1,0 +1,80 @@
+# The on-ramp issue. ProveKit's claim is "traces from ANY framework", and the only thing that
+# makes that claim true is a fixture in the conformance corpus. This form exists so a report of
+# "my framework looks wrong" arrives with the one artifact that turns it into a fix: the span.
+name: "Framework support / span mapped wrong"
+description: A framework's spans are missing, misclassified, or missing fields in the portal — or you want to add coverage for one.
+title: "[instrumentor] "
+labels: ["instrumentor", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This is the best first contribution in the repo**, and you can do it without an LLM key.
+
+        ProveKit doesn't instrument frameworks itself — it maps the OTel spans your
+        instrumentor already emits (`backend/provekit/services/otel.py::map_span`). Support for
+        a framework is a **fixture** in `backend/tests/fixtures/otlp/` that pins what the
+        mapping must produce.
+
+        Read **[docs/CONTRIBUTING_INSTRUMENTORS.md](https://github.com/MobirizerServices/ProveKit/blob/main/docs/CONTRIBUTING_INSTRUMENTORS.md)**
+        first — it has the capture recipe and the fixture anatomy. If you already have the span,
+        you may be one file away from a PR; open it directly instead of this issue.
+
+  - type: input
+    id: framework
+    attributes:
+      label: Framework / instrumentor
+      description: The package emitting the spans, e.g. `openinference-instrumentation-smolagents`.
+      placeholder: openinference-instrumentation-smolagents
+    validations: {required: true}
+
+  - type: dropdown
+    id: dialect
+    attributes:
+      label: Attribute dialect
+      description: Which attribute family the span carries. Not sure? Paste the span below and leave this as "not sure".
+      options:
+        - not sure
+        - genai_current  (gen_ai.input.messages / gen_ai.provider.name / gen_ai.request.model)
+        - genai_legacy   (gen_ai.prompt / gen_ai.completion / gen_ai.system)
+        - openinference  (llm.model_name / input.value / openinference.span.kind)
+        - http           (no gen_ai.* at all — an outbound tool call)
+    validations: {required: true}
+
+  - type: textarea
+    id: span
+    attributes:
+      label: The span, as OTLP JSON
+      description: |
+        One span, exactly as the exporter sends it — this is the whole issue. The capture recipe
+        (a 10-line local sink) is in the instrumentor guide. Redact payload text if you need to;
+        keep the attribute KEYS intact, they are what the mapping reads.
+      render: json
+    validations: {required: true}
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What it should map to vs. what it does
+      description: |
+        Use the field names the suite uses, so this drops straight into a fixture's `expect`:
+        `type`, `label`, `request.model`, `request.input`, `result.text`,
+        `result.meta.usage.input_tokens`, `result.meta.tool`, …
+      placeholder: |
+        expected  type: "tool", result.meta.tool: "web_search"
+        actual    type: "step", no tool name — it never matches a tool filter in the portal
+    validations: {required: true}
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: provekit 0.6.0, openinference-instrumentation-smolagents 0.1.x, Python 3.12
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Before you file
+      options:
+        - label: I checked `backend/tests/fixtures/otlp/` — no fixture covers this case yet.
+        - label: I'd like to send the fixture myself (say so and it's yours; the guide walks the whole path).

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, Feedback, TraceSpan } from "@/lib/api";
+import { api, API_BASE, Feedback, getProjectId, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import { useVirtualRows } from "@/lib/useVirtualRows";
 import TraceGraph, { heatColor } from "@/components/TraceGraph";
@@ -121,9 +121,26 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   // everything derived from it — is no longer what this run would have produced. Said once at
   // the top, because the per-node badges are easy to read past.
   const divergedCount = spans.filter((s) => (s.result?.meta as any)?.replay_state === "diverged").length;
+  // Said once at the top of a shared trace: a reader who doesn't know fields were withheld will
+  // read an empty prompt as a bug in the agent rather than a deliberate redaction.
+  const withheld = Array.from(new Set(spans.flatMap(withheldOf))).sort();
 
   return (
     <div>
+      {withheld.length > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5,
+                      border: "1px solid var(--border-strong)", borderRadius: 10, padding: "9px 11px",
+                      marginBottom: 10 }}>
+          <span aria-hidden>🔒</span>
+          <span>
+            <strong>Partly redacted.</strong>{" "}
+            <span className="muted">
+              This link withholds {withheld.join(", ")}. Those fields were removed before the
+              trace was sent — nothing here was hidden client-side.
+            </span>
+          </span>
+        </div>
+      )}
       {divergedCount > 0 && (
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5,
                       border: "1px solid var(--amber)", borderRadius: 10, padding: "9px 11px",
@@ -233,6 +250,11 @@ function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSp
         <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
           <span style={insBadge(s.type, s.status)}>{s.type}</span>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
+          {withheldOf(s).length > 0 && (
+            <span style={{ ...chip(), flexShrink: 0 }} title={`Withheld from this share link: ${withheldOf(s).join(", ")}`}>
+              🔒 {withheldOf(s).join(", ")}
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: 2, marginTop: 10, borderBottom: "1px solid var(--border)" }}>
           {tabs.map(([t, label, n]) => (
@@ -349,18 +371,97 @@ function ScoreButtons({ traceId }: { traceId: string }) {
   );
 }
 
+// Fields a share link can withhold, in the order they matter to whoever is deciding. The names
+// must match services/share.py's MASKABLE_FIELDS — the server rejects anything else rather than
+// quietly sharing a field it didn't recognise.
+const WITHHOLDABLE: [string, string, string][] = [
+  ["input", "Prompts", "everything sent to the model"],
+  ["output", "Completions", "everything the model answered"],
+  ["logs", "Log events", "log lines your code attached to a span"],
+  ["error", "Error messages", "exception text, which often quotes data"],
+  ["label", "Span names", "often a customer id or a routing decision"],
+];
+
+// Posted directly rather than through lib/api's `api` object: both routes exist only for this
+// panel, and the request body is exactly the checkbox state below.
+async function postShare<T>(path: string, body: unknown): Promise<T> {
+  const pid = getProjectId();
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST", credentials: "include", body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", ...(pid ? { "X-Project-Id": pid } : {}) },
+  });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+
+const ISSUE_REPO_KEY = "pk_issue_repo";
+
+// Share + hand off. The withheld fields are stripped by the server before the shared response
+// is built (services/share.py), so unchecking a box here is a real redaction and not a UI that
+// hides what it still downloaded.
 function ShareButton({ traceId }: { traceId: string }) {
+  const [open, setOpen] = useState(false);
+  const [withhold, setWithhold] = useState<string[]>([]);
   const [label, setLabel] = useState("Share");
-  const share = async () => {
+  const [repo, setRepo] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { try { setRepo(localStorage.getItem(ISSUE_REPO_KEY) || ""); } catch { /* no storage */ } }, []);
+  const toggle = (f: string) =>
+    setWithhold((w) => (w.includes(f) ? w.filter((x) => x !== f) : [...w, f]));
+  const flash = (msg: string) => { setLabel(msg); setTimeout(() => setLabel("Share"), 2200); };
+
+  const copyLink = async () => {
+    setBusy(true);
     try {
-      const { token, expires_in_days } = await api.shareTrace(traceId);
-      const url = `${window.location.origin}/shared/${token}`;
-      await navigator.clipboard?.writeText(url);
-      setLabel(`Copied · ${expires_in_days}d link`);
-      setTimeout(() => setLabel("Share"), 2200);
-    } catch { setLabel("Failed"); setTimeout(() => setLabel("Share"), 1600); }
+      // Same-origin link, not the server's configured web_base_url: whoever is looking at this
+      // trace is already on the host their teammates use.
+      const r = await postShare<{ token: string }>(`/api/traces/${encodeURIComponent(traceId)}/share/redacted`, { withhold });
+      await navigator.clipboard?.writeText(`${window.location.origin}/shared/${r.token}`);
+      setOpen(false);
+      flash(withhold.length ? `Copied · ${withhold.length} field${withhold.length === 1 ? "" : "s"} withheld` : "Copied · link");
+    } catch { flash("Failed"); } finally { setBusy(false); }
   };
-  return <button className="btn btn-sm" onClick={share}>{label}</button>;
+
+  const openIssue = async () => {
+    setBusy(true);
+    try { localStorage.setItem(ISSUE_REPO_KEY, repo.trim()); } catch { /* no storage */ }
+    try {
+      const r = await postShare<{ issue_url: string }>(`/api/traces/${encodeURIComponent(traceId)}/issue-link`, { withhold, repo: repo.trim() });
+      // A new tab, prefilled and authored by the person who clicked it — ProveKit holds no
+      // tracker credential and files nothing on anyone's behalf.
+      window.open(r.issue_url, "_blank", "noopener,noreferrer");
+      setOpen(false);
+    } catch { flash("Check the repo"); } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button className="btn btn-sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{label} ▾</button>
+      {open && (
+        <div style={sharePanel}>
+          <div className="muted" style={fieldLabel}>Withhold from the link</div>
+          {WITHHOLDABLE.map(([f, name, why]) => (
+            <label key={f} title={why} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5, padding: "3px 0", cursor: "pointer" }}>
+              <input type="checkbox" checked={withhold.includes(f)} onChange={() => toggle(f)} />
+              <span>{name}<span className="muted" style={{ fontSize: 11 }}> · {why}</span></span>
+            </label>
+          ))}
+          <div className="muted" style={{ fontSize: 11, lineHeight: 1.45, margin: "6px 0 10px" }}>
+            Withheld fields are removed on the server — they never reach the shared page.
+          </div>
+          <button className="btn btn-sm" disabled={busy} onClick={copyLink} style={{ width: "100%" }}>Copy share link</button>
+          <div style={{ borderTop: "1px solid var(--border)", margin: "12px 0 10px" }} />
+          <div className="muted" style={fieldLabel}>File an issue</div>
+          <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="owner/repo or project URL"
+            style={{ width: "100%", background: "var(--panel-2)", color: "var(--text)", fontSize: 12,
+              border: "1px solid var(--border-strong)", borderRadius: 8, padding: "6px 9px", marginBottom: 7 }} />
+          <button className="btn btn-sm" disabled={busy || !repo.trim()} onClick={openIssue} style={{ width: "100%" }}>
+            Open prefilled issue ↗
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FeedbackPanel({ traceId }: { traceId: string }) {
@@ -716,6 +817,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+// Fields the server stripped from this span before sending it (a redacted share link). Read off
+// the row rather than inferred from empty content: "withheld" and "the model was called with
+// nothing" look identical in the payload, and only one of them is worth telling the reader.
+function withheldOf(s: TraceSpan): string[] {
+  return (s as unknown as { withheld?: string[] }).withheld || [];
+}
+
 function textOf(v: any): string {
   if (v == null) return "";
   return typeof v === "string" ? v : JSON.stringify(v, null, 2);
@@ -740,6 +848,11 @@ function chip(color?: string): React.CSSProperties {
     border: `1px solid ${color ? color : "var(--border)"}`, background: "var(--bg-2)", whiteSpace: "nowrap",
   };
 }
+const sharePanel: React.CSSProperties = {
+  position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 20, width: 300,
+  background: "var(--panel)", border: "1px solid var(--border-strong)", borderRadius: 10,
+  padding: 12, boxShadow: "var(--sh-2)", textAlign: "left",
+};
 const collapseBtn: React.CSSProperties = {
   position: "absolute", top: 10, zIndex: 5, width: 22, height: 22, borderRadius: 6,
   border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--muted)",

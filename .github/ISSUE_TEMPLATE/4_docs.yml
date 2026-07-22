@@ -1,0 +1,40 @@
+# Docs issues are the other reliable first contribution: the fix is usually one file, and the
+# reporter is the only person who knows exactly where they got lost.
+name: "Docs — wrong, missing, or confusing"
+description: A guide told you something untrue, left something out, or lost you.
+title: "[docs] "
+labels: ["documentation", "good first issue"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Which page
+      description: Path in the repo. The docs site renders these files in place — there is no separate copy to edit.
+      placeholder: docs/QUICKSTARTS.md — "CrewAI" section
+    validations: {required: true}
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem
+      options:
+        - It says something that is not true (a command fails, an option does not exist)
+        - Something is missing
+        - It is confusing or out of order
+        - A link or anchor is broken
+        - It describes a feature that is not actually wired up
+    validations: {required: true}
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: What went wrong
+      description: If a command failed, paste it and the output. That turns this into a one-line fix.
+    validations: {required: true}
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Fixing it
+      options:
+        - label: I'll send the PR (edit the `.md` in `docs/`; `mkdocs serve -f docs/site/mkdocs.yml` previews it).

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import ApiKey, User, Workspace, iso_utc
-from ..services import apikey, audit
+from ..services import apikey, audit, errors
 from ..services.auth import get_current_user
 from ..services.workspace import current_workspace
 
@@ -59,7 +59,7 @@ def revoke_key(key_id: int, request: Request, db: Session = Depends(get_db),
     """Revoke a key (soft — the row stays so last_used history survives). 404 across workspaces."""
     row = db.get(ApiKey, key_id)
     if not row or row.workspace_id != ws.id:
-        raise HTTPException(404, "API key not found")
+        raise HTTPException(404, errors.not_in_project("API key", "GET /api/api-keys"))
     row.revoked = True
     db.commit()
     audit.record(db, user, audit.KEY_REVOKE, workspace_id=ws.id, target_type="key",

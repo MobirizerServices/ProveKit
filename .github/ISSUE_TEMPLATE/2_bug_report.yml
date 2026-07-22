@@ -1,0 +1,61 @@
+name: "Bug report"
+description: Something in the backend, SDK, or portal does not do what it says.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Spans from a framework mapping wrong? Use the **Framework support / span mapped wrong**
+        form instead — it asks for the one thing that makes those fixable.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+    validations: {required: true}
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: |
+        Smallest thing that shows it. A failing test is the ideal form — `backend/tests/` has
+        ~60 modules to copy a shape from, and `conftest.py` gives you a workspace via
+        `ingest_workspace_id()`.
+      placeholder: |
+        1. make setup && make backend
+        2. POST this payload to /v1/traces …
+        3. open /traces → the child span has no parent
+    validations: {required: true}
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SDK (provekit/trace.py, auto.py)
+        - Ingest / OTel mapping
+        - Read APIs / auth / tenancy
+        - Portal (Next.js frontend)
+        - Evaluation (datasets, scorers, experiments)
+        - Deploy / Docker / migrations
+        - Docs
+        - Not sure
+    validations: {required: true}
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: |
+        provekit: 0.6.0        install: pip / docker compose / source
+        python:   3.12         database: sqlite / postgres
+        browser:  Firefox 141  (if it is a portal bug)
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      description: Scrub keys and payload text first — a project key in a public issue is a live credential.
+      render: shell

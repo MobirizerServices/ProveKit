@@ -8,8 +8,10 @@ from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import grpc_ingest
 from .config import get_settings
 from .database import init_db
+from .services.impersonation import ReadOnlyImpersonation
 from .observability import (
     BodySizeLimitMiddleware,
     RequestIDMiddleware,
@@ -19,8 +21,8 @@ from .observability import (
     setup_logging,
 )
 from .routers import (
-    admin, alerts, apikeys, auth, datasets, experiments, metrics, playground, projects, traces,
-    views,
+    admin, alerts, apikeys, auth, dataset_writes, datasets, experiments, metrics, playground,
+    projects, traces, views,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -122,6 +124,10 @@ app = FastAPI(title="ProveKit", version="0.1.0", lifespan=lifespan)
 # order: CORS -> SecurityHeaders -> RequestID -> BodySizeLimit -> app. Both SecurityHeaders
 # and RequestID must stay outside BodySizeLimit, whose 413 short-circuits the rest of the
 # stack — inside them, that response would carry no security headers and no X-Request-ID.
+# Innermost, so its 403 still passes back out through RequestID and SecurityHeaders. This
+# is what actually enforces read-only support impersonation — without it the admin API
+# reports read_only: true while writes succeed, which is worse than having no feature.
+app.add_middleware(ReadOnlyImpersonation)
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -135,11 +141,15 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(apikeys.router)
+# BEFORE traces.router: same path and method, and Starlette dispatches to the first match.
+# Registered after, this is dead code and a protobuf body silently returns "success" again.
+app.include_router(grpc_ingest.router)
 app.include_router(traces.router)
 app.include_router(traces.ws_router)
 app.include_router(traces.runs_router)
 app.include_router(datasets.router)
 app.include_router(datasets.key_router)
+app.include_router(dataset_writes.key_router)
 app.include_router(experiments.router)
 app.include_router(experiments.key_router)
 app.include_router(metrics.router)

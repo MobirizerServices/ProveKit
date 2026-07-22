@@ -396,6 +396,33 @@
         "title": "_FromTraceIn",
         "type": "object"
       },
+      "_ImpersonateIn": {
+        "properties": {
+          "minutes": {
+            "default": 15,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Minutes",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "reason"
+        ],
+        "title": "_ImpersonateIn",
+        "type": "object"
+      },
       "_ItemIn": {
         "properties": {
           "expected": {
@@ -739,6 +766,22 @@
         "title": "_RunIn",
         "type": "object"
       },
+      "_SplitIn": {
+        "properties": {
+          "ratio": {
+            "default": 0.2,
+            "title": "Ratio",
+            "type": "number"
+          },
+          "seed": {
+            "default": 0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "title": "_SplitIn",
+        "type": "object"
+      },
       "_SuperIn": {
         "properties": {
           "is_superuser": {
@@ -750,6 +793,24 @@
           "is_superuser"
         ],
         "title": "_SuperIn",
+        "type": "object"
+      },
+      "_ViewIn": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "params": {
+            "default": {},
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "_ViewIn",
         "type": "object"
       }
     }
@@ -843,6 +904,229 @@
           }
         },
         "summary": "List Audit",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/impersonate": {
+      "delete": {
+        "description": "End support mode and hand the operator back their own session. The one write allowed\nwhile impersonating (see impersonation.STOP_ROUTE) — the exit must never be blocked.",
+        "operationId": "stop_impersonation_api_admin_impersonate_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stop Impersonation",
+        "tags": [
+          "admin"
+        ]
+      },
+      "get": {
+        "description": "Whether this session is impersonating, and for how much longer — the banner the console\nkeeps on screen. Answers `{\"active\": false}` rather than 403 so it can be polled always.",
+        "operationId": "impersonation_status_api_admin_impersonate_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Impersonation Status",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Begin a time-boxed, read-only view of one project. Replaces the caller's session cookie\nwith one that carries the impersonation claim — so it expires on its own, and every write\nin the deployment is refused until it is stopped.",
+        "operationId": "start_impersonation_api_admin_impersonate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_ImpersonateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Impersonation",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/impersonate/traces": {
+      "get": {
+        "description": "The tenant's trace list, exactly as `/api/traces` renders it for them.",
+        "operationId": "impersonated_traces_api_admin_impersonate_traces_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window_hours",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Window Hours"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Impersonated Traces",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/impersonate/traces/{trace_id}": {
+      "get": {
+        "description": "All spans of one of the tenant's traces — the same payload `/api/traces/{id}` returns.",
+        "operationId": "impersonated_trace_api_admin_impersonate_traces__trace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Impersonated Trace",
         "tags": [
           "admin"
         ]
@@ -1917,6 +2201,98 @@
         ]
       }
     },
+    "/api/datasets/{dataset_id}/split": {
+      "post": {
+        "description": "Deterministically label a train/test split.\n\nHash-based, not random: the same item lands in the same split every time, so re-splitting\ncan't quietly move examples across the boundary and invalidate every earlier comparison.",
+        "operationId": "assign_split_api_datasets__dataset_id__split_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_SplitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Split",
+        "tags": [
+          "datasets"
+        ]
+      }
+    },
+    "/api/datasets/{dataset_id}/version": {
+      "get": {
+        "description": "Version, content fingerprint and split breakdown — the provenance an experiment pins.",
+        "operationId": "dataset_version_api_datasets__dataset_id__version_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dataset Version",
+        "tags": [
+          "datasets"
+        ]
+      }
+    },
     "/api/experiments": {
       "get": {
         "description": "List experiments with their per-scorer means. Filter by dataset_id to compare runs\non the same dataset side by side.",
@@ -1997,6 +2373,78 @@
           }
         },
         "summary": "Create Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/experiments/judge-calibration": {
+      "get": {
+        "description": "Is the LLM judge worth believing? Measures it against the human labels already stored.\n\nOver traces carrying both a human thumbs (`source=human`) and a judge/eval score\n(`source=eval|sdk`): agreement, Cohen's kappa, the 2x2 confusion matrix and the disagreeing\ntraces. Kappa is the number that matters — on a 90%-good dataset a judge that always says\n\"good\" scores 90% agreement and kappa 0.\n\nBelow `min_n` pairs, no rate, kappa or verdict is returned at all: see `caution`.",
+        "operationId": "judge_calibration_api_experiments_judge_calibration_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "judge_name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Judge Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "human_name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Human Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pass_at",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "title": "Pass At",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Judge Calibration",
         "tags": [
           "experiments"
         ]
@@ -2180,6 +2628,76 @@
         ]
       }
     },
+    "/api/experiments/{eid}/triage/{other_id}": {
+      "get": {
+        "description": "Which rows regressed — the question a score delta cannot answer.\n\n/compare says the mean moved by -0.08 and that the move is real. That still leaves someone\nreading the whole result table to find the handful of examples that broke. This pairs rows\nby dataset item and returns, per scorer, what got worse (worst first), what got better, and\nwhat crossed the pass/fail line, so \"what broke\" is one request rather than an afternoon.\n\nRows that cannot be paired are reported, never guessed at: see `pairing` and `notes`.",
+        "operationId": "triage_experiments_api_experiments__eid__triage__other_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eid",
+            "required": true,
+            "schema": {
+              "title": "Eid",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "other_id",
+            "required": true,
+            "schema": {
+              "title": "Other Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pass_at",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "title": "Pass At",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Triage Experiments",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
     "/api/metrics": {
       "get": {
         "operationId": "metrics_api_metrics_get",
@@ -2336,6 +2854,94 @@
         "summary": "Playground Run",
         "tags": [
           "playground"
+        ]
+      }
+    },
+    "/api/playground/run/stream": {
+      "post": {
+        "description": "Server-sent events for one re-run: `delta` frames, then `done` (same body as\n/playground/run) or `error`. Limits and validation still answer with a real status code —\nthey run before the response starts.",
+        "operationId": "playground_run_stream_api_playground_run_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_RunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Playground Run Stream",
+        "tags": [
+          "playground"
+        ]
+      }
+    },
+    "/api/pricing": {
+      "get": {
+        "description": "The rate table, so a client can price tokens without keeping its own copy.\n\n`version` re-derives a historical cost card: spans carry `meta.price_version`, and asking\nfor that version returns the rates that were in force when the span was captured.",
+        "operationId": "price_table_api_pricing_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Price Table",
+        "tags": [
+          "pricing"
         ]
       }
     },
@@ -3242,6 +3848,150 @@
         ]
       }
     },
+    "/api/views": {
+      "get": {
+        "operationId": "list_views_api_views_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Views",
+        "tags": [
+          "views"
+        ]
+      },
+      "post": {
+        "operationId": "create_view_api_views_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_ViewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create View",
+        "tags": [
+          "views"
+        ]
+      }
+    },
+    "/api/views/{view_id}": {
+      "delete": {
+        "operationId": "delete_view_api_views__view_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "view_id",
+            "required": true,
+            "schema": {
+              "title": "View Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete View",
+        "tags": [
+          "views"
+        ]
+      },
+      "put": {
+        "operationId": "update_view_api_views__view_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "view_id",
+            "required": true,
+            "schema": {
+              "title": "View Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_ViewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update View",
+        "tags": [
+          "views"
+        ]
+      }
+    },
     "/api/workspace/ingest-key": {
       "post": {
         "description": "Mint/rotate this workspace's OTLP ingest key (shown once; stored hashed).",
@@ -3259,6 +4009,26 @@
           }
         },
         "summary": "Rotate Ingest Key",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/workspace/retention": {
+      "get": {
+        "description": "The answer to \"where did my trace go?\" — the policy, what's still here, and what was\ndeleted recently.",
+        "operationId": "retention_status_api_workspace_retention_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Retention Status",
         "tags": [
           "workspace"
         ]
@@ -3325,6 +4095,62 @@
         "tags": [
           "datasets"
         ]
+      },
+      "post": {
+        "description": "Create an empty dataset in the key's project.",
+        "operationId": "create_dataset_by_key_v1_datasets_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_DatasetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Dataset By Key",
+        "tags": [
+          "datasets"
+        ]
       }
     },
     "/v1/datasets/{dataset_id}/items": {
@@ -3378,6 +4204,71 @@
           }
         },
         "summary": "List Items By Key",
+        "tags": [
+          "datasets"
+        ]
+      },
+      "post": {
+        "description": "Append one {input, expected} item. `meta` carries provenance (trace_id/span_id/source)\nso a promoted item can be traced back to the run it came from.",
+        "operationId": "add_item_by_key_v1_datasets__dataset_id__items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_ItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Item By Key",
         "tags": [
           "datasets"
         ]
@@ -3435,6 +4326,94 @@
           }
         },
         "summary": "Create Experiment By Key",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/v1/experiments/judge-calibration": {
+      "get": {
+        "description": "Judge calibration by project key, so CI can refuse to gate on an uncalibrated judge —\nassert `kappa` rather than a score mean. `sufficient` is false when there are too few\nlabels to say anything, and then `kappa` is null rather than a number to compare.",
+        "operationId": "judge_calibration_by_key_v1_experiments_judge_calibration_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "judge_name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Judge Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "human_name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Human Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pass_at",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "title": "Pass At",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Judge Calibration By Key",
         "tags": [
           "experiments"
         ]

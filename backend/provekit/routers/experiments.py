@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Experiment, ExperimentResult, Workspace, iso_utc
-from ..services import stats
+from ..models import Experiment, ExperimentResult, Feedback, Workspace, iso_utc
+from ..services import calibration, stats
 from ..services.workspace import current_workspace, workspace_from_key
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
@@ -194,6 +194,21 @@ def _triage_scorer(paired: list, scorer: str, pass_at: float, limit: int) -> dic
             "truncated": len(regressed) > limit or len(improved) > limit}
 
 
+def _calibration(db: Session, ws: Workspace, judge_name: str, human_name: str,
+                 pass_at: float, limit: int) -> dict:
+    """Judge-vs-human calibration over the workspace's stored feedback.
+
+    Only the two sources that can be a label or a prediction are pulled, so an unrelated
+    annotation kind can't be mistaken for either.
+    """
+    rows = (db.query(Feedback)
+            .filter(Feedback.workspace_id == ws.id,
+                    Feedback.source.in_(sorted(calibration.HUMAN_SOURCES | calibration.JUDGE_SOURCES)))
+            .order_by(Feedback.id.asc()).all())
+    return calibration.calibrate(rows, pass_at=pass_at, judge_name=judge_name,
+                                 human_name=human_name, limit=limit)
+
+
 def _experiment_row(db: Session, e: Experiment) -> dict:
     results = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == e.id).all()
     return {"id": e.id, "name": e.name, "dataset_id": e.dataset_id,
@@ -240,6 +255,24 @@ def list_experiments(dataset_id: int | None = None, db: Session = Depends(get_db
     if dataset_id is not None:
         q = q.filter(Experiment.dataset_id == dataset_id)
     return [_experiment_row(db, e) for e in q.order_by(Experiment.id.desc()).all()]
+
+
+# Declared before the "/{eid}" routes: a literal path segment has to be registered first or the
+# int converter claims it and answers 422.
+@router.get("/judge-calibration")
+def judge_calibration(judge_name: str = "", human_name: str = "", pass_at: float = calibration.PASS_AT,
+                      limit: int = calibration.DISAGREEMENT_LIMIT, db: Session = Depends(get_db),
+                      ws: Workspace = Depends(current_workspace)):
+    """Is the LLM judge worth believing? Measures it against the human labels already stored.
+
+    Over traces carrying both a human thumbs (`source=human`) and a judge/eval score
+    (`source=eval|sdk`): agreement, Cohen's kappa, the 2x2 confusion matrix and the disagreeing
+    traces. Kappa is the number that matters — on a 90%-good dataset a judge that always says
+    "good" scores 90% agreement and kappa 0.
+
+    Below `min_n` pairs, no rate, kappa or verdict is returned at all: see `caution`.
+    """
+    return _calibration(db, ws, judge_name, human_name, pass_at, limit)
 
 
 @router.post("/{eid}/results")
@@ -353,6 +386,19 @@ def create_experiment_by_key(data: _ExperimentIn, request: Request, db: Session 
 def add_result_by_key(eid: int, data: _ResultIn, request: Request, db: Session = Depends(get_db),
                       authorization: str | None = Header(default=None)):
     return _add_result(db, workspace_from_key(db, request, authorization), eid, data)
+
+
+@key_router.get("/judge-calibration")
+def judge_calibration_by_key(request: Request, judge_name: str = "", human_name: str = "",
+                             pass_at: float = calibration.PASS_AT,
+                             limit: int = calibration.DISAGREEMENT_LIMIT,
+                             db: Session = Depends(get_db),
+                             authorization: str | None = Header(default=None)):
+    """Judge calibration by project key, so CI can refuse to gate on an uncalibrated judge —
+    assert `kappa` rather than a score mean. `sufficient` is false when there are too few
+    labels to say anything, and then `kappa` is null rather than a number to compare."""
+    ws = workspace_from_key(db, request, authorization)
+    return _calibration(db, ws, judge_name, human_name, pass_at, limit)
 
 
 @key_router.get("/{eid}")

@@ -82,7 +82,8 @@ count and check whether that project has a retention override.
 
 ## API
 
-All four require a superuser session cookie.
+All of these require a superuser session cookie (see also
+[Impersonation](#impersonation--read-only-view-as-tenant) below).
 
 | Endpoint | Returns |
 |---|---|
@@ -107,6 +108,57 @@ for users, and project name or owner email for projects — `total` is the size 
 match, not of the page, so it drives the pager. The console hides its pager entirely when
 everything fits on one page.
 
+## Impersonation — read-only "view as tenant"
+
+Most support tickets are "my traces aren't showing up". Asking the customer for screenshots turns
+a five-minute answer into a day. An operator can instead open a **time-boxed, read-only view of
+one project**:
+
+```bash
+curl -X POST /api/admin/impersonate -b cookies \
+  -d '{"workspace_id": 42, "reason": "ticket 4412: missing traces", "minutes": 15}'
+curl /api/admin/impersonate/traces -b cookies        # what that project sees at /traces
+curl -X DELETE /api/admin/impersonate -b cookies     # stop
+```
+
+Five properties, in the order they matter:
+
+1. **Read only, enforced on the server.** While the session is impersonating, *every* request
+   that isn't `GET`/`HEAD`/`OPTIONS` is refused with `403 … read-only`, anywhere in the API —
+   not just in the pages the console hides. The single exception is `DELETE
+   /api/admin/impersonate`, because the way out must never be blocked. The check is by method,
+   so a mutating endpoint written next year is covered the day it is written.
+2. **Audited at both ends.** `impersonation.start` and `impersonation.stop` land in the audit
+   trail with the operator's email, the target project, the caller's IP, and the **reason** —
+   which the API requires, so the trail answers *why* and not only *who*.
+3. **Time-bounded by the signature.** The deadline is the session token's own `exp` (default 15
+   minutes, max 60), so an expired support session is not a session at all — there is nothing
+   left to replay. When it lapses, the operator is simply signed out and logs back in.
+4. **No escalation.** Impersonating does not grant the tenant's privileges *or* keep the
+   operator's: the rest of `/api/admin` (stats, users, grants) returns `403` while a support
+   session is open. Start one, look, stop, then act.
+5. **No cross-tenant reach.** Project resolution (`X-Project-Id` → membership check) never looks
+   at the impersonation claim, so the ordinary APIs keep returning the *operator's* own project
+   mid-session. The tenant's data is reachable only through `/api/admin/impersonate/*`.
+
+Mechanically, the claim rides inside the normal signed session cookie as one extra field. There
+is deliberately no second credential: two ways to be authenticated is how one of them ends up
+unguarded.
+
+| Endpoint | Does |
+|---|---|
+| `POST /api/admin/impersonate` | start; `{"workspace_id", "reason", "minutes"}` (`reason` required, `minutes` 1–60, default 15). `404` unknown project, `422` bad duration/reason, `403` if already impersonating |
+| `GET /api/admin/impersonate` | the banner: `{"active": false}` or project, owner, `seconds_remaining` |
+| `DELETE /api/admin/impersonate` | stop, restore the operator's own session, audit it |
+| `GET /api/admin/impersonate/traces` | the tenant's trace list — the same query `/api/traces` runs for them (`limit`, `status`, `window_hours`, `q`, `cursor`) |
+| `GET /api/admin/impersonate/traces/{trace_id}` | all spans of one of their traces |
+
+> **Deployment note.** The read-only guarantee is the `ReadOnlyImpersonation` ASGI middleware
+> (`services/impersonation.py`), registered in `main.py`. If it is ever removed, an impersonating
+> operator can still write — as *themselves*, in *their own* project, never the tenant's — so the
+> tenant-safety property survives, but the "support mode is read-only" promise does not. Keep it
+> registered.
+
 ## Revoking
 
 How you revoke depends on **where the grant came from**, because config wins over the flag:
@@ -130,9 +182,13 @@ requires a *second* operator — or direct database access.
 
 ## Cautions
 
-- **A superuser sees every user's email and every project on the deployment.** They don't get
-  project data (traces, keys) through this console, but they can read the DB behind it. Grant it
-  the way you'd grant production database access.
+- **A superuser sees every user's email and every project on the deployment**, and can open a
+  read-only view of any project's traces (above). Keys are never exposed, and the read is
+  audited — but they can read the database behind all of it regardless. Grant superuser the way
+  you'd grant production database access.
+- **Impersonation is recorded, not prevented.** The audit trail is what makes it accountable, so
+  it is only as good as your ability to read it: `GET /api/admin/audit?action=impersonation.start`
+  is the query to put in front of whoever reviews support access.
 - **The audit trail covers changes, not reads.** Grants, revocations, project deletion and
   settings, membership, and key lifecycle are recorded with actor, target, IP and timestamp.
   *Who viewed a trace* is not — that would write a row per page load and bury the privileged

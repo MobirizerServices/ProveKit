@@ -1,24 +1,39 @@
 """Platform superadmin — a global operator console across every user and project. Gated by
 the superuser flag (or a bootstrap email in config.superuser_emails). This is separate from
 per-project owner settings (see routers.projects)."""
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import (AuditLog, Dataset, Experiment, Run, User, Workspace,
                       WorkspaceMember, iso_utc)
-from ..services import audit
+from ..services import audit, impersonation
 from ..services.auth import get_current_user, is_bootstrap, is_operator
+# The impersonated views deliberately reuse the tenant's own read path instead of
+# re-implementing it: "what the tenant sees" is only true if it is literally the same query.
+from .traces import _get_trace, _list_traces
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-def require_superuser(user: User = Depends(get_current_user)) -> User:
+def _operator(user: User = Depends(get_current_user)) -> User:
+    """Effective superuser, re-checked per request — revoking the grant ends any in-flight
+    impersonation session on its next call, without waiting for the cookie to expire."""
     if is_operator(user):
         return user
     raise HTTPException(403, "Superuser only")
+
+
+def require_superuser(request: Request, user: User = Depends(_operator)) -> User:
+    """Operator access to the console proper. An impersonating session is refused here even
+    though it belongs to an operator: support mode must not be a way to run operator actions
+    (grants, revokes) while wearing a tenant's view."""
+    if impersonation.claim(request) is not None:
+        raise HTTPException(403, "This session is impersonating a tenant. Stop impersonation "
+                                 "(DELETE /api/admin/impersonate) before using operator tools.")
+    return user
 
 
 class _SuperIn(BaseModel):
@@ -151,3 +166,99 @@ def set_superuser(uid: int, data: _SuperIn, request: Request,
                  target_type="user", target_id=u.id, target_label=u.email, request=request)
     return {"id": u.id, "is_superuser": u.is_superuser or is_bootstrap(u.email),
             "is_bootstrap": is_bootstrap(u.email)}
+
+
+# ---- impersonation: read-only "view as tenant" (services/impersonation.py) ----
+class _ImpersonateIn(BaseModel):
+    workspace_id: int
+    # Required, and recorded in the audit row. A support tool whose trail says *who* looked but
+    # not *why* answers half the question a customer will ask afterwards.
+    reason: str = Field(min_length=3, max_length=200)
+    minutes: int = Field(default=impersonation.DEFAULT_MINUTES, ge=1, le=impersonation.MAX_MINUTES)
+
+
+def current_impersonation(request: Request, me: User = Depends(_operator),
+                          db: Session = Depends(get_db)) -> tuple[User, Workspace, impersonation.Claim]:
+    """The active support session, or 403. Every impersonated read goes through here."""
+    claim = impersonation.claim(request)
+    if claim is None:
+        raise HTTPException(403, "No active impersonation session")
+    ws = db.get(Workspace, claim.workspace_id)
+    if ws is None:
+        raise HTTPException(404, "That project no longer exists")
+    return me, ws, claim
+
+
+def _status(db: Session, ws: Workspace, claim: impersonation.Claim) -> dict:
+    owner = db.query(User.email).filter(User.id == ws.owner_user_id).scalar() or ""
+    return {"active": True, "read_only": True, "workspace_id": ws.id, "workspace": ws.name,
+            "owner": owner, "expires_at": claim.expires_at,
+            "seconds_remaining": claim.seconds_remaining,
+            "span_count": db.query(func.count(Run.id)).filter(Run.workspace_id == ws.id).scalar() or 0}
+
+
+@router.post("/impersonate")
+def start_impersonation(data: _ImpersonateIn, request: Request, response: Response,
+                        me: User = Depends(require_superuser), db: Session = Depends(get_db)):
+    """Begin a time-boxed, read-only view of one project. Replaces the caller's session cookie
+    with one that carries the impersonation claim — so it expires on its own, and every write
+    in the deployment is refused until it is stopped."""
+    ws = db.get(Workspace, data.workspace_id)
+    if not ws:
+        raise HTTPException(404, "Project not found")
+    seconds = data.minutes * 60
+    token = impersonation.issue(me, ws.id, seconds)
+    # Read the claim back out of the token we just signed rather than recomputing the deadline:
+    # the response then reports exactly what the cookie will be judged by.
+    claim = impersonation.claim_from_token(token)
+    impersonation.set_impersonation_cookie(response, token, seconds)
+    audit.record(db, me, impersonation.START, workspace_id=ws.id, target_type="project",
+                 target_id=ws.id, target_label=ws.name, request=request,
+                 detail={"reason": data.reason, "minutes": data.minutes, "read_only": True})
+    return _status(db, ws, claim)
+
+
+@router.get("/impersonate")
+def impersonation_status(request: Request, me: User = Depends(_operator),
+                         db: Session = Depends(get_db)):
+    """Whether this session is impersonating, and for how much longer — the banner the console
+    keeps on screen. Answers `{"active": false}` rather than 403 so it can be polled always."""
+    claim = impersonation.claim(request)
+    if claim is None:
+        return {"active": False}
+    ws = db.get(Workspace, claim.workspace_id)
+    if ws is None:
+        return {"active": False}
+    return _status(db, ws, claim)
+
+
+@router.delete("/impersonate")
+def stop_impersonation(request: Request, response: Response,
+                       session: tuple = Depends(current_impersonation),
+                       db: Session = Depends(get_db)):
+    """End support mode and hand the operator back their own session. The one write allowed
+    while impersonating (see impersonation.STOP_ROUTE) — the exit must never be blocked."""
+    me, ws, claim = session
+    impersonation.restore_session_cookie(response, me)
+    audit.record(db, me, impersonation.STOP, workspace_id=ws.id, target_type="project",
+                 target_id=ws.id, target_label=ws.name, request=request,
+                 detail={"seconds_remaining": claim.seconds_remaining})
+    return {"active": False, "workspace_id": ws.id, "workspace": ws.name}
+
+
+@router.get("/impersonate/traces")
+def impersonated_traces(limit: int = 50, status: str | None = None, window_hours: int | None = None,
+                        q: str | None = None, cursor: int | None = None,
+                        session: tuple = Depends(current_impersonation),
+                        db: Session = Depends(get_db)):
+    """The tenant's trace list, exactly as `/api/traces` renders it for them."""
+    _, ws, _claim = session
+    return _list_traces(db, ws, limit, status, window_hours, search=q, cursor=cursor)
+
+
+@router.get("/impersonate/traces/{trace_id}")
+def impersonated_trace(trace_id: str, session: tuple = Depends(current_impersonation),
+                       db: Session = Depends(get_db)):
+    """All spans of one of the tenant's traces — the same payload `/api/traces/{id}` returns."""
+    _, ws, _claim = session
+    return _get_trace(db, ws, trace_id)

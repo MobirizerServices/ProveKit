@@ -198,6 +198,73 @@ Cost is never priced from tokens here: the price tables are versioned and server
 (`services/pricing.py`), so a client-side scorer inventing its own would silently disagree
 with the portal. Pass `cost_usd`, or use `token_budget`, which works on any captured trace.
 
+## 6. Is the judge worth believing?
+
+A model-graded scorer is a model grading a model. The only evidence that its 0.87 means
+anything is that it tracks what people said about the same traces, so ProveKit measures that
+against the labels it already stores — no second labelling pipeline, no new fields:
+
+```
+GET /api/experiments/judge-calibration          # portal (cookie)
+GET /v1/experiments/judge-calibration           # project key, for CI
+    ?judge_name=llm_judge&human_name=thumbs&pass_at=0.5&limit=50
+```
+
+Ground truth is feedback with `source=human` (the portal's 👍/👎), the prediction is feedback
+with `source=eval` or `source=sdk` (what `pk.score()` and an offline judge post). Only traces
+carrying **both** are measured; everything else is counted under `coverage` rather than quietly
+folded in.
+
+```json
+{"n": 120, "sufficient": true, "min_n": 20, "pass_at": 0.5,
+ "agreement": 0.9, "kappa": 0.0, "verdict": "none",
+ "confusion": {"both_pass": 108, "human_pass_judge_fail": 0,
+               "human_fail_judge_pass": 12, "both_fail": 0},
+ "false_pass_rate": 1.0, "false_fail_rate": 0.0,
+ "coverage": {"human_labelled": 130, "judge_scored": 400, "both": 120,
+              "human_only": 10, "judge_only": 280, "unusable_rows": 3},
+ "caution": "Kappa 0.00 (none): agreement is 90%, but little of it survives correcting for…",
+ "disagreement_count": 12, "disagreements": [ … ], "truncated": false}
+```
+
+**Read `kappa`, not `agreement`.** That example is the case worth internalising: a judge that
+says "good" to everything, on a dataset that is 90% good, scores **90% agreement and is
+worthless**. Cohen's kappa is agreement after subtracting what chance alone would produce —
+`(observed − expected) / (1 − expected)` — and it scores that judge **0.00**. The conventional
+bands (`verdict`) are *none* / *slight* / *fair* / *moderate* / *substantial* / *almost
+perfect*; they are a shared vocabulary, not a gate.
+
+`false_pass_rate` is the share of traces *people failed* that the judge passed, and it is the
+error that costs you something: it is what lets a bad release through a gate built on the
+judge. `disagreements` lists those cases first, with the human's comment and the judge's score
+attached, so the next step is reading five traces rather than re-deriving the argument.
+
+**Below 20 pairs you get no number.** No agreement rate, no kappa, no verdict — only `n`, the
+confusion counts and the disagreeing traces, with `sufficient: false` and a `caution` saying
+so. The standard error of kappa is on the order of 1/√n, so at twenty labels a reported 0.6 is
+worth roughly ±0.2; below that the point estimate is noise wearing a decimal point. A
+calibration number computed from four labels is worse than no number, because it gets quoted.
+Same posture as the significance testing behind `/api/experiments/{a}/compare/{b}`, which
+refuses to call a difference real at a sample size that cannot support it: *not enough data to
+tell* is a different finding from *the judge is bad*, and neither may be rendered as the other.
+
+Two other refusals: if every label on both sides is the same class, kappa is **undefined**
+(nothing to correct for) and comes back `null` rather than a flattering `1.0` — the judge has
+never been tested on the other kind of output. And a continuous judge score is thresholded at
+`pass_at` to meet the human's categorical 👍/👎, because kappa is an agreement statistic over
+categories; a row that carries only a comment is unlabelled, counted in
+`coverage.unusable_rows`, and never read as a failing label.
+
+Gate CI on the judge itself, not just on its scores:
+
+```python
+cal = httpx.get(f"{PROVEKIT_ENDPOINT}/v1/experiments/judge-calibration",
+                params={"judge_name": "llm_judge"},
+                headers={"Authorization": f"Bearer {PROVEKIT_API_KEY}"}).json()
+assert cal["sufficient"], cal["caution"]        # label more traces before trusting it
+assert cal["kappa"] >= 0.4                      # moderate agreement with humans, or don't ship on it
+```
+
 ## Feedback vs. evaluation
 
 - **Feedback** (`pk.score`, or 👍/👎 in the portal) attaches a score to a *single production

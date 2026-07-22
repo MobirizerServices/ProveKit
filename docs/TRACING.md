@@ -208,3 +208,66 @@ not the only one.
   function. Redact anything sensitive before returning it if you don't want it captured.
 - Self-hosters set `PROVEKIT_ENDPOINT` to their instance; there is no default hosted
   endpoint.
+
+## OTLP protobuf (`Content-Type: application/x-protobuf`)
+
+`/v1/traces` accepts the OTLP `ExportTraceServiceRequest` in **protobuf** as well as JSON.
+The transport is chosen by the request's content type; everything after the decode — the
+project key, the rate limit, the per-account span quota, the ingest spool, the
+`(trace_id, span_id)` dedupe, retention — is the same code path either encoding takes.
+
+```bash
+curl -X POST "$PROVEKIT_ENDPOINT/v1/traces" \
+  -H "Authorization: Bearer $PROVEKIT_API_KEY" \
+  -H "Content-Type: application/x-protobuf" \
+  --data-binary @batch.pb
+```
+
+The reply is a protobuf `ExportTraceServiceResponse` — **an empty body is a full success**,
+which is what "no fields set" encodes to, not a stub.
+
+This matters because protobuf is the default in most of the ecosystem, and until now the
+server read every body as JSON:
+
+| exporter | what it sends |
+|---|---|
+| Go `otlptracehttp` | protobuf; there is no JSON encoding option |
+| Java / JS / .NET autoconfigure | `http/protobuf` is the default protocol |
+| OpenTelemetry Collector `otlphttp` | `encoding: proto` by default |
+
+A protobuf body used to come back `200 {"partialSuccess": {"rejectedSpans": 0,
+"errorMessage": "invalid JSON"}}`. OTLP defines a 200 with zero rejected spans as success,
+so exporters logged a warning at most, dropped the batch and never retried — the pipeline
+looked healthy and the spans were gone. If you were told to route around this (see
+[SDK_OTHER_LANGUAGES.md](SDK_OTHER_LANGUAGES.md)), you no longer have to.
+
+A body that cannot be decoded now answers **400** with the reason in the response's
+`error_message`, so a broken exporter is visible instead of silently discarded.
+
+### Still missing: OTLP/gRPC on :4317
+
+`OTEL_EXPORTER_OTLP_PROTOCOL=grpc` is **not** served. gRPC needs an HTTP/2 listener on its
+own port, which the ASGI app cannot host — uvicorn serves HTTP/1.1 — so it means a second
+server process, a second published port, and `grpcio` as a dependency. The payload itself is
+already handled: gRPC carries the byte-identical `ExportTraceServiceRequest` this endpoint
+now decodes.
+
+Until it ships, put a collector in front and let it change transports for you — receive
+OTLP/gRPC on 4317, export `otlphttp` to ProveKit:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+exporters:
+  otlphttp:
+    endpoint: https://provekit.your-company.com
+    headers: { authorization: "Bearer pk_..." }
+service:
+  pipelines:
+    traces: { receivers: [otlp], exporters: [otlphttp] }
+```
+
+The collector's `otlphttp` exporter posts protobuf, which is exactly the hop that used to
+lose the batch.

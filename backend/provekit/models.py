@@ -358,6 +358,34 @@ class SavedView(Base):
     )
 
 
+class WebhookSubscription(Base):
+    """A customer endpoint to notify when something happens in their project.
+
+    Alerts already push to a webhook (#66), but only for a breached alert rule. Everything else
+    — a trace finished, an experiment finished — was only observable by polling, which means a
+    customer integration either polls too often or finds out too late.
+
+    Deliberately a subscription row rather than a column on the project: a team needs different
+    destinations for different events (an experiment result to CI, a failure to on-call), and
+    one URL per project forces them to build the fan-out themselves.
+    """
+    __tablename__ = "webhook_subscriptions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    url: Mapped[str] = mapped_column(String(500), default="")
+    events: Mapped[list] = mapped_column(JSON, default=list)   # e.g. ["trace.failed"]
+    # Signing secret: the receiver has no other way to know a POST is genuinely from ProveKit,
+    # and an unauthenticated webhook endpoint is a way to inject fake events into their system.
+    secret: Mapped[str] = mapped_column(String(64), default="")
+    enabled: Mapped[bool] = mapped_column(default=True)
+    # Consecutive failures. A dead endpoint that is retried forever becomes an outbound DoS the
+    # customer is paying for, so delivery backs off and eventually stops.
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    last_status: Mapped[str] = mapped_column(String(120), default="")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class RetentionEvent(Base):
     """What retention deleted, and when.
 

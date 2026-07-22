@@ -954,6 +954,32 @@
         "title": "_SplitIn",
         "type": "object"
       },
+      "_SubIn": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "events": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "_SubIn",
+        "type": "object"
+      },
       "_SuperIn": {
         "properties": {
           "is_superuser": {
@@ -4396,6 +4422,143 @@
         "summary": "Update View",
         "tags": [
           "views"
+        ]
+      }
+    },
+    "/api/webhooks": {
+      "get": {
+        "operationId": "list_subs_api_webhooks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Subs",
+        "tags": [
+          "webhooks"
+        ]
+      },
+      "post": {
+        "operationId": "create_sub_api_webhooks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_SubIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Sub",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/webhooks/{sub_id}": {
+      "delete": {
+        "operationId": "delete_sub_api_webhooks__sub_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sub_id",
+            "required": true,
+            "schema": {
+              "title": "Sub Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Sub",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/webhooks/{sub_id}/enable": {
+      "post": {
+        "description": "Re-enable a subscription that backed off to disabled, and clear its failure count.",
+        "operationId": "reenable_api_webhooks__sub_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sub_id",
+            "required": true,
+            "schema": {
+              "title": "Sub Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reenable",
+        "tags": [
+          "webhooks"
         ]
       }
     },

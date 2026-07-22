@@ -8,6 +8,11 @@ os.environ["SEED_EXAMPLES"] = "false"
 # Keep the ingest spool inside this run's temp dir. Sharing the default (a system temp path)
 # would let one run's leftover batches count toward another's backlog and depth assertions.
 os.environ["SPOOL_DIR"] = f"{_tmp}/spool"
+# Same isolation for the SDK's client-side retry buffer. Its default is a shared system temp
+# path, so a failed export in one test was replayed into the next test's captured payloads —
+# an order-dependent flake, and on a developer's machine a directory that quietly accumulates
+# every batch any test run ever failed to send.
+os.environ["PROVEKIT_BUFFER_DIR"] = f"{_tmp}/sdk-buffer"
 
 # Create the schema eagerly so tests using a bare TestClient (no lifespan) still have tables.
 from provekit.database import init_db  # noqa: E402

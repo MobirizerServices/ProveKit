@@ -81,6 +81,26 @@ async function statusError(res: Response): Promise<string> {
   return `${res.status}: ${body}`;
 }
 
+// One extra span pulled into the same replay. An LLM span is edited as messages; a tool span is
+// edited as its arguments and nothing else — ProveKit does not own the tool and cannot run it,
+// so there is no output field to offer and no output it could honestly invent.
+interface SpanEdit { kind: "llm" | "tool"; msgs: Msg[]; args: string; model: string }
+
+// The honest accounting a multi-edit replay returns. `reliable` is false whenever any span
+// diverged or any edit was re-run on text an earlier edit had already invalidated — the report
+// is shown instead of jumping straight to the branch, because the badge is the point.
+interface MultiReplayResult {
+  new_trace_id: string; reliable: boolean; fidelity_warning: string; edit_count: number;
+  fidelity: { live: number; diverged: number; recorded: number; unchanged: number };
+  tainted_input_spans: string[];
+}
+
+function seedEdit(s: TraceSpan): SpanEdit {
+  return s.type === "tool"
+    ? { kind: "tool", msgs: [], args: typeof s.request?.input === "string" ? s.request.input : "", model: "" }
+    : { kind: "llm", msgs: seedMessages(s), args: "", model: s.request?.model || "" };
+}
+
 // Find {{variable}} placeholders across all messages so they can be edited as fields.
 function findVars(msgs: Msg[]): string[] {
   const set = new Set<string>();
@@ -104,6 +124,9 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const [runs, setRuns] = useState<PlaygroundResult[]>([]);   // newest first — A/B history
   const [compareModels, setCompareModels] = useState("");     // comma-separated models to A/B
   const [replayMode, setReplayMode] = useState<"reconstructed" | "webhook">("reconstructed");
+  const [others, setOthers] = useState<TraceSpan[]>([]);        // the trace's other editable spans
+  const [edits, setEdits] = useState<Record<string, SpanEdit>>({});
+  const [multi, setMulti] = useState<MultiReplayResult | null>(null);
   const [saved, setSaved] = useState<SavedPrompt[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [dsId, setDsId] = useState("");
@@ -122,6 +145,15 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     api.prompts().then(setSaved).catch(() => {});
     api.datasets().then((ds) => { setDatasets(ds); if (ds[0]) setDsId(String(ds[0].id)); }).catch(() => {});
   }, []);
+
+  // The sibling spans that can join this replay. Only llm and tool spans: an agent/step span has
+  // no edited input a re-run could act on.
+  useEffect(() => {
+    if (!traceId) return;
+    api.trace(traceId)
+      .then((rows) => setOthers(rows.filter((s) => s.span_id !== span.span_id && (s.type === "llm" || s.type === "tool"))))
+      .catch(() => {});
+  }, [traceId, span.span_id]);
 
   const varNames = useMemo(() => findVars(msgs), [msgs]);
   // Fill any newly-detected variables with a blank default without clobbering existing edits.
@@ -184,10 +216,48 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
   };
 
+  const editCount = Object.keys(edits).length;
+  const toggleEdit = (s: TraceSpan) =>
+    setEdits((e) => {
+      if (e[s.span_id]) { const n = { ...e }; delete n[s.span_id]; return n; }
+      return { ...e, [s.span_id]: seedEdit(s) };
+    });
+  const patchEdit = (id: string, patch: Partial<SpanEdit>) =>
+    setEdits((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
+
+  // Several edits, ONE re-run. Two edits are not two replays: the second span usually sits
+  // downstream of the first, so separate runs produce two branches that cannot be combined —
+  // the combination only exists in a single walk that carries both changes at once.
+  const multiReplay = async () => {
+    const p = payload();
+    const body = {
+      origin_trace_id: traceId,
+      edits: [
+        { span_id: span.span_id, kind: "llm", model, messages: p.messages, params: p.params },
+        ...Object.entries(edits).map(([sid, e]) => e.kind === "tool"
+          ? { span_id: sid, kind: "tool", arguments: e.args }
+          : { span_id: sid, kind: "llm", model: e.model || model, params: p.params,
+              messages: e.msgs.map((m) => ({ role: m.role, content: substitute(m.content) })) }),
+      ],
+      ...(conn === "mock" ? { provider: "mock" } : { connection_id: Number(conn) }),
+    };
+    const pid = getProjectId();
+    const res = await fetch(`${API_BASE}/api/replay/multi`, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json", ...(pid ? { "X-Project-Id": pid } : {}) },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(await statusError(res));
+    // Show the fidelity report rather than jumping to the branch: a replay with a diverged span
+    // is a hypothesis, and navigating away would bury the one sentence that says so.
+    setMulti(await res.json());
+  };
+
   const replay = async () => {
     if (!traceId) return;
-    setErr(""); setBusy(true);
+    setErr(""); setMulti(null); setBusy(true);
     try {
+      if (editCount > 0) { await multiReplay(); setBusy(false); return; }
       const r = await api.replay({ ...payload(), origin_trace_id: traceId, fork_span_id: span.span_id, mode: replayMode });
       // open the new branch (deep-link handles selection); it renders with per-node replay badges
       window.location.href = `/traces?trace=${encodeURIComponent(r.new_trace_id)}`;
@@ -328,15 +398,62 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
               <>
                 <button className="btn btn-ghost" onClick={replay} disabled={busy}
                   title="Fork the whole trace here and re-run downstream calls with this edit"
-                  style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>⑂ Replay flow</button>
-                <select value={replayMode} onChange={(e) => setReplayMode(e.target.value as any)}
-                  style={{ ...input, padding: "5px 8px", fontSize: 12 }} title="reconstructed = from the trace; webhook = re-run your real agent">
+                  style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
+                  ⑂ Replay flow{editCount > 0 ? ` (${editCount + 1} edits)` : ""}
+                </button>
+                <select value={editCount > 0 ? "reconstructed" : replayMode} disabled={editCount > 0}
+                  onChange={(e) => setReplayMode(e.target.value as any)}
+                  style={{ ...input, padding: "5px 8px", fontSize: 12 }}
+                  title={editCount > 0
+                    ? "Webhook replay sends your agent a single fork override, so multi-span edits are reconstructed here"
+                    : "reconstructed = from the trace; webhook = re-run your real agent"}>
                   <option value="reconstructed">reconstructed</option>
                   <option value="webhook">webhook (exact)</option>
                 </select>
               </>
             )}
           </div>
+
+          {traceId && others.length > 0 && (
+            <div>
+              <div style={secLbl}>Also edit in the same replay ({editCount}/{others.length})</div>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
+                Change the planner <i>and</i> the summariser in one run. A <b>tool</b> takes edited
+                arguments only — ProveKit can&apos;t execute your tool, so identical arguments serve
+                the recorded response and changed ones are reported as diverged rather than answered.
+              </div>
+              {others.map((s) => {
+                const e = edits[s.span_id];
+                return (
+                  <div key={s.span_id} style={{ border: "1px solid var(--border)", borderRadius: 8, marginBottom: 6, overflow: "hidden" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 8px", background: "var(--bg-2)", cursor: "pointer" }}>
+                      <input type="checkbox" checked={!!e} onChange={() => toggleEdit(s)} />
+                      <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: s.type === "tool" ? "var(--tool)" : "var(--prompt)" }}>{s.type}</span>
+                      <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
+                    </label>
+                    {e && (e.kind === "tool" ? (
+                      <div style={{ padding: 8 }}>
+                        <div className="muted" style={{ fontSize: 10.5, marginBottom: 4 }}>Arguments</div>
+                        <textarea value={e.args} onChange={(ev) => patchEdit(s.span_id, { args: ev.target.value })}
+                          style={{ ...input, width: "100%", minHeight: 54, resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 11.5 }} />
+                        <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
+                          Recorded result: <span className="mono">{(s.result?.text || "—").slice(0, 120)}</span> — kept and badged, never replaced by a guess.
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {e.msgs.map((m, i) => (
+                          <textarea key={i} value={m.content}
+                            onChange={(ev) => patchEdit(s.span_id, { msgs: e.msgs.map((x, j) => (j === i ? { ...x, content: ev.target.value } : x)) })}
+                            style={{ ...input, width: "100%", minHeight: 54, resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 11.5 }} />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <input value={compareModels} onChange={(e) => setCompareModels(e.target.value)}
               placeholder="gpt-4o, gpt-4o-mini, claude-sonnet-5" style={{ ...input, flex: 1, minWidth: 200, padding: "6px 9px", fontSize: 12 }} />
@@ -390,7 +507,20 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
                 : <span className="muted">Calling the model…</span>}
             </Panel>
           )}
-          {runs.length === 0 && !busy && !stream && (
+          {multi && (
+            <Panel accent title={multi.reliable ? `Replay · ${multi.edit_count} edits · reliable` : `Replay · ${multi.edit_count} edits · UNRELIABLE`}
+              meta={`${multi.fidelity.live} live · ${multi.fidelity.diverged} diverged · ${multi.fidelity.recorded} recorded · ${multi.fidelity.unchanged} unchanged`}>
+              {multi.fidelity_warning
+                ? <span style={{ color: "var(--warn)" }}>{multi.fidelity_warning}</span>
+                : <span>Every span in the branch is either unchanged, re-run live, or a recording whose inputs still hold.</span>}
+              <div style={{ marginTop: 8 }}>
+                <a href={`/traces?trace=${encodeURIComponent(multi.new_trace_id)}`} style={{ color: "var(--accent)", fontSize: 12.5 }}>
+                  open the branch →
+                </a>
+              </div>
+            </Panel>
+          )}
+          {runs.length === 0 && !busy && !stream && !multi && (
             <Panel title="New" accent><span className="muted">Edit the prompt and press Run. Each run is kept here to compare.</span></Panel>
           )}
           {runs.map((r, i) => {

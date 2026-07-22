@@ -36,8 +36,15 @@ _WEAK_KEYS = {"", "dev-only-change-me", "change-me", "changeme", "secret"}
 
 def _guard_production_config() -> None:
     """Refuse to boot hosted mode with an unset/weak SECRET_KEY — otherwise every stored
-    credential is decryptable by anyone who reads the (default, public) value."""
-    s = settings
+    credential is decryptable by anyone who reads the (default, public) value.
+
+    Reads settings at call time rather than the module-level `settings` captured at import.
+    Those are the same object until something calls `get_settings.cache_clear()`, after which
+    they are two different objects — and this guard would then be checking a stale copy while
+    the rest of the process used the new one. A boot-time security check that can be silently
+    detached from the configuration it is guarding is not a check.
+    """
+    s = get_settings()
     weak_key = s.secret_key.strip() in _WEAK_KEYS or len(s.secret_key.strip()) < 16
     if s.hosted and weak_key:
         raise RuntimeError(

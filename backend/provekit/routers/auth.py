@@ -50,6 +50,9 @@ def register(body: Credentials, response: Response, db: Session = Depends(get_db
     u = User(email=body.email, name=body.name or body.email.split("@")[0],
              password_hash=auth.hash_password(body.password))
     db.add(u); db.commit(); db.refresh(u)
+    # A brand-new account should have something to click before it has an integration (#32).
+    # Best-effort and silent by contract — a demo that can break signup is not a demo.
+    auth.new_account_setup(db, u)
     _send_verify(u)
     if not get_settings().require_email_verification:
         _set_cookie(response, u)  # verification optional → log in immediately

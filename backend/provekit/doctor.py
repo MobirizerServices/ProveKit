@@ -117,6 +117,11 @@ def check_packages(rep: Report) -> bool:
 
 
 # (import that means the user is using it, instrumentor module, extra that provides it)
+#
+# This table is the single source of truth for "what ProveKit can auto-instrument". The CLI
+# walks it against the local environment (`local_coverage`); the portal renders it as a
+# catalogue (`coverage_catalog`) — see frontend/components/EmptyState.tsx, whose copy of the
+# list is pinned to this one by tests/test_onboarding.py.
 _COVERAGE = [
     ("openai", "openinference.instrumentation.openai", "provekit[trace]"),
     ("anthropic", "openinference.instrumentation.anthropic", "provekit[trace]"),
@@ -131,11 +136,37 @@ _COVERAGE = [
 ]
 
 
+def coverage_catalog() -> list[dict[str, str]]:
+    """The catalogue itself, with no reference to the local environment.
+
+    The portal needs this list but can never compute the *local* answer: the libraries live in
+    the user's virtualenv, on a machine the server has never seen. Showing the catalogue and
+    saying so is honest; inferring "you aren't instrumenting langchain" from the absence of
+    langchain spans would not be — a project that simply doesn't use langchain looks identical.
+    """
+    return [{"library": lib, "instrumentor": inst, "extra": extra}
+            for lib, inst, extra in _COVERAGE]
+
+
+def local_coverage() -> dict[str, list]:
+    """Walk the catalogue against *this* interpreter's site-packages.
+
+    `missing` is the interesting half: a library you clearly use whose instrumentor is absent,
+    i.e. calls that will happen and produce no span at all.
+    """
+    return {
+        "instrumented": [lib for lib, inst, _ in _COVERAGE
+                         if _installed(lib) and _installed(inst)],
+        "missing": [{"library": lib, "extra": extra} for lib, inst, extra in _COVERAGE
+                    if _installed(lib) and not _installed(inst)],
+    }
+
+
 def check_coverage(rep: Report) -> None:
     """Libraries present whose instrumentor is not — the spans you'd expect but won't get."""
-    missing = [(lib, extra) for lib, inst, extra in _COVERAGE
-               if _installed(lib) and not _installed(inst)]
-    covered = [lib for lib, inst, _ in _COVERAGE if _installed(lib) and _installed(inst)]
+    local = local_coverage()
+    missing = [(m["library"], m["extra"]) for m in local["missing"]]
+    covered = local["instrumented"]
 
     if covered:
         rep.add(OK, "Instrumentation", "auto-instrumenting " + ", ".join(sorted(covered)))

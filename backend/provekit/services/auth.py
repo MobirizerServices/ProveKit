@@ -96,6 +96,19 @@ def read_token(token: str, purpose: str = "session") -> tuple[int, int] | None:
         return None
 
 
+def new_account_setup(db: Session, user: User) -> None:
+    """Everything a freshly created account gets before its first page load.
+
+    Today that is one thing — a clearly-labelled sample project, so the portal is legible
+    before there is an integration (services/seed.py). Kept here, next to the account-creation
+    paths, and deliberately silent on failure: nothing in this function is worth failing a
+    signup for. Imported lazily because services.seed reaches services.workspace, which
+    imports this module.
+    """
+    from .seed import ensure_sample_project
+    ensure_sample_project(db, user)
+
+
 def _local_user(db: Session) -> User:
     u = db.query(User).filter(User.email == LOCAL_EMAIL).first()
     if u:
@@ -115,6 +128,7 @@ def _local_user(db: Session) -> User:
             raise
         return winner
     db.refresh(u)
+    new_account_setup(db, u)
     return u
 
 

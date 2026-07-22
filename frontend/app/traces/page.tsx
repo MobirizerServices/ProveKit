@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { api, API_BASE, TraceSpan, TraceSummary } from "@/lib/api";
+import { api, API_BASE, getProjectId, TraceSpan, TraceSummary } from "@/lib/api";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 import TraceDetail from "@/components/TraceDetail";
 import TraceCompare from "@/components/TraceCompare";
+import EmptyState, { SAMPLE_PROJECT_NAME, sampleBadge } from "@/components/EmptyState";
 
 function ListSkeleton() {
   return <><Skeleton w="65%" h={12} /><Skeleton w="85%" h={10} mt={5} /><SkeletonStyles /></>;
@@ -82,6 +83,10 @@ export default function TracesPage() {
   const [more, setMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [listOpen, setListOpen] = useState(true);
+  // True while the selected project is the preloaded sample. Fabricated traces shown without
+  // saying so would break the one promise a tracing tool has to keep, so this banner rides
+  // above the list for as long as the sample project is open.
+  const [inSample, setInSample] = useState(false);
 
   const filters = { status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined, q: dq || undefined };
   const filterKey = JSON.stringify(filters);
@@ -126,6 +131,11 @@ export default function TracesPage() {
     // Deep-link: /traces?trace=<id> opens that trace directly (e.g. from a dashboard failure).
     const deep = new URLSearchParams(window.location.search).get("trace");
     if (deep) setSel(deep);
+    api.projects().then((ps) => {
+      const pid = getProjectId();
+      const cur = ps.find((p) => String(p.id) === pid) ?? ps.find((p) => p.is_default);
+      setInSample(cur?.name === SAMPLE_PROJECT_NAME);
+    }).catch(() => {});
   }, []);
 
   // Live updates. The server announces new traces over SSE and we refetch through the normal
@@ -174,8 +184,20 @@ export default function TracesPage() {
           calls, tools, and steps, nested as it actually ran.
         </p>
 
+        {inSample && (
+          <div style={sampleBanner}>
+            <span style={sampleBadge}>sample</span>
+            <span>
+              These traces are fabricated demo data in <b>{SAMPLE_PROJECT_NAME}</b> — no agent
+              of yours produced them. Switch projects in the top bar for your real traces, or
+              delete this project in <Link href="/settings" style={{ color: "var(--accent)" }}>Settings</Link> when
+              you&apos;re done.
+            </span>
+          </div>
+        )}
+
         {traces.length === 0 && !failuresOnly && !windowHours ? (
-          <Onboarding origin={origin} />
+          <EmptyState origin={origin} />
         ) : (
           <div className="traces-grid" style={{ display: "grid", gridTemplateColumns: listOpen ? "300px 1fr" : "0 1fr", gap: listOpen ? 16 : 0, transition: "grid-template-columns .2s, gap .2s", position: "relative" }}>
             {/* collapse the trace list to give the flow studio the whole width */}
@@ -305,58 +327,14 @@ function DetailSkeleton() {
   );
 }
 
-function Onboarding({ origin }: { origin: string }) {
-  const [copied, setCopied] = useState(false);
-  const snippet = `pip install "provekit[trace]"
-
-# .env
-PROVEKIT_API_KEY=pk_...          # ← create one in Project keys
-PROVEKIT_ENDPOINT=${origin}
-
-import provekit.auto              # one import — captures everything below it
-
-# (optional) group a run under a named root:
-import provekit.trace as pk
-@pk.trace(name="my-agent")
-def run_agent(question: str) -> str:
-    ...   # your agent — OpenAI/Anthropic calls capture themselves`;
-  const copy = () => { navigator.clipboard?.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); };
-
-  return (
-    <div style={{ ...panel, maxWidth: 720 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <span className="pulse-dot" />
-        <span style={{ fontSize: 15, fontWeight: 600 }}>Listening for your first trace…</span>
-      </div>
-      <p className="muted" style={{ margin: "0 0 16px", fontSize: 13 }}>
-        This page updates automatically the moment a trace arrives. Three steps to get there:
-      </p>
-      <ol style={{ margin: "0 0 14px", paddingLeft: 18, fontSize: 13.5, lineHeight: 1.7 }}>
-        <li>Grab a key on the <Link href="/api-keys" style={{ color: "var(--accent)" }}>Project keys</Link> page.</li>
-        <li>Drop the snippet below into your agent (fill in the key).</li>
-        <li>Run your agent — the run shows up here as a nested flow.</li>
-      </ol>
-      <div style={{ position: "relative" }}>
-        <button className="btn btn-sm" onClick={copy} style={{ position: "absolute", top: 8, right: 8, zIndex: 1 }}>
-          {copied ? "Copied" : "Copy"}
-        </button>
-        <pre style={{ ...pre, maxHeight: "none", padding: 14, fontSize: 12.5 }}>{snippet}</pre>
-      </div>
-      <style jsx>{`
-        .pulse-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--green); box-shadow: 0 0 0 0 var(--green); animation: pk-pulse 1.8s infinite; }
-        @keyframes pk-pulse { 0% { box-shadow: 0 0 0 0 rgba(80,200,120,0.5); } 70% { box-shadow: 0 0 0 8px rgba(80,200,120,0); } 100% { box-shadow: 0 0 0 0 rgba(80,200,120,0); } }
-      `}</style>
-    </div>
-  );
-}
+const sampleBanner: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 14px",
+  borderRadius: 10, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-dim)",
+  background: "var(--panel)", border: "1px solid var(--purple)",
+};
 
 const panel: React.CSSProperties = {
   background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16,
-};
-const pre: React.CSSProperties = {
-  margin: 0, padding: 10, borderRadius: 8, background: "var(--bg-2)", border: "1px solid var(--border)",
-  fontSize: 12, lineHeight: 1.5, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap",
-  wordBreak: "break-word", maxHeight: 240, overflowY: "auto",
 };
 const dot: React.CSSProperties = { width: 8, height: 8, borderRadius: 999, flexShrink: 0, marginTop: 4 };
 // Distinct from `failed`: the run didn't report an error, it stopped reporting at all.

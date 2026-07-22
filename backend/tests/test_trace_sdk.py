@@ -11,9 +11,22 @@ from provekit.services import otel  # noqa: E402
 
 
 def _reset():
-    # configure() is idempotent via module globals; reset them per test.
+    """Return the SDK's module globals to their unconfigured state.
+
+    configure() is idempotent via those globals, so without this a test inherits whatever
+    tracer an earlier test built. The log handler has to be reset too, and forgetting it was
+    an order-dependent flake: _install_log_handler returns early when one already exists, so a
+    later test's spans got a handler still bound to a dead TracerProvider, and its log events
+    silently went nowhere. It only failed when pytest-randomly happened to run the tests in
+    the wrong order, which is the worst way for a test to fail.
+    """
+    import logging
+
     pk._configured = False
     pk._tracer = None
+    if pk._log_handler is not None:
+        logging.getLogger().removeHandler(pk._log_handler)
+        pk._log_handler = None
 
 
 def test_trace_is_a_no_op_when_unconfigured(monkeypatch):

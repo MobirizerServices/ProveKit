@@ -68,7 +68,7 @@ The single strongest lever on adoption. ProveKit's pitch is "one import" — the
 29. **Framework quickstarts.** ~~The examples existed; the docs didn't route people to them by framework.~~ [QUICKSTARTS.md](QUICKSTARTS.md) — install line, minimal traced program and the actual span tree for LangGraph, CrewAI and LlamaIndex, including which attributes `map_span` keeps and which it drops. 🔴 S ✅
 30. **Instrumentation coverage report.** ~~No way to see which installed libraries aren't instrumented.~~ Reported by `provekit-doctor`; not yet surfaced in the portal. 🟡 S ◑
 31. **Diagnostic empty state.** The "listening for your first trace…" state is good; make it say *why* nothing has arrived (no key seen, key seen but no spans, spans rejected). 🔴 S ◑
-32. **Preloaded sample project.** A new account should have traces to click before it has an integration. `provekit-demo` does this from the CLI — do it server-side at signup. 🟡 S ◑
+32. **Preloaded sample project.** ~~`provekit-demo` did this from the CLI only.~~ Registration seeds a "Sample data (demo)" project — 18 spans including a failure, a two-turn session and retrieval steps — so the portal is legible before there is an integration. Best-effort and silent: a demo that can break signup is not a demo. 🟡 S ✅
 33. **Versioned docs site.** Docs are markdown in the repo; there's no searchable, versioned site, which is table-stakes for evaluation. 🔴 M ✖
 34. **Actionable error messages.** Every rejection (bad key, malformed OTLP, rate limit) should name the fix, not the failure. 🟡 S ◑
 35. **One-click deploy.** ~~No blueprints.~~ `render.yaml`, `railway.json`, `fly.toml` and [ONE_CLICK.md](../deploy/ONE_CLICK.md). Not yet deployed against real accounts — flagged as such in the doc rather than implied working. 🟡 S ◑
@@ -103,13 +103,13 @@ The strongest differentiator ProveKit has — edit-and-re-run, reconstructed rep
 54. **Recorded-response (VCR) mode.** ~~No way to replay tools against their captured responses.~~ `GET /v1/traces/{id}/cassette` hands back every tool call a trace made with the response it got; `pk.replay(trace_id, target)` serves them by (tool, arguments), falling back to recorded order. A call whose arguments changed is served *and reported diverged* — never counted as a faithful hit. 🔴 M ✅
 55. **Sandboxed live tool calls.** ~~Nothing bounded real execution during replay.~~ `mode="live"` takes an `allow={...}` set and refuses anything outside it; `mode="dry-run"` executes nothing and returns a marker, so you can see what *would* have fired before letting it. 🔴 M ✅
 56. **Step-through / time-travel.** Pause at a span, inspect state, advance. The natural end state of the fork tree. 🟡 XL ✖
-57. **Multi-span editing.** Edit two prompts and re-run once; today each edit is a separate re-run. 🟡 M ✖
+57. **Multi-span editing.** ~~Each edit was a separate re-run, so two edits produced two branches that couldn't be combined.~~ `POST /api/replay/multi` carries N edits through one walk. N edits means N taint sources, and an edit whose text still contains an invalidated value is badged rather than presented as a clean live re-run. 🟡 M ✅
 58. **Structural trace diff.** ~~Compare was side-by-side and visual.~~ `lib/traceDiff.ts` aligns the two trees, classifies each node same/changed/only-in-A/only-in-B, and leads with the first structural divergence. A differing duration is not divergence; a differing output or a missing span is. 🔴 M ✅
 59. **Root-cause hinting.** ~~Nothing pointed at where two runs parted ways.~~ The first divergence is surfaced as a callout above the comparison. 🟡 M ✅
 60. **Streaming playground output.** ~~Re-runs blocked until complete.~~ An SSE variant streams tokens as they arrive, following the pattern `/api/traces/stream` already established. The blocking endpoint is unchanged (replay and experiments share the layer), spend is still metered on the streamed path, and a mid-stream provider error surfaces instead of truncating into what looks like a short answer. 🟡 S ✅
 61. **Runtime prompt fetch.** Prompt versions can be saved and restored in the portal, but there's no `pk.get_prompt("name", label="production")` — so a prompt change still needs a deploy. 🔴 M ◑
 62. **Prompt A/B in production.** Serve two versions by traffic split and compare on live scores. 🟡 L ✖
-63. **Agent/tool playground.** The playground edits single LLM calls; editing a tool's arguments and re-running the step is the missing sibling. 🟡 M ✖
+63. **Agent/tool playground.** ~~Only LLM calls were editable.~~ Tool arguments can be edited: unchanged arguments are a cassette hit, changed ones keep the recorded result but badge it diverged and taint onward. No tool result is ever invented. 🟡 M ✅
 64. **Replay from the SDK.** ~~Everything was portal-driven.~~ `pk.replay(trace_id, target, mode=...)` returns a `ReplayReport` (hits, misses, live calls, diverged, unused, `reliable`), so a production trace can be replayed deterministically in a test or a CI job. 🟡 M ✅
 
 ## F. Collaboration (65–74)
@@ -139,10 +139,10 @@ What running ProveKit *for other people* requires. The [admin console](ADMIN.md)
 80. **Usage metering.** ~~No per-account accounting.~~ Monthly spans and project count are metered per account and enforced as quotas. Token/cost metering and a durable (non-counter) record for billing are still open. 🔴 M ◑
 81. **Support impersonation.** ~~No way to see what a tenant sees.~~ A time-boxed claim inside the existing signed session, enforced read-only by an ASGI middleware that refuses every non-safe method, with start and stop audited. Reads go through the tenant's own query path, so "what they see" is literally the same query. No portal UI yet. 🟡 M ◑
 82. **Tenant lifecycle.** Suspend, export, and hard-delete a tenant, with GDPR-grade deletion that actually removes spans. 🔴 M ◑
-83. **Backup automation & restore drill.** A documented recipe exists; nothing automates it and nothing has ever tested a restore. 🔴 S ◑
-84. **Fleet health view.** Per-tenant ingest lag, error rate, and storage — the operator's answer to "who is filling the database?" beyond a span-count column. 🟡 M ◑
+83. **Backup automation & restore drill.** ~~A recipe nobody automated and nobody had ever tested.~~ `install-backups.sh` schedules a nightly dump *and* a weekly `verify-restore.sh` that restores into a throwaway database and asserts tables, row counts and the alembic head. Exercised against a real Postgres container. A backup nobody has restored is a belief, not a capability. 🔴 S ✅
+84. **Fleet health view.** ~~A span-count column.~~ `GET /api/admin/fleet` ranks tenants by share of the instance's errors and volume, reading pre-aggregated rollups rather than raw spans — measured at 28 statements for 200 tenants / 144k spans. Storage is labelled `approximate` because no per-tenant byte counter exists. 🟡 M ✅
 85. **Compliance posture.** SOC 2 evidence, DPA, subprocessor list, data-retention statement. Nothing exists; every enterprise deal asks. 🔴 L ✖
-86. **Region / residency.** A documented single-region story now, and a path to EU-resident deployment. 🟢 L ✖
+86. **Region / residency.** ~~Undocumented.~~ [RESIDENCY.md](RESIDENCY.md) — where data physically lives self-hosted, what leaves the box (provider calls, webhooks, email), and what an EU-resident deployment needs. Read out of the source, with no compliance claims invented. 🟢 L ✅
 
 ## H. Ecosystem & SDK (87–100)
 

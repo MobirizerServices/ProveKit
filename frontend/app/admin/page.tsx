@@ -1,8 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminProject, AdminStats, AdminUser, AuditEntry, api } from "@/lib/api";
+import { API_BASE, AdminProject, AdminStats, AdminUser, AuditEntry, api } from "@/lib/api";
 import TopNav from "@/components/TopNav";
+
+// Fleet health (roadmap #84). Typed here rather than in lib/api because it is only ever read
+// by this page — the operator console is the one surface that looks across tenants.
+interface FleetTenant {
+  workspace_id: number; name: string; owner: string;
+  traces: number; errors: number; error_rate: number;
+  error_share: number; volume_share: number; blame: number;
+  recent_traces: number; prior_traces: number; trend_pct: number | null;
+  spans_per_trace: number; bytes_per_span: number;
+  ingest_bytes: number; storage_bytes: number; retention_spans: number;
+  sampled_spans: number; last_ingest_at: string | null; ingest_age_seconds: number | null;
+}
+interface FleetSnapshot {
+  window_hours: number; generated_at: string; partial_open_hour: boolean; approximate: boolean;
+  limit: number; total: number;
+  instance: {
+    tenants_active: number; traces: number; errors: number; error_rate: number;
+    ingest: { spool: boolean; queue_depth?: number; lag_seconds?: number };
+  };
+  tenants: FleetTenant[];
+}
 
 export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -16,8 +37,14 @@ export default function AdminPage() {
   const [pq, setPq] = useState(""); const [pOff, setPOff] = useState(0); const [pTotal, setPTotal] = useState(0);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [aq, setAq] = useState(""); const [aOff, setAOff] = useState(0); const [aTotal, setATotal] = useState(0);
+  const [fleet, setFleet] = useState<FleetSnapshot | null>(null);
+  const [fWindow, setFWindow] = useState(24);
 
   const load = () => {
+    // Not in lib/api: this endpoint is read by this page only. `credentials` matches the
+    // shared wrapper so the operator session cookie travels with it.
+    fetch(`${API_BASE}/api/admin/fleet?window_hours=${fWindow}&limit=${PAGE / 2}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null)).then(setFleet).catch(() => {});
     api.adminStats().then(setStats).catch(() => setForbidden(true));
     api.adminUsers({ limit: PAGE, offset: uOff, q: uq })
       .then((r) => { setUsers(r.users); setUTotal(r.total); }).catch(() => {});
@@ -28,7 +55,7 @@ export default function AdminPage() {
   };
   // Re-query on paging; debounce the search so typing doesn't fire a request per keystroke.
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); },
-    [uq, uOff, pq, pOff, aq, aOff]);
+    [uq, uOff, pq, pOff, aq, aOff, fWindow]);
 
   const toggleSuper = async (u: AdminUser) => {
     setErr("");
@@ -63,6 +90,8 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+
+            <FleetPanel snap={fleet} windowHours={fWindow} onWindow={setFWindow} />
 
             <div style={{ ...panel, marginBottom: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -173,6 +202,141 @@ export default function AdminPage() {
 }
 
 const PAGE = 50;
+const WINDOWS: [string, number][] = [["6h", 6], ["24h", 24], ["7d", 168]];
+
+// "Who is filling the database?" — the tenants are already ranked by their share of the
+// instance's traces and failures, so this renders the server's order and never re-sorts.
+// Re-sorting client-side would only ever reorder the page, which is not the instance.
+function FleetPanel({ snap, windowHours, onWindow }:
+  { snap: FleetSnapshot | null; windowHours: number; onWindow: (n: number) => void }) {
+  const inst = snap?.instance;
+  return (
+    <div style={{ ...panel, marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div>
+          <div style={label}>Fleet health</div>
+          <div className="muted" style={{ fontSize: 12.5, marginTop: -4, marginBottom: 8 }}>
+            Who is responsible for what the instance dashboard is showing — worst first.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {WINDOWS.map(([lbl, h]) => (
+            <button key={h} className="btn btn-sm" onClick={() => onWindow(h)}
+              style={h === windowHours ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {inst && (
+        <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+          {inst.tenants_active.toLocaleString()} active {inst.tenants_active === 1 ? "project" : "projects"} ·{" "}
+          {inst.traces.toLocaleString()} traces ·{" "}
+          <span style={{ color: inst.errors ? "var(--err)" : undefined }}>
+            {pct(inst.error_rate)} errors
+          </span>
+          {inst.ingest.spool && (inst.ingest.queue_depth ?? 0) > 0 ? (
+            <span style={{ color: "var(--amber)" }}>
+              {" "}· ingest backlog {inst.ingest.queue_depth} batches, {Math.round(inst.ingest.lag_seconds ?? 0)}s behind
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {/* Never let a bounded read look like a complete one — the whole point of reading
+          rollups is that the numbers stay honest about what they cover. */}
+      {snap?.partial_open_hour && (
+        <div style={{ fontSize: 12, color: "var(--amber)", marginBottom: 8 }}>
+          This hour is ingesting faster than the bounded scan covers — live figures are a floor.
+        </div>
+      )}
+
+      {!snap ? (
+        <div className="muted" style={{ fontSize: 13, padding: "6px 0" }}>Loading…</div>
+      ) : snap.tenants.length === 0 ? (
+        <div className="muted" style={{ fontSize: 13, padding: "6px 0" }}>
+          No project has ingested anything in this window.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={table}>
+            <thead><tr style={hrow}>
+              <th style={th}>Project</th><th style={th}>Traces</th><th style={th}>Trend</th>
+              <th style={th}>Errors</th><th style={th}>Share of errors</th>
+              <th style={th}>Est. size</th><th style={th}>Last ingest</th>
+            </tr></thead>
+            <tbody>
+              {snap.tenants.map((t) => (
+                <tr key={t.workspace_id} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td style={td}>
+                    {t.name}
+                    {t.owner ? <span className="muted" style={{ fontSize: 12 }}> · {t.owner}</span> : ""}
+                  </td>
+                  <td style={td}>{t.traces.toLocaleString()}</td>
+                  <td style={{ ...td, ...trendStyle(t.trend_pct) }}>{trendText(t.trend_pct)}</td>
+                  <td style={{ ...td, color: t.errors ? "var(--err)" : "var(--muted)" }}>
+                    {pct(t.error_rate)}
+                  </td>
+                  <td style={td}><ShareBar share={t.error_share} /></td>
+                  <td style={td} title={`~${t.bytes_per_span.toLocaleString()} bytes/span from a ${t.sampled_spans}-span sample; capped at retention (${t.retention_spans.toLocaleString()} spans)`}>
+                    {bytes(t.storage_bytes)}
+                    <span className="muted" style={{ fontSize: 11.5 }}> · +{bytes(t.ingest_bytes)}</span>
+                  </td>
+                  <td style={{ ...td, color: "var(--muted)", whiteSpace: "nowrap" }}>{age(t.ingest_age_seconds)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+        Volume and errors come from hourly rollups plus the current hour; sizes are estimated
+        from a bounded sample, so read them as magnitudes, not as disk accounting.
+      </div>
+    </div>
+  );
+}
+
+// The share of the instance's failures this tenant owns — the column that answers the
+// question, so it gets a bar rather than another number to compare by eye.
+function ShareBar({ share }: { share: number }) {
+  const w = Math.max(0, Math.min(1, share));
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span style={{ width: 56, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+        <span style={{ display: "block", width: `${w * 100}%`, height: "100%", background: w >= 0.34 ? "var(--err)" : "var(--muted)" }} />
+      </span>
+      <span className="muted" style={{ fontSize: 11.5 }}>{pct(share)}</span>
+    </span>
+  );
+}
+
+const pct = (v: number) => `${(v * 100).toFixed(v > 0 && v < 0.01 ? 2 : 1)}%`;
+
+function trendText(v: number | null): string {
+  if (v === null) return "new";                 // no baseline half — not "+∞%"
+  return `${v > 0 ? "+" : ""}${v.toFixed(0)}%`;
+}
+function trendStyle(v: number | null): React.CSSProperties {
+  if (v === null) return { color: "var(--muted)" };
+  return { color: v >= 50 ? "var(--amber)" : v <= -50 ? "var(--muted)" : "inherit" };
+}
+
+function bytes(n: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+  return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}
+
+function age(seconds: number | null): string {
+  if (seconds === null) return "—";
+  if (seconds < 90) return `${Math.round(seconds)}s ago`;
+  if (seconds < 5400) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 172800) return `${Math.round(seconds / 3600)}h ago`;
+  return `${Math.round(seconds / 86400)}d ago`;
+}
 
 // Hidden entirely when everything fits on one page, so a small deployment sees no chrome.
 function Pager({ offset, total, onPage }: { offset: number; total: number; onPage: (n: number) => void }) {

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import (AuditLog, Dataset, Experiment, Run, User, Workspace,
                       WorkspaceMember, iso_utc)
-from ..services import audit, impersonation
+from ..services import audit, fleet, impersonation
 from ..services.auth import get_current_user, is_bootstrap, is_operator
 # The impersonated views deliberately reuse the tenant's own read path instead of
 # re-implementing it: "what the tenant sees" is only true if it is literally the same query.
@@ -116,6 +116,19 @@ def list_all_projects(limit: int = 50, offset: int = 0, q: str = "",
          "member_count": members.get(w.id, 0), "span_count": spans.get(w.id, 0),
          "retention": w.retention, "redact_pii": w.redact_pii,
          "created_at": iso_utc(w.created_at)} for w in rows]}
+
+
+@router.get("/fleet")
+def fleet_health(window_hours: int = fleet.DEFAULT_WINDOW_HOURS, limit: int = fleet.DEFAULT_LIMIT,
+                 _: User = Depends(require_superuser), db: Session = Depends(get_db)):
+    """Per-tenant ingest volume, trend, error rate, size and freshness — worst tenant first.
+
+    `/projects` answers "how big is each project"; this answers "who is responsible for what
+    the instance dashboard is showing me right now", which is the question actually being asked
+    during an incident. Ordered by share of the instance's own traces and failures, so the top
+    row is the tenant to look at. See services/fleet.py for why nothing here scans raw spans.
+    """
+    return fleet.snapshot(db, window_hours=window_hours, limit=limit)
 
 
 @router.get("/audit")

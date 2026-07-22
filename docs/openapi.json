@@ -234,6 +234,61 @@
         "title": "_DatasetIn",
         "type": "object"
       },
+      "_EditIn": {
+        "description": "One edit inside a multi-span replay.\n\nkind=\"llm\"  — messages/model/params replace the captured request and the span is re-run live.\nkind=\"tool\" — `arguments` replace the captured tool input. Nothing is executed: ProveKit does\n              not own the tool. Identical arguments serve the recorded response; changed\n              arguments make that response evidence of nothing (see _multi_reconstruct).",
+        "properties": {
+          "arguments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arguments"
+          },
+          "kind": {
+            "default": "llm",
+            "title": "Kind",
+            "type": "string"
+          },
+          "messages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/_Msg"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "params": {
+            "default": {},
+            "title": "Params",
+            "type": "object"
+          },
+          "span_id": {
+            "title": "Span Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "span_id"
+        ],
+        "title": "_EditIn",
+        "type": "object"
+      },
       "_ExpIn": {
         "properties": {
           "connection_id": {
@@ -498,6 +553,49 @@
           "content"
         ],
         "title": "_Msg",
+        "type": "object"
+      },
+      "_MultiReplayIn": {
+        "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/_EditIn"
+            },
+            "title": "Edits",
+            "type": "array"
+          },
+          "origin_trace_id": {
+            "title": "Origin Trace Id",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "required": [
+          "origin_trace_id",
+          "edits"
+        ],
+        "title": "_MultiReplayIn",
         "type": "object"
       },
       "_NoteIn": {
@@ -909,6 +1007,58 @@
           }
         },
         "summary": "List Audit",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/fleet": {
+      "get": {
+        "description": "Per-tenant ingest volume, trend, error rate, size and freshness — worst tenant first.\n\n`/projects` answers \"how big is each project\"; this answers \"who is responsible for what\nthe instance dashboard is showing me right now\", which is the question actually being asked\nduring an incident. Ordered by share of the instance's own traces and failures, so the top\nrow is the tenant to look at. See services/fleet.py for why nothing here scans raw spans.",
+        "operationId": "fleet_health_api_admin_fleet_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window_hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "title": "Window Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fleet Health",
         "tags": [
           "admin"
         ]
@@ -3382,6 +3532,46 @@
           }
         },
         "summary": "Replay",
+        "tags": [
+          "playground"
+        ]
+      }
+    },
+    "/api/replay/multi": {
+      "post": {
+        "description": "Fork a trace at SEVERAL spans at once and re-run it once.\n\nEditing the planner and the summariser used to be two replays whose results could not be\ncombined; this is the combined run, with one honest fidelity report over both changes. Tool\nspans can be edited too — their arguments only, because ProveKit cannot execute a tool.",
+        "operationId": "replay_multi_api_replay_multi_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_MultiReplayIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Multi",
         "tags": [
           "playground"
         ]

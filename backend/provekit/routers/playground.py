@@ -5,6 +5,7 @@ The trace replay harness (POST /api/replay) is added in a later milestone and re
 connections + llm_client here.
 """
 import json
+import secrets
 import time
 from collections.abc import AsyncIterator
 
@@ -14,11 +15,18 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import DatasetItem, Experiment, ExperimentResult, Prompt, ProviderConnection, Workspace, _now, iso_utc
+from ..models import (
+    DatasetItem, Experiment, ExperimentResult, Prompt, ProviderConnection, ReplayRun, Run,
+    Workspace, _now, iso_utc,
+)
 from ..scorers import run_scorers
 from ..services import limits, pricing
 from ..services.llm_client import LLMError, approx_usage, complete, judge, stream_complete
-from ..services.replay import reconstruct
+# The multi-span walk below deliberately reuses the single-fork path's helpers rather than
+# copying them: `_messages`/`_text_of`/`_apply` are how ProveKit decides that a span's input
+# changed, and two implementations of that would drift into two different verdicts about
+# whether a replay is trustworthy.
+from ..services.replay import _apply, _messages, _text_of, reconstruct
 from ..services.replay import webhook as replay_webhook
 from ..services.sealing import mask_key, seal, unseal
 from ..services.workspace import current_workspace
@@ -237,6 +245,326 @@ async def replay(data: _ReplayIn, db: Session = Depends(get_db),
         return await reconstruct(db, ws, data.origin_trace_id, data.fork_span_id,
                                  data.model, messages, params,
                                  provider=provider, api_key=api_key, base_url=base_url)
+    except LLMError as e:
+        raise HTTPException(502, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+# ---- multi-span replay: several edits, ONE re-run (#57), including tool arguments (#63) ----
+#
+# Two edits are not two replays. The second edited span usually sits downstream of the first, so
+# two separate re-runs produce two branches whose results cannot be combined afterwards — the
+# combination only exists inside a single walk that carries both changes at once. Hence one
+# request, one branch, one fidelity report.
+_MAX_EDITS = 8   # bound the live provider calls a single request can make
+
+
+class _EditIn(BaseModel):
+    """One edit inside a multi-span replay.
+
+    kind="llm"  — messages/model/params replace the captured request and the span is re-run live.
+    kind="tool" — `arguments` replace the captured tool input. Nothing is executed: ProveKit does
+                  not own the tool. Identical arguments serve the recorded response; changed
+                  arguments make that response evidence of nothing (see _multi_reconstruct).
+    """
+    span_id: str
+    kind: str = "llm"
+    model: str = ""
+    messages: list[_Msg] = []
+    params: dict = {}
+    arguments: str | dict | list | None = None
+
+
+class _MultiReplayIn(BaseModel):
+    origin_trace_id: str
+    edits: list[_EditIn]
+    connection_id: int | None = None
+    provider: str | None = None
+
+
+def _args_text(value) -> str:
+    """The tool arguments as they will be stored on the replayed span's request.input, which is
+    a string for every captured tool span."""
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+
+
+def _args_equal(recorded, edited) -> bool:
+    """Do these two payloads describe the SAME tool call?
+
+    Compared as parsed JSON when both sides are JSON, so re-serialising a payload the user never
+    touched — different key order, different whitespace, which is exactly what a round trip
+    through a browser textarea produces — is not mistaken for a change. Getting this wrong in the
+    permissive direction would hide a real edit; getting it wrong in the strict direction would
+    badge an untouched tool 'diverged' and taint the whole run for nothing. Neither is acceptable,
+    so the comparison is on meaning, not on bytes.
+    """
+    def norm(v):
+        if isinstance(v, str):
+            s = v.strip()
+            if s.startswith(("{", "[")):
+                try:
+                    return json.loads(s)
+                except ValueError:
+                    return s
+            return s
+        return v
+    return norm(recorded) == norm(edited)
+
+
+async def _multi_reconstruct(db: Session, ws: Workspace, origin_trace_id: str,
+                             edits: dict[str, _EditIn], *, provider: str, api_key: str,
+                             base_url: str) -> dict:
+    """Rebuild a trace branch with every edit applied in one pass.
+
+    Same accounting as services/replay.py::reconstruct, extended to N simultaneous edits, which
+    means N taint sources instead of one:
+
+      * `subs`    — old output → new output, threaded forward out of every LIVE re-run;
+      * `tainted` — recorded outputs we can no longer stand behind. Unlike `subs` there is no
+        replacement value: a tool whose arguments changed would not have returned its recorded
+        result, and ProveKit cannot run the tool to find out what it *would* have returned. So
+        the recorded value is kept, badged, and everything derived from it is badged too.
+
+    An edited LLM span is re-run live even when it sits downstream of a taint — the user typed
+    its input, so it is theirs to assert. But if the text they submitted still *contains* an
+    invalidated value (the common case: the portal seeds the editor from the recording), the new
+    output is a confident answer built on fiction. It is produced, badged
+    `meta.replay_input_tainted`, counted against reliability, and its recorded output is tainted
+    so the badge cascades — the alternative, presenting it as a clean live re-run, is the exact
+    failure this whole feature exists to expose.
+    """
+    spans = (db.query(Run).filter(Run.workspace_id == ws.id, Run.trace_id == origin_trace_id)
+             .order_by(Run.id.asc()).all())
+    if not spans:
+        raise ValueError("origin trace not found")
+    order = {s.span_id: i for i, s in enumerate(spans)}
+    missing = [sid for sid in edits if sid not in order]
+    if missing:
+        raise ValueError(f"edited span(s) not in trace: {', '.join(sorted(missing))}")
+    first_i = min(order[sid] for sid in edits)
+
+    # The params/model a *threaded* downstream re-run inherits. reconstruct uses the fork's; with
+    # several forks the earliest LLM edit is the closest analogue — it is the change the rest of
+    # the flow is being re-derived from.
+    lead = next((edits[s.span_id] for s in spans
+                 if s.span_id in edits and edits[s.span_id].kind != "tool"), None)
+    lead_params = dict(lead.params or {}) if lead else {}
+    lead_model = (lead.model if lead else "") or ""
+
+    new_tid = secrets.token_hex(16)
+    id_map: dict[str, str] = {}
+    subs: dict[str, str] = {}
+    tainted: set[str] = set()
+    diverged_ids: set[str] = set()
+    tainted_inputs: set[str] = set()     # live re-runs whose submitted input carried fiction
+    new_rows: list[Run] = []
+    outputs: dict[str, str] = {}         # edited span id → the text this replay produced for it
+
+    def _tainted_ref(text: str) -> bool:
+        return any(t and t in text for t in tainted)
+
+    async def _live(model: str, messages: list[dict], params: dict) -> dict:
+        """One billable call. The cap is re-checked before every call, not just at admission: a
+        multi-edit replay makes N calls from one request, so checking once would let a single
+        request walk straight past the ceiling it is supposed to enforce."""
+        limits.check_spend_cap(ws.id)
+        r = await complete(provider, model, messages, params, api_key=api_key, base_url=base_url)
+        limits.record_spend(ws.id, pricing.estimate(model, r["usage"].get("input_tokens"),
+                                                    r["usage"].get("output_tokens")))
+        return r
+
+    for i, s in enumerate(spans):
+        new_sid = secrets.token_hex(8)
+        id_map[s.span_id] = new_sid
+        new_parent = id_map.get(s.parent_span_id, "") if s.parent_span_id else ""
+        req = dict(s.request or {})
+        res = dict(s.result or {})
+        meta = dict(res.get("meta") or {})
+        edit = edits.get(s.span_id)
+        state = "unchanged"
+        input_tainted = False
+
+        if edit is not None and edit.kind == "tool":
+            # #63: the portal can edit a tool's arguments but can never produce a tool's answer.
+            new_args = _args_text(edit.arguments)
+            same = _args_equal(req.get("input") or "", new_args)
+            req = {**req, "input": new_args}
+            out = _text_of(res)
+            if same:
+                # A cassette hit. The tool is a function of its arguments, so pinning them to the
+                # recorded ones makes the recorded answer valid evidence again — which is also
+                # how a user deliberately stops a taint cascade from an upstream edit.
+                state = "recorded"
+            else:
+                state = "diverged"
+                diverged_ids.add(s.span_id)
+                if out:
+                    tainted.add(out)
+        elif edit is not None:
+            msgs = [{"role": m.role, "content": m.content} for m in edit.messages]
+            input_tainted = any(_tainted_ref(m["content"]) for m in msgs)
+            model = edit.model or req.get("model") or lead_model
+            params = dict(edit.params or {})
+            r = await _live(model, msgs, params)
+            old_out, new_out = _text_of(res), r["output"]
+            outputs[s.span_id] = new_out
+            if old_out and old_out != new_out:
+                subs[old_out] = new_out
+            if input_tainted:
+                tainted_inputs.add(s.span_id)
+                if old_out:
+                    # Downstream spans reference the OLD text, so that is what has to carry the
+                    # badge forward — the new output is derived from an invalidated input.
+                    tainted.add(old_out)
+            req = {**req, "model": model, "input": json.dumps(msgs)}
+            res = {"text": new_out, "meta": {**meta, "usage": r["usage"], "model": model,
+                                             "params": params}}
+            state = "live"
+        elif i < first_i:
+            state = "unchanged"
+        elif s.parent_span_id in diverged_ids or _tainted_ref(json.dumps(req.get("input") or "")):
+            state = "diverged"
+            diverged_ids.add(s.span_id)
+            out = _text_of(res)
+            if out:
+                tainted.add(out)
+        elif s.type == "llm" and subs:
+            new_msgs, any_changed = [], False
+            for m in _messages(req):
+                c, ch = _apply(subs, m["content"])
+                any_changed = any_changed or ch
+                new_msgs.append({"role": m["role"], "content": c})
+            if any_changed:
+                dmodel = req.get("model") or lead_model
+                r = await _live(dmodel, new_msgs, lead_params)
+                old_out = _text_of(res)
+                if old_out and old_out != r["output"]:
+                    subs[old_out] = r["output"]
+                req = {**req, "input": json.dumps(new_msgs)}
+                res = {"text": r["output"], "meta": {**meta, "usage": r["usage"]}}
+                state = "live"
+            else:
+                state = "recorded"
+        else:
+            _, ref_changed = _apply(subs, json.dumps(req.get("input") or ""))
+            state = "diverged" if ref_changed else "recorded"
+            if ref_changed:
+                diverged_ids.add(s.span_id)
+                out = _text_of(res)
+                if out:
+                    tainted.add(out)
+
+        meta_out = dict(res.get("meta") or {})
+        meta_out["replay_of"] = origin_trace_id
+        meta_out["replay_state"] = state
+        if s.span_id in edits:
+            meta_out["replay_edited"] = True
+        if input_tainted:
+            meta_out["replay_input_tainted"] = True
+        res["meta"] = meta_out
+        new_rows.append(Run(
+            workspace_id=ws.id, type=s.type, label=s.label, duration_ms=s.duration_ms,
+            status=s.status, trace_id=new_tid, span_id=new_sid, parent_span_id=new_parent,
+            request=req, result=res, error=s.error, session_id=s.session_id))
+
+    db.add_all(new_rows)
+    rr = ReplayRun(
+        workspace_id=ws.id, origin_trace_id=origin_trace_id,
+        # One column, several forks: the earliest edited span is the branch point; the full set
+        # lives in `overrides`, which is JSON and needs no schema change.
+        fork_span_id=spans[first_i].span_id,
+        overrides={"multi": True, "edits": [
+            {"span_id": e.span_id, "kind": e.kind, "model": e.model, "params": e.params,
+             "arguments": _args_text(e.arguments) if e.kind == "tool" else None}
+            for e in edits.values()]},
+        mode="reconstructed", new_trace_id=new_tid, status="completed")
+    db.add(rr)
+    db.commit(); db.refresh(rr)
+
+    def _count(state: str) -> int:
+        return sum(1 for r in new_rows if (r.result.get("meta") or {}).get("replay_state") == state)
+
+    live, diverged = _count("live"), _count("diverged")
+    reasons = []
+    if diverged:
+        reasons.append(
+            f"{diverged} span(s) diverged: their inputs changed, so their recorded outputs — and "
+            "anything downstream of them — are not what this run would actually have produced. "
+            "ProveKit can't re-run your tools; use webhook replay for an exact re-run.")
+    if tainted_inputs:
+        reasons.append(
+            f"{len(tainted_inputs)} edited span(s) were re-run on text an earlier edit had "
+            "already invalidated, so their new output rests on a value this run cannot stand "
+            "behind.")
+    return {"new_trace_id": new_tid, "replay_run_id": rr.id,
+            "outputs": outputs, "fork_output": next(iter(outputs.values()), ""),
+            "fidelity": {"live": live, "diverged": diverged, "recorded": _count("recorded"),
+                         "unchanged": _count("unchanged")},
+            # A branch with any diverged span, or any edit re-run on invalidated text, is a
+            # hypothesis about the run — never a reproduction of it.
+            "reliable": not diverged and not tainted_inputs,
+            "fidelity_warning": " ".join(reasons),
+            "tainted_input_spans": sorted(tainted_inputs),
+            "live_count": live, "span_count": len(new_rows), "edit_count": len(edits),
+            "mode": "reconstructed-multi"}
+
+
+def _validate_edits(data: _MultiReplayIn) -> dict[str, _EditIn]:
+    out: dict[str, _EditIn] = {}
+    if not data.edits:
+        raise HTTPException(422, "at least one edit is required")
+    if len(data.edits) > _MAX_EDITS:
+        raise HTTPException(422, f"at most {_MAX_EDITS} spans can be edited in one replay")
+    for e in data.edits:
+        if not e.span_id:
+            raise HTTPException(422, "each edit needs a span_id")
+        if e.span_id in out:
+            # Two edits of one span have no defined order and would silently drop one of them.
+            raise HTTPException(422, f"span {e.span_id} is edited twice")
+        if e.kind not in ("llm", "tool"):
+            raise HTTPException(422, "edit kind must be 'llm' or 'tool'")
+        if e.kind == "llm" and not e.messages:
+            raise HTTPException(422, f"span {e.span_id}: at least one message is required")
+        if e.kind == "tool" and e.arguments is None:
+            raise HTTPException(422, f"span {e.span_id}: tool edits need `arguments`")
+        if e.kind == "llm" and e.params.get("max_tokens"):
+            e.params = {**e.params, "max_tokens": min(int(e.params["max_tokens"]), _MAX_TOKENS_CAP)}
+        out[e.span_id] = e
+    return out
+
+
+@router.post("/replay/multi")
+async def replay_multi(data: _MultiReplayIn, db: Session = Depends(get_db),
+                       ws: Workspace = Depends(current_workspace)):
+    """Fork a trace at SEVERAL spans at once and re-run it once.
+
+    Editing the planner and the summariser used to be two replays whose results could not be
+    combined; this is the combined run, with one honest fidelity report over both changes. Tool
+    spans can be edited too — their arguments only, because ProveKit cannot execute a tool.
+    """
+    # One re-run per edit against the burst limit: this endpoint makes as many live calls as it
+    # has LLM edits, so charging it as a single run would make it the cheap way past the ceiling.
+    edits = _validate_edits(data)
+    for _ in range(sum(1 for e in edits.values() if e.kind == "llm") or 1):
+        limits.check_playground_rate(ws.id)
+    limits.check_spend_cap(ws.id)
+    lead = next((e for e in edits.values() if e.kind == "llm"), None)
+    if lead is not None:
+        provider, api_key, base_url = _resolve(db, ws, _RunIn(
+            model=lead.model, messages=lead.messages,
+            connection_id=data.connection_id, provider=data.provider))
+    else:
+        # Tool-only edits never call a provider — `subs` (the only thing that triggers a threaded
+        # live re-run) is fed exclusively by LLM edits — so demanding a connection would refuse a
+        # replay that costs nothing. An empty provider fails loudly if that ever stops holding,
+        # rather than quietly serving mock text as if it were a real re-run.
+        provider, api_key, base_url = "", "", ""
+    try:
+        return await _multi_reconstruct(db, ws, data.origin_trace_id, edits,
+                                        provider=provider, api_key=api_key, base_url=base_url)
     except LLMError as e:
         raise HTTPException(502, str(e))
     except ValueError as e:

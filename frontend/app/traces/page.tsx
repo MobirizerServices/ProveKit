@@ -8,6 +8,7 @@ import TopNav from "@/components/TopNav";
 import TraceDetail from "@/components/TraceDetail";
 import TraceCompare from "@/components/TraceCompare";
 import EmptyState, { SAMPLE_PROJECT_NAME, sampleBadge } from "@/components/EmptyState";
+import Tour, { TourStep, useTour } from "@/components/Tour";
 
 function ListSkeleton() {
   return <><Skeleton w="65%" h={12} /><Skeleton w="85%" h={10} mt={5} /><SkeletonStyles /></>;
@@ -60,6 +61,10 @@ function relTime(iso?: string): string {
 }
 
 const PAGE = 50;
+
+// Versioned: bumping the suffix is the one deliberate way to show the tour again to everyone
+// (e.g. after the layout it points at changes). Never bump it for a copy tweak.
+const TOUR_KEY = "pk_tour_traces_v1";
 
 const WINDOWS: { label: string; hours: number }[] = [
   { label: "All time", hours: 0 }, { label: "Last hour", hours: 1 },
@@ -174,11 +179,60 @@ export default function TracesPage() {
       : sort === "tokens" ? (b.tokens || 0) - (a.tokens || 0)
       : b.id - a.id);   // recent (default) — the API already returns newest-first by id
 
+  // First visit to a *populated* portal gets the tour, once (#37). Gated on a loaded, non-empty
+  // list so it can never teach an empty screen — and on a fresh account the seeded
+  // "Sample data (demo)" project means there is something real to teach against on visit one.
+  const tour = useTour(TOUR_KEY, loaded && shown.length > 0);
+  // Every step after the first needs a trace open, or there is no flow graph to point at.
+  // Idempotent: `before` can fire again on a re-measure.
+  const openFirst = () => setSel((cur) => cur ?? shown[0]?.trace_id ?? null);
+  const tourSteps: TourStep[] = [
+    {
+      target: '[data-tour="trace-list"]',
+      title: "Every run lands here",
+      body: <>One decorator on your agent and each run shows up in this list, newest first, live.
+        Search hits span <em>content</em>, not just labels, and the chips narrow to failures or a
+        time window.</>,
+    },
+    {
+      target: '[data-tour="flow-canvas"]', before: openFirst,
+      title: "The run, as it actually ran",
+      body: <>Model calls, tools and steps nested exactly as they nested at runtime — not a flat
+        log. Click any node to select it.</>,
+    },
+    {
+      target: '[data-tour="inspector"]', before: openFirst,
+      title: "What that node saw",
+      body: <>Input, output, parameters, tokens and cost for the selected node. On an LLM node,
+        <b> ▶ Edit &amp; re-run</b> replays it with its real data.</>,
+    },
+    {
+      target: '[data-tour="view-toggle"]', before: openFirst,
+      title: "Flow or waterfall",
+      body: <>Same run, two questions. Flow answers &ldquo;what did it do?&rdquo;; waterfall
+        answers &ldquo;where did the time go?&rdquo;</>,
+    },
+    {
+      target: '[data-tour="compare"]', before: openFirst,
+      title: "One that worked, one that didn't",
+      body: <>Put two runs side by side to see what actually differed. That&apos;s the tour — the
+        <b> Tour</b> button up top replays it any time.</>,
+    },
+  ];
+
   return (
     <>
       <TopNav />
       <main style={{ maxWidth: sel ? 1600 : 1180, margin: "0 auto", padding: "24px 20px 80px", transition: "max-width .2s" }}>
-        <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Traces</h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Traces</h1>
+          {/* The tour is one-shot, so dismissing it has to be safe: this is the way back in. */}
+          {shown.length > 0 && (
+            <button className="btn btn-sm btn-ghost" onClick={tour.start} title="Replay the walkthrough">
+              ✦ Tour
+            </button>
+          )}
+        </div>
         <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
           Every run your agent makes, captured from one decorator — the whole flow of model
           calls, tools, and steps, nested as it actually ran.
@@ -207,7 +261,7 @@ export default function TracesPage() {
                 {listOpen ? "‹" : "›"}
               </button>
             )}
-            <div style={{ display: listOpen ? "flex" : "none", flexDirection: "column", gap: 8, maxHeight: "76vh" }}>
+            <div data-tour="trace-list" style={{ display: listOpen ? "flex" : "none", flexDirection: "column", gap: 8, maxHeight: "76vh" }}>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search label or content…"
                 style={{ background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 }} />
               <div style={{ display: "flex", gap: 6 }}>
@@ -287,7 +341,7 @@ export default function TracesPage() {
               ) : (
                 <>
                   <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-                    <select value="" onChange={(e) => e.target.value && setVs(e.target.value)}
+                    <select value="" data-tour="compare" onChange={(e) => e.target.value && setVs(e.target.value)}
                       title="Compare this trace against another"
                       style={{ background: "var(--panel-2)", color: "var(--muted)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "5px 9px", fontSize: 12 }}>
                       <option value="">⇄ Compare with…</option>
@@ -303,6 +357,7 @@ export default function TracesPage() {
           </div>
         )}
       </main>
+      <Tour steps={tourSteps} open={tour.open} onClose={tour.close} />
     </>
   );
 }

@@ -6,6 +6,7 @@ import { estimateCost, fmtCost } from "@/lib/cost";
 import { useVirtualRows } from "@/lib/useVirtualRows";
 import TraceGraph, { heatColor } from "@/components/TraceGraph";
 import Playground from "@/components/Playground";
+import { SpanBody } from "@/components/spanRenderers";
 
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
@@ -70,6 +71,19 @@ function Transcript({ msgs }: { msgs: { role: string; content: string }[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// The default span body: input, output, and the error if it failed. Every custom span renderer
+// falls back to exactly this, so it lives in one place and both the inspector and the waterfall
+// row use it.
+function DefaultBody({ span: s }: { span: TraceSpan }) {
+  return (
+    <>
+      <IO label="Input" value={s.request?.input} />
+      <IO label="Output" value={s.result?.text} />
+      {(s.error || s.status === "failed") && <ErrorBlock error={s.error} />}
+    </>
   );
 }
 
@@ -169,7 +183,8 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
           {!readOnly && traceId && <ShareButton traceId={traceId} />}
-          <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2 }}>
+          {/* data-tour marks the elements the product tour rings (components/Tour.tsx). */}
+          <div data-tour="view-toggle" style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2 }}>
             {(["flow", "waterfall"] as const).map((v) => (
               <button key={v} onClick={() => setView(v)} style={toggleBtn(view === v)}>
                 {v === "flow" ? "Flow" : "Waterfall"}
@@ -191,14 +206,14 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
       {view === "flow" ? (
         // Full-height studio: canvas fills the space, a resizable/collapsible inspector on the right.
         <div className="flow-studio" style={{ display: "flex", height: "62vh", minHeight: 420, border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
-          <div className="flow-canvas" style={{ flex: 1, minWidth: 0, position: "relative" }}>
+          <div className="flow-canvas" data-tour="flow-canvas" style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <TraceGraph spans={spans} selected={picked} onSelect={setPicked} fill />
           </div>
           {/* collapse toggle on the divider */}
           <button className="flow-collapse-btn" onClick={() => setInspectorOpen((o) => !o)} title={inspectorOpen ? "Hide inspector" : "Show inspector"}
             style={{ ...collapseBtn, right: inspectorOpen ? 388 : 8 }}>{inspectorOpen ? "›" : "‹"}</button>
           {inspectorOpen && (
-            <div className="flow-inspector" style={{ width: 380, flexShrink: 0, borderLeft: "1px solid var(--border)", overflowY: "auto", background: "var(--panel)" }}>
+            <div className="flow-inspector" data-tour="inspector" style={{ width: 380, flexShrink: 0, borderLeft: "1px solid var(--border)", overflowY: "auto", background: "var(--panel)" }}>
               {sel ? <Inspector span={sel} traceId={traceId} readOnly={readOnly} onPlayground={setPgSpan} /> : <div className="muted" style={{ padding: 16, fontSize: 13 }}>Click a node to inspect it.</div>}
             </div>
           )}
@@ -266,13 +281,9 @@ function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSp
       </div>
 
       <div style={{ padding: 14 }}>
-        {tab === "output" && (
-          <>
-            <IO label="Input" value={s.request?.input} />
-            <IO label="Output" value={s.result?.text} />
-            {(s.error || s.status === "failed") && <ErrorBlock error={s.error} />}
-          </>
-        )}
+        {/* A team can render its own domain span here (components/spanRenderers.tsx); anything
+            unclaimed — or a renderer that declines or throws — lands on DefaultBody. */}
+        {tab === "output" && <SpanBody span={s} fallback={<DefaultBody span={s} />} />}
         {tab === "raw" && (
           <pre style={{ ...pre, maxHeight: "48vh" }}>{JSON.stringify({ request: s.request, result: s.result }, null, 2)}</pre>
         )}
@@ -701,9 +712,7 @@ function Tree({ spans, focusSpan }: { spans: TraceSpan[]; focusSpan?: string | n
         {isOpen && (
           <div style={{ padding: `4px 0 10px ${depth * 16 + 14}px` }}>
             {s.request?.model && <div className="muted mono" style={{ fontSize: 11.5, marginBottom: 6 }}>{s.request.model}</div>}
-            <IO label="Input" value={s.request?.input} />
-            <IO label="Output" value={s.result?.text} />
-            {(s.error || failed) && <ErrorBlock error={s.error} />}
+            <SpanBody span={s} fallback={<DefaultBody span={s} />} />
           </div>
         )}
       </div>

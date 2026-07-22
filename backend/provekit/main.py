@@ -21,7 +21,8 @@ from .observability import (
     setup_logging,
 )
 from .routers import (
-    admin, alerts, apikeys, auth, dataset_writes, datasets, experiments, metrics, playground,
+    activity, admin, alerts, apikeys, auth, dataset_writes, datasets, experiments, export,
+    metrics, playground,
     projects, traces, views, webhooks,
 )
 
@@ -166,6 +167,9 @@ app.include_router(projects.router)
 app.include_router(playground.router)
 app.include_router(views.router)
 app.include_router(webhooks.router)
+app.include_router(activity.router)
+app.include_router(export.router)
+app.include_router(export.key_router)
 app.include_router(admin.router)
 
 

@@ -190,3 +190,27 @@ class _FakeDB:
     def commit(self): pass
     def rollback(self): pass
     def query(self, *a, **k): raise AssertionError("not used in these tests")
+
+
+# ---- the same guard, on provider connections (found via the #85 compliance review) ---------
+
+def test_a_provider_base_url_is_ssrf_guarded():
+    """The server makes outbound calls to a connection's base_url, so it is SSRF by
+    construction — but it was stored unguarded, meaning a member could point a connection at
+    cloud metadata and read the response back through the playground. Found because a
+    compliance document claimed "SSRF protection on all outbound URLs" and a verifier checked.
+    """
+    with _client() as c:
+        r = c.post("/api/connections",
+                   json={"provider": "openai_compatible", "key": "sk-x",
+                         "base_url": "http://169.254.169.254/latest/meta-data"})
+        assert r.status_code == 422 and "base_url rejected" in r.text
+
+
+def test_a_legitimate_base_url_is_still_accepted():
+    with _client() as c:
+        r = c.post("/api/connections",
+                   json={"provider": "openai_compatible", "key": "sk-x",
+                         "base_url": "https://api.example.com/v1"})
+        assert r.status_code == 200
+        c.delete(f"/api/connections/{r.json()['id']}")

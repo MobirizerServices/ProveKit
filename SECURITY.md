@@ -73,9 +73,27 @@ within 72 hours. Please include reproduction steps and the affected version.
   and CI fails on any new high/critical advisory (`npm audit --audit-level=high`).
 - Python deps use compatible-release ranges; CI installs and tests them across 3.11–3.13.
 
+## Compliance
+
+**ProveKit is not SOC 2 certified — no report, no auditor, no observation period** — and holds
+no other certification. What exists instead is a written posture, grounded in this codebase:
+
+- [docs/COMPLIANCE.md](docs/COMPLIANCE.md) — the controls that genuinely exist (each pointing
+  at the file that implements it and how to verify it yourself), the data-retention statement,
+  and an explicit gap list of what an audit would ask for and not find.
+- [docs/SUBPROCESSORS.md](docs/SUBPROCESSORS.md) — empty for a self-hosted deployment, because
+  nothing leaves the host until you configure it. Everything optional is enumerated.
+- [docs/DPA.md](docs/DPA.md) — a processing-agreement **template** requiring legal review, not
+  executed terms.
+
+Self-hosting is what makes the answer short: ProveKit runs inside your control environment, so
+it is a component in your audit scope rather than a vendor added to it.
+
 ## What is NOT yet done (be aware before exposing publicly)
 
-- No third-party penetration test or formal audit has been performed.
+- No third-party penetration test or formal audit has been performed, and no SOC 2 (or other)
+  certification exists — see [docs/COMPLIANCE.md](docs/COMPLIANCE.md) for the full gap list,
+  including no MFA/SSO, no audit logging of reads, and no per-subject erasure.
 - **No Content-Security-Policy yet** — the other security headers ship, but script sources
   aren't constrained.
 - Without `REDIS_URL`, rate-limit windows are per-worker, so the effective ingest/login caps

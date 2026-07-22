@@ -20,7 +20,7 @@ from ..models import (
     Workspace, _now, iso_utc,
 )
 from ..scorers import run_scorers
-from ..services import errors, limits, pricing, share
+from ..services import errors, limits, netguard, pricing, share
 from ..services.llm_client import LLMError, approx_usage, complete, judge, stream_complete
 # The multi-span walk below deliberately reuses the single-fork path's helpers rather than
 # copying them: `_messages`/`_text_of`/`_apply` are how ProveKit decides that a span's input
@@ -73,6 +73,15 @@ def create_connection(data: _ConnIn, db: Session = Depends(get_db),
         raise HTTPException(422, errors.provider_key_required(provider))
     if provider == "openai_compatible" and not data.base_url.strip():
         raise HTTPException(422, errors.BASE_URL_REQUIRED)
+    if data.base_url.strip():
+        # The server makes outbound calls to this, so it is SSRF by construction — the same
+        # guard alert webhooks and replay callbacks already go through. It was missing here,
+        # which meant a member could point a connection at cloud metadata or an internal
+        # service and read the response back through the playground.
+        try:
+            netguard.guard_url(data.base_url.strip())
+        except Exception as exc:
+            raise HTTPException(422, f"base_url rejected: {exc}") from None
     key = data.key.strip()
     c = ProviderConnection(
         workspace_id=ws.id, provider=provider,

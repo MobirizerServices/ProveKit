@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, getProjectId, Member, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
 import TopNav from "@/components/TopNav";
 import ModelConnections from "@/components/ModelConnections";
+import ActivityFeed from "@/components/ActivityFeed";
 
 export default function SettingsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -161,6 +162,13 @@ export default function SettingsPage() {
 
                 <div style={{ marginBottom: 22 }}>
                   <ModelConnections />
+                </div>
+
+                {/* Lives next to the settings it explains: the row above says retention is
+                    5000, this says who set it to that and when. Every member can read it —
+                    it is not an owner-only view. */}
+                <div style={{ marginBottom: 22 }}>
+                  <ActivityFeed projectId={sel} />
                 </div>
 
                 {isOwner && (

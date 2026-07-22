@@ -73,7 +73,7 @@ The single strongest lever on adoption. ProveKit's pitch is "one import" — the
 34. **Actionable error messages.** ~~Rejections named the symptom.~~ Phrasing centralised in `services/errors.py` so a message can't drift per-router, rewritten to name the fix. Status codes and response shapes unchanged — clients depend on them and this item is about the text. 🟡 S ✅
 35. **One-click deploy.** ~~No blueprints.~~ `render.yaml`, `railway.json`, `fly.toml` and [ONE_CLICK.md](../deploy/ONE_CLICK.md). Not yet deployed against real accounts — flagged as such in the doc rather than implied working. 🟡 S ◑
 36. **Migration guides.** ~~Nothing for people switching.~~ [MIGRATING.md](MIGRATING.md) — concept mapping for LangSmith and Langfuse, what moves cleanly, what doesn't, and the OTLP endpoint as the fastest path. 🟡 M ✅
-37. **Interactive product tour.** First visit to a populated portal should teach the flow graph, not present it cold. 🟢 M ✖
+37. **Interactive product tour.** ~~A populated portal was presented cold.~~ A dismissible first-visit tour over the sample project (#32), shown once. 🟢 M ✅
 38. **Zero-config local mode polish.** Local mode skips login and lands in a default project — extend it to a single `provekit up` that runs backend + frontend + demo data. 🟡 S ◑
 
 ## D. Evaluation depth (39–52)
@@ -125,7 +125,7 @@ ProveKit is currently a single-player tool with multi-user auth.
 71. **Scheduled digests.** A weekly "here's what regressed" email or Slack post. 🟡 M ✖
 72. **Finer roles.** ~~Owner/member only, and both could write — so a PM or support lead had to be handed a role that can delete the project's data.~~ A `viewer` role, enforced in `workspace.current_workspace` immediately after the project is resolved, method-based so a new mutating endpoint is covered the day it is written. An unrecognised role falls to viewer, not member. 🔴 M ✅
 73. **Pending-invite state.** Members are invited by email; there's no visible pending/expired invite lifecycle. 🟡 S ◑
-74. **Activity feed.** Who changed a prompt, promoted a dataset row, or resolved an alert. 🟢 M ✖
+74. **Activity feed.** ~~No project-level history.~~ A read-only view over `audit_logs` — no second log to drift — gated by an **allowlist** of tenant-visible actions, because impersonation rows are recorded against the tenant's own workspace and scoping alone would have shown a support session to the tenant. It publishes its own coverage gaps as data, with a test that fails if a listed gap gets wired. 🟢 M ◑
 
 ## G. Operations & multi-tenancy (75–86)
 
@@ -141,7 +141,7 @@ What running ProveKit *for other people* requires. The [admin console](ADMIN.md)
 82. **Tenant lifecycle.** Suspend, export, and hard-delete a tenant, with GDPR-grade deletion that actually removes spans. 🔴 M ◑
 83. **Backup automation & restore drill.** ~~A recipe nobody automated and nobody had ever tested.~~ `install-backups.sh` schedules a nightly dump *and* a weekly `verify-restore.sh` that restores into a throwaway database and asserts tables, row counts and the alembic head. Exercised against a real Postgres container. A backup nobody has restored is a belief, not a capability. 🔴 S ✅
 84. **Fleet health view.** ~~A span-count column.~~ `GET /api/admin/fleet` ranks tenants by share of the instance's errors and volume, reading pre-aggregated rollups rather than raw spans — measured at 28 statements for 200 tenants / 144k spans. Storage is labelled `approximate` because no per-tenant byte counter exists. 🟡 M ✅
-85. **Compliance posture.** SOC 2 evidence, DPA, subprocessor list, data-retention statement. Nothing exists; every enterprise deal asks. 🔴 L ✖
+85. **Compliance posture.** ~~Nothing existed.~~ A security-posture document grounded in controls that actually exist, a self-hosted subprocessor list, a retention statement, and a DPA **template** marked as requiring legal review — leading with "ProveKit is not SOC 2 certified" and an explicit gap list. Stays partial because certification needs an auditor, not a document. Reviewing it found a live SSRF gap. 🔴 L ◑
 86. **Region / residency.** ~~Undocumented.~~ [RESIDENCY.md](RESIDENCY.md) — where data physically lives self-hosted, what leaves the box (provider calls, webhooks, email), and what an EU-resident deployment needs. Read out of the source, with no compliance claims invented. 🟢 L ✅
 
 ## H. Ecosystem & SDK (87–100)
@@ -154,13 +154,13 @@ ProveKit is OTel-native, which is real leverage — but the surface a team build
 90. **OpenAPI spec + generated clients.** ~~FastAPI served `/openapi.json`, but nothing committed it, diffed it, or kept it honest.~~ `scripts/export_openapi.py` writes [openapi.json](openapi.json), CI fails when it drifts, and [API.md](API.md) covers the auth split and client generation — with an honest audit of which endpoints still lack response models. 🔴 S ✅
 91. **A real CLI.** ~~`provekit-demo` and `provekit-mcp` only.~~ `provekit traces list/get`, `datasets list/create/add`, `eval run --fail-under`, `doctor` — a pure HTTP client over the documented `/v1` endpoints, so it works against a remote instance. `--json` everywhere. Dataset *writes* still fall back to `/api` because `/v1/datasets` is read-only. 🟡 M ◑
 92. **Outbound webhooks.** ~~Only a breached alert rule could push anywhere; everything else needed polling.~~ Per-project subscriptions to `trace.completed` / `trace.failed` / `experiment.finished` / `alert.fired`, HMAC-signed with the timestamp inside the signed material so a captured delivery can't be replayed. A dead endpoint backs off and disables itself *with the reason recorded*, and the destination is SSRF-guarded. Emitting is best-effort — a customer's slow endpoint must never fail an ingest. 🟡 M ✅
-93. **Bulk & scheduled export.** To S3 or a warehouse, so trace data joins the rest of a company's analytics. 🟡 M ✖
+93. **Bulk & scheduled export.** ~~No way to get data out in bulk.~~ Streaming NDJSON export over cookie or key auth, resolving offloaded payloads so a warehouse gets content rather than blob pointers. *Scheduled* export needs somewhere to store a schedule and is not built — described, not faked. 🟡 M ◑
 94. **OTLP gRPC ingest.** ~~A protobuf body returned `200 {"errorMessage": "invalid JSON"}` — which OTLP defines as success, so Go's protobuf-only exporter and every `http/protobuf` default had its spans silently discarded.~~ `/v1/traces` now decodes `application/x-protobuf` through the same pipeline (spool, quota, dedupe), and an undecodable body is a loud 400. **gRPC on :4317 is still not served** — that needs an HTTP/2 listener and a C-extension dependency. 🔴 M ◑
 95. **MCP write operations.** ~~Read-only.~~ Promote a trace or span into a dataset, create a dataset, register an experiment — with a dry-run preview, the target named back in every result, and ambiguity refused rather than guessed. Deliberately append-only: no delete or edit tools, because rewriting an item's `expected` silently changes what every past experiment was scored against. 🟡 M ✅
 96. **Helm chart / k8s manifests.** ~~Docker Compose was the only supported deployment.~~ A chart at `deploy/helm/provekit` and plain manifests at `deploy/k8s` (the latter verified with `kubectl kustomize`; the chart is **unlinted** — `helm` wasn't available — and says so). 🔴 M ◑
 97. **Terraform provider.** Declarative projects, keys, and alerts for teams that manage infra as code. 🟢 L ✖
 98. **API stability policy.** ~~No stated deprecation policy.~~ [API_STABILITY.md](API_STABILITY.md) — three tiers (stable `/v1` + SDK surface, experimental, internal `/api`), what counts as breaking, and the deprecation window with a worked example. 🔴 S ✅
-99. **Custom span renderers.** A plugin hook so a team can render *their* domain span (a retrieval, a simulation, a game state) natively. 🟢 L ✖
+99. **Custom span renderers.** ~~No way to render a domain span natively.~~ A keyed registry with a documented contract and total fallback — a throwing custom renderer drops to the default view rather than blanking the trace, because a debugger that dies on the span you're debugging is worse than a plain one. 🟢 L ✅
 100. **Contribution ladder.** ~~No on-ramp.~~ Issue/PR templates plus an instrumentor guide that routes contributors at the dialect conformance suite (#11) — add a fixture, and the mapping it must satisfy is asserted for you. That suite is the best on-ramp this project has. 🟡 M ✅
 
 ---

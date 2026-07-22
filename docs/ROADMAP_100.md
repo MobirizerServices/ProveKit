@@ -55,7 +55,7 @@ Everything here is fine on a demo instance and breaks on a real one.
 21. **Streaming trace updates.** ~~Every viewer refetched the whole list every 5s.~~ `GET /api/traces/stream` (SSE) announces new traces and the client refetches through its normal path; a 30s poll remains as a fallback. 🔴 M ✅
 22. **Large-trace virtualization.** A 1000-span trace renders every node. Virtualize the tree and waterfall. 🔴 M ✖
 23. **Ingest backpressure.** ~~No queue between accept and write — a traffic spike became DB pressure and 5xx (which, per #1, then duplicated).~~ Once the spool backlog passes `SPOOL_MAX_DEPTH` the endpoint sheds with `503 + Retry-After` instead of taking work the database can't absorb; the depth check is TTL-cached so it costs no syscall per request. 🔴 M ✅
-24. **SDK-side durable buffer.** If the portal is unreachable the batch is dropped by design (fail-open). A bounded on-disk buffer would make brief outages lossless without ever blocking the app. 🟡 M ✖
+24. **SDK-side durable buffer.** ~~If the portal was unreachable the batch was dropped by design (fail-open).~~ A failed export is written to a bounded on-disk buffer and retried on the next export or flush, oldest evicted first. Still fail-open: an unwritable directory degrades to the old behaviour rather than raising. The TS SDK re-queues in memory (no disk in a browser). 🟡 M ✅
 25. **Published load numbers.** No soak test, no "X spans/sec on Y hardware". Teams sizing a self-host deployment have nothing to go on. 🔴 M ✖
 26. **Frontend perf budget.** Bundle size and Lighthouse aren't gated in CI, so regressions land invisibly. 🟢 S ✖
 

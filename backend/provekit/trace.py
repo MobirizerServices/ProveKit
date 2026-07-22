@@ -126,25 +126,57 @@ class _ProveKitExporter:
     We emit JSON (not protobuf) because the ingest endpoint reads JSON; this keeps the
     server unchanged and the SDK's only heavy dependency the OTel SDK itself.
     """
-    def __init__(self, url: str, api_key: str):
+    def __init__(self, url: str, api_key: str, buffer=None):
         self._url = url
         self._headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        self._buffer = buffer
+
+    def _send(self, body: dict) -> bool:
+        """POST one OTLP body. False on anything that isn't an accepted write.
+
+        The status code matters: the server sheds load with 503 when its ingest backlog is
+        full, and a key can be revoked mid-run. Treating those as success — which this did,
+        by never looking — silently drops exactly the spans the retry path exists for.
+        """
+        import httpx
+        r = httpx.post(self._url, json=body, headers=self._headers, timeout=5,
+                       follow_redirects=False)
+        if r.status_code >= 400:
+            log.debug("provekit trace export rejected: HTTP %s", r.status_code)
+            return False
+        return True
 
     def export(self, spans):
         from opentelemetry.sdk.trace.export import SpanExportResult
+        body = {"resourceSpans": [{"scopeSpans": [{"spans": [_span_to_otlp(s) for s in spans]}]}]}
         try:
-            import httpx
-            body = {"resourceSpans": [{"scopeSpans": [{"spans": [_span_to_otlp(s) for s in spans]}]}]}
-            httpx.post(self._url, json=body, headers=self._headers, timeout=5, follow_redirects=False)
-            return SpanExportResult.SUCCESS
+            # Retry what an earlier outage left buffered first, so traces land in the order
+            # they happened rather than newest-first after a reconnect.
+            if self._buffer is not None and self._buffer.depth():
+                self._buffer.drain(self._send)
+            if self._send(body):
+                return SpanExportResult.SUCCESS
+            self._stash(body)
+            return SpanExportResult.FAILURE
         except Exception as exc:  # never let a trace-export failure surface into the user's app
             log.debug("provekit trace export failed: %s", exc)
+            self._stash(body)
             return SpanExportResult.FAILURE
+
+    def _stash(self, body: dict) -> None:
+        if self._buffer is not None:
+            self._buffer.put(body)
 
     def shutdown(self):
         pass
 
     def force_flush(self, timeout_millis: int = 30000):
+        """A flush is the app's last chance to get its spans out — drain the buffer too."""
+        try:
+            if self._buffer is not None and self._buffer.depth():
+                self._buffer.drain(self._send)
+        except Exception:
+            pass
         return True
 
 
@@ -203,13 +235,38 @@ def _install_log_handler(level: int) -> None:
     logging.getLogger().addHandler(_log_handler)
 
 
+def _make_buffer(max_batches: int | None, directory: str | None):
+    """Build the on-disk retry buffer, or None if it's disabled/unusable.
+
+    Never raises: a buffer we can't construct means the SDK behaves exactly as it did before
+    it existed, which is a degraded safety net and not a broken app.
+    """
+    try:
+        from .buffer import SpanBuffer
+        if max_batches is None:
+            max_batches = int(os.environ.get("PROVEKIT_BUFFER_BATCHES", "500"))
+        if max_batches <= 0:
+            return None
+        return SpanBuffer(directory or os.environ.get("PROVEKIT_BUFFER_DIR") or None,
+                          max_batches=max_batches)
+    except Exception as exc:
+        log.debug("provekit: span buffer disabled (%s)", exc)
+        return None
+
+
 def configure(api_key: str | None = None, endpoint: str | None = None,
-              *, batch: bool = True, capture_logs: bool = True, log_level: int = logging.INFO) -> bool:
+              *, batch: bool = True, capture_logs: bool = True, log_level: int = logging.INFO,
+              buffer_batches: int | None = None, buffer_dir: str | None = None) -> bool:
     """Wire up the tracer. Returns True if tracing is active, False if it's a no-op.
 
     Called automatically on first use; call it explicitly only to pass values in code
     instead of the environment. Idempotent. `capture_logs` attaches a handler that records
-    your `logging` calls (at `log_level`+) as events on the active span."""
+    your `logging` calls (at `log_level`+) as events on the active span.
+
+    A failed export is buffered on disk and retried on the next one, so a deploy or a brief
+    network blip doesn't lose traces. `buffer_batches=0` turns that off and restores the old
+    drop-on-failure behaviour; `PROVEKIT_BUFFER_BATCHES` / `PROVEKIT_BUFFER_DIR` do the same
+    from the environment."""
     global _tracer, _configured, _api_key, _endpoint
     with _lock:
         if _configured:
@@ -226,7 +283,8 @@ def configure(api_key: str | None = None, endpoint: str | None = None,
             from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
             url = endpoint.rstrip("/") + "/v1/traces"
             provider = TracerProvider()
-            exporter = _ProveKitExporter(url, api_key)
+            exporter = _ProveKitExporter(url, api_key, buffer=_make_buffer(buffer_batches,
+                                                                          buffer_dir))
             proc = BatchSpanProcessor(exporter) if batch else SimpleSpanProcessor(exporter)
             provider.add_span_processor(proc)
             _tracer = provider.get_tracer("provekit")

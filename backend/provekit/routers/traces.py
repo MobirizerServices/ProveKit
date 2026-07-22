@@ -593,3 +593,36 @@ def get_trace_by_key(trace_id: str, request: Request, db: Session = Depends(get_
     """Full span tree of one trace using the project key (Bearer)."""
     ws = _resolve_ingest_ws(db, request, authorization)
     return _get_trace(db, ws, trace_id)
+
+
+@router.get("/traces/{trace_id}/cassette")
+def get_trace_cassette(trace_id: str, request: Request, db: Session = Depends(get_db),
+                       authorization: str | None = Header(default=None)):
+    """Every tool call this trace made, with the response it got — a cassette for replay.
+
+    Portal-side replay can re-run LLM calls but not tools: ProveKit doesn't own them, so a run
+    whose behaviour depends on a tool result diverges from reality (#194 makes that visible
+    rather than silently wrong). The SDK *does* own them, and this is the missing half — hand
+    the recorded responses back to the process that has the tools, and a replay can be
+    deterministic, free and side-effect-free.
+
+    Ordered by span id so a sequential fallback match (the same tool called twice with
+    different arguments) replays in the order it originally happened.
+    """
+    ws = _resolve_ingest_ws(db, request, authorization)
+    spans = (db.query(Run)
+             .filter(Run.workspace_id == ws.id, Run.trace_id == trace_id, Run.type == "tool")
+             .order_by(Run.id.asc()).all())
+    entries = []
+    for s in spans:
+        meta = (s.result or {}).get("meta") or {}
+        entries.append({
+            "span_id": s.span_id,
+            "tool": meta.get("tool") or s.label or "",
+            "input": ((s.request or {}).get("input") or ""),
+            "output": (s.result or {}).get("text") or "",
+            "status": s.status,
+            "error": s.error or "",
+            "duration_ms": s.duration_ms,
+        })
+    return {"trace_id": trace_id, "entries": entries}

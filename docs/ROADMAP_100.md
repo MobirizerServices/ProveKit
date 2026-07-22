@@ -99,9 +99,9 @@ Datasets, scorers, experiments and a CI gate all exist. What's missing is everyt
 
 The strongest differentiator ProveKit has — edit-and-re-run, reconstructed replay, fork trees. These deepen it.
 
-53. **Tool re-execution in replay.** Reconstructed replay re-runs LLM calls and threads outputs downstream, but tool spans aren't re-executed — so any run whose behaviour depends on tool results diverges from reality. The biggest fidelity gap in the feature. 🔴 L ◑
-54. **Recorded-response (VCR) mode.** Replay tools against their captured responses for deterministic, free, side-effect-free replay. 🔴 M ✖
-55. **Sandboxed live tool calls.** For when you *do* want real execution: an allowlist and a dry-run mode, so replay can't fire a production side effect twice. 🔴 M ✖
+53. **Tool re-execution in replay.** ~~Tool spans weren't re-executed, so any run whose behaviour depended on a tool result diverged from reality.~~ Closed from the SDK side, which is the side that owns the tools: register them with `@pk.tool` and `pk.replay(..., mode="live")` calls the real thing on a cassette miss. 🔴 L ✅
+54. **Recorded-response (VCR) mode.** ~~No way to replay tools against their captured responses.~~ `GET /v1/traces/{id}/cassette` hands back every tool call a trace made with the response it got; `pk.replay(trace_id, target)` serves them by (tool, arguments), falling back to recorded order. A call whose arguments changed is served *and reported diverged* — never counted as a faithful hit. 🔴 M ✅
+55. **Sandboxed live tool calls.** ~~Nothing bounded real execution during replay.~~ `mode="live"` takes an `allow={...}` set and refuses anything outside it; `mode="dry-run"` executes nothing and returns a marker, so you can see what *would* have fired before letting it. 🔴 M ✅
 56. **Step-through / time-travel.** Pause at a span, inspect state, advance. The natural end state of the fork tree. 🟡 XL ✖
 57. **Multi-span editing.** Edit two prompts and re-run once; today each edit is a separate re-run. 🟡 M ✖
 58. **Structural trace diff.** Compare is side-by-side and visual; a diff that aligns trees and highlights *first divergence* is what you actually want. 🔴 M ◑
@@ -110,7 +110,7 @@ The strongest differentiator ProveKit has — edit-and-re-run, reconstructed rep
 61. **Runtime prompt fetch.** Prompt versions can be saved and restored in the portal, but there's no `pk.get_prompt("name", label="production")` — so a prompt change still needs a deploy. 🔴 M ◑
 62. **Prompt A/B in production.** Serve two versions by traffic split and compare on live scores. 🟡 L ✖
 63. **Agent/tool playground.** The playground edits single LLM calls; editing a tool's arguments and re-running the step is the missing sibling. 🟡 M ✖
-64. **Replay from the SDK.** Everything is portal-driven; `pk.replay(trace_id)` would put it in tests and CI. 🟡 M ✖
+64. **Replay from the SDK.** ~~Everything was portal-driven.~~ `pk.replay(trace_id, target, mode=...)` returns a `ReplayReport` (hits, misses, live calls, diverged, unused, `reliable`), so a production trace can be replayed deterministically in a test or a CI job. 🟡 M ✅
 
 ## F. Collaboration (65–74)
 
@@ -176,7 +176,7 @@ evaluation:
 4. ~~**Audit log** (#75)~~ — **shipped** for changes (reads still open). The cheapest item that unblocks enterprise conversations. 🔴 M
 5. ~~**Slack alerting** (#66)~~ — **shipped.** Alerts that email nobody reads aren't alerts. 🔴 S
 6. ~~**Streaming trace updates** (#21)~~ — **shipped.** Replaces the 5s poll and makes live runs feel live. 🔴 M
-7. **Tool re-execution / VCR replay** (#53–54) — closes the fidelity gap in ProveKit's best differentiator. 🔴 L
+7. ~~**Tool re-execution / VCR replay** (#53–54)~~ — **shipped**, with the allowlist (#55) and SDK-driven replay (#64). Closes the fidelity gap in ProveKit's best differentiator. 🔴 L
 8. ~~**Statistical significance in experiments** (#41)~~ — **shipped.** Without it, the eval stack invited teams to ship on noise. 🔴 M
 9. ~~**TypeScript SDK** (#87)~~ — **shipped**, including OpenAI/Anthropic instrumentation. The largest single expansion in addressable users. 🔴 L
 10. ~~**Metric rollups** (#16)~~ — **shipped.** The dashboard is the most-loaded page and the first thing to fall over. 🔴 L

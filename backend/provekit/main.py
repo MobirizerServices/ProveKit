@@ -21,7 +21,7 @@ from .observability import (
     setup_logging,
 )
 from .routers import (
-    activity, admin, alerts, apikeys, auth, dataset_writes, datasets, digests, experiments,
+    activity, admin, alerts, apikeys, auth, automation, dataset_writes, datasets, digests, experiments,
     export,
     metrics, playground, scim, sso,
     projects, traces, views, webhooks,
@@ -74,12 +74,38 @@ async def lifespan(app: FastAPI):
     init_db()
     tasks = [asyncio.create_task(_drain_spool_forever()),
              asyncio.create_task(_roll_up_forever()),
-             asyncio.create_task(_send_digests_forever())]
+             asyncio.create_task(_send_digests_forever()),
+             asyncio.create_task(_run_automation_forever())]
     try:
         yield
     finally:
         for t in tasks:
             t.cancel()
+
+
+async def _run_automation_forever() -> None:
+    """Advance automation rules over new traces (services/automation.py).
+
+    Off the ingest path on purpose: ingest is the hottest write in the product and carries a
+    durability spool, so making it also evaluate rules and call judge models would trade that
+    guarantee for a feature nothing needs synchronous.
+    """
+    from .database import SessionLocal
+    from .services import automation as automation_svc
+    while True:
+        try:
+            def _pass():
+                db = SessionLocal()
+                try:
+                    return automation_svc.run_all(db)
+                finally:
+                    db.close()
+            await run_in_threadpool(_pass)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger("provekit").exception("automation pass failed")
+        await asyncio.sleep(60)
 
 
 async def _send_digests_forever() -> None:
@@ -197,6 +223,7 @@ app.include_router(playground.router)
 app.include_router(views.router)
 app.include_router(webhooks.router)
 app.include_router(digests.router)
+app.include_router(automation.router)
 app.include_router(activity.router)
 app.include_router(export.router)
 app.include_router(export.key_router)

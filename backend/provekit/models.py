@@ -414,6 +414,48 @@ class Digest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class AutomationRule(Base):
+    """Route matching production traces somewhere useful.
+
+    Evaluation was entirely offline: you curated a dataset by hand and ran experiments against
+    it. Nothing connected what actually happened in production back to that loop, so the
+    dataset drifted away from real traffic and the traces worth learning from were the ones
+    nobody got round to copying across.
+
+    A rule is a match plus an action. `promote` copies a matching trace into a dataset;
+    `score` samples matching traces and scores them online (#39) — the eval loop that needs no
+    ground truth, which is why it is the one worth having on live traffic.
+
+    Runs on a background pass rather than on the ingest path. Ingest is the hottest write in
+    the product and it now carries a durability spool; making it also evaluate every rule and
+    call a judge model would trade the guarantee this codebase spent a lot of effort acquiring
+    for a feature nobody needs to be synchronous.
+    """
+    __tablename__ = "automation_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(160), default="")
+    # {status?, label_contains?, q?, type?} — all optional, ANDed. An empty match is refused at
+    # save time rather than treated as "everything": a rule that silently matched every trace
+    # would promote a project's entire history into a dataset on its first pass.
+    match: Mapped[dict] = mapped_column(JSON, default=dict)
+    action: Mapped[str] = mapped_column(String(16), default="promote")   # promote | score
+    target_dataset_id: Mapped[int | None] = mapped_column(nullable=True)
+    scorers: Mapped[list] = mapped_column(JSON, default=list)
+    # Fraction of matching traces to act on, 0<f<=1. Online scoring costs money per trace, so
+    # sampling is a first-class control rather than something to bolt on after the first bill.
+    sample: Mapped[float] = mapped_column(Float, default=1.0)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    # Watermark: the highest Run.id already considered. Rules act on new traffic only — a rule
+    # created today that swept all history would be a surprise, and an expensive one for
+    # `score`.
+    last_run_id: Mapped[int] = mapped_column(Integer, default=0)
+    matched: Mapped[int] = mapped_column(Integer, default=0)
+    acted: Mapped[int] = mapped_column(Integer, default=0)
+    last_status: Mapped[str] = mapped_column(String(160), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class RetentionEvent(Base):
     """What retention deleted, and when.
 

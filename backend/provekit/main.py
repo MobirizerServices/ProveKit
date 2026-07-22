@@ -20,6 +20,7 @@ from .observability import (
 )
 from .routers import (
     admin, alerts, apikeys, auth, datasets, experiments, metrics, playground, projects, traces,
+    views,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -146,6 +147,7 @@ app.include_router(metrics.pricing_router)
 app.include_router(alerts.router)
 app.include_router(projects.router)
 app.include_router(playground.router)
+app.include_router(views.router)
 app.include_router(admin.router)
 
 

@@ -336,6 +336,28 @@ class ModelRollup(Base):
     )
 
 
+class SavedView(Base):
+    """A named filter + time-window + search combination, shareable by URL.
+
+    Filters were ephemeral: "our failing checkout traces" existed only as whatever someone
+    had typed into the toolbar, so it could be described in chat but not handed over. The
+    query lives in `params` as the same key/values the trace list already accepts, so a saved
+    view is replayable through the normal read path rather than being a second query language
+    that can drift away from the first.
+    """
+    __tablename__ = "saved_views"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(160), default="")
+    params: Mapped[dict] = mapped_column(JSON, default=dict)   # status, window_hours, q, …
+    created_by: Mapped[str] = mapped_column(String(255), default="")   # email, for display
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    __table_args__ = (
+        Index("uq_saved_view_name", "workspace_id", "name", unique=True),
+    )
+
+
 class RetentionEvent(Base):
     """What retention deleted, and when.
 

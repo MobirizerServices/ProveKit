@@ -119,7 +119,7 @@ ProveKit is currently a single-player tool with multi-user auth.
 65. **Comment threads with @mentions.** Span notes exist but are flat and silent — no replies, no notification, no resolve. 🔴 M ◑
 66. **Slack / Discord alerting.** ~~Alerts emailed only.~~ A rule can carry a webhook URL, SSRF-guarded and validated at save time, with the body shape chosen per host. 🔴 S ✅
 67. **PagerDuty / Opsgenie.** ~~Email and chat webhooks only.~~ `notify.payload_for` dispatches on host, so both slot in behind the existing `webhook_url` with no schema change. Alias is stable per rule, so repeated breaches deduplicate into one incident rather than paging someone twenty times. 🟡 S ✅
-68. **Saved views.** Filter + time-window + search combinations are ephemeral; teams want "our failing checkout traces" as a shareable URL. 🔴 S ✖
+68. **Saved views.** ~~Filter combinations were ephemeral, so "our failing checkout traces" could be described but not handed over.~~ `/api/views` stores a named filter using the same parameters `/api/traces` already accepts — replayed through the normal read path, so a saved query can't drift from what the live one means. Names are unique per project; params are allowlisted. 🔴 S ✅
 69. **Issue-tracker handoff.** One click from a trace to a GitHub issue with the shared link and context embedded. 🟡 S ✖
 70. **Redaction on share.** Signed `/shared/{token}` links expose the full payload; sharing a trace externally needs field-level masking. 🔴 M ◑
 71. **Scheduled digests.** A weekly "here's what regressed" email or Slack post. 🟡 M ✖

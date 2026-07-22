@@ -8,23 +8,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Run, Workspace, _now, iso_utc
+from ..models import MetricRollup, ModelRollup, Run, Workspace, _now, iso_utc
+from ..services import rollups
 from ..services.workspace import current_workspace
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
-
-_ROOT_CAP = 5000     # bound the scan for percentiles/series
-_SPAN_CAP = 20000    # bound the scan for token totals
-
-
-def _pct(sorted_vals: list[int], p: float) -> int:
-    if not sorted_vals:
-        return 0
-    k = (len(sorted_vals) - 1) * p / 100
-    f, c = math.floor(k), math.ceil(k)
-    if f == c:
-        return sorted_vals[int(k)]
-    return round(sorted_vals[f] * (c - k) + sorted_vals[c] * (k - f))
 
 
 def _usage_pair(result) -> tuple[int, int, bool]:
@@ -52,78 +40,148 @@ def metrics(window_hours: int = 24, db: Session = Depends(get_db),
 
 def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
     """The dashboard aggregate. Also called by the alerts evaluator, so it's a plain
-    function, not just a route handler."""
-    cutoff = _now() - timedelta(hours=window_hours) if window_hours > 0 else None
+    function, not just a route handler.
+
+    Closed hours are read from pre-aggregated rollups (services/rollups.py); only the current,
+    still-filling hour is computed from raw spans. Before this, every load re-scanned raw rows
+    for the whole window and capped the scan — so a wide window didn't just cost more, it
+    quietly returned a partial answer that looked complete.
+    """
+    now = _now()
+    cutoff = now - timedelta(hours=window_hours) if window_hours > 0 else None
     by_day = window_hours == 0 or window_hours > 48
+    open_hour = rollups.floor_hour(now)
 
-    rootq = db.query(Run).filter(Run.workspace_id == ws.id, Run.parent_span_id == "")
-    if cutoff is not None:
-        rootq = rootq.filter(Run.created_at >= cutoff)
-    roots = rootq.order_by(Run.id.desc()).limit(_ROOT_CAP).all()
-
-    durations = sorted(r.duration_ms or 0 for r in roots)
-    errors = sum(1 for r in roots if r.status == "failed")
-    count = len(roots)
+    # Rollups cover only *whole* hours that fall entirely inside the window. The hour the
+    # cutoff lands in, and the hour still filling now, are read from raw rows — otherwise a
+    # "last 48 hours" would quietly include part of a 49th.
+    if cutoff is None:
+        first = (db.query(func.min(Run.created_at))
+                 .filter(Run.workspace_id == ws.id).scalar())
+        roll_start = rollups.floor_hour(first) if first else open_hour
+        live_ranges = [(open_hour, None)]
+    else:
+        roll_start = min(rollups.ceil_hour(cutoff), open_hour)
+        live_ranges = [(cutoff, roll_start)] if cutoff < roll_start else []
+        live_ranges.append((max(open_hour, cutoff), None))
+    rollups.ensure_range(db, ws.id, roll_start, open_hour)
 
     def _bucket_key(dt) -> str:
         return dt.strftime("%Y-%m-%d") if by_day else dt.strftime("%Y-%m-%dT%H:00")
 
-    # time series: bucket roots by hour (or day for wide windows). Each bucket carries volume,
-    # errors, per-bucket latency percentiles, and tokens — enough to trend all four over time.
+    # Each series bucket keeps a mergeable histogram; percentiles are read off it at the end.
+    # A day bucket is many hourly rollups, and p95 is not the mean of hourly p95s.
     series: dict[str, dict] = {}
-    bucket_durs: dict[str, list] = {}
-    for r in roots:
-        dt = r.created_at
-        if dt is None:
-            continue
-        key = _bucket_key(dt)
-        b = series.setdefault(key, {"t": key, "count": 0, "errors": 0, "tokens": 0, "p50": 0, "p95": 0})
-        b["count"] += 1
-        if r.status == "failed":
-            b["errors"] += 1
-        bucket_durs.setdefault(key, []).append(r.duration_ms or 0)
+    hists: dict[str, list[int]] = {}
 
-    for key, durs in bucket_durs.items():
-        ds = sorted(durs)
-        series[key]["p50"] = _pct(ds, 50)
-        series[key]["p95"] = _pct(ds, 95)
+    def _bucket(key: str) -> dict:
+        b = series.setdefault(key, {"t": key, "count": 0, "errors": 0, "tokens": 0,
+                                    "p50": 0, "p95": 0})
+        hists.setdefault(key, rollups.empty_histogram())
+        return b
 
-    # token totals + per-model breakdown + per-bucket tokens, across all spans in the window
-    spanq = db.query(Run.result, Run.request, Run.created_at).filter(Run.workspace_id == ws.id)
-    if cutoff is not None:
-        spanq = spanq.filter(Run.created_at >= cutoff)
-    total_tokens = 0
+    total_hist = rollups.empty_histogram()
+    count = errors = 0
+    total_in = total_out = 0
+    model_calls = usage_spans = 0
     by_model: dict[str, dict] = {}
-    model_calls = 0          # spans that named a model — the denominator for usage coverage
-    usage_spans = 0          # of those, how many actually reported token usage
-    for result, request, created in spanq.limit(_SPAN_CAP):
-        in_tok, out_tok, reported = _usage_pair(result)
-        tok = in_tok + out_tok
-        total_tokens += tok
-        model = (request or {}).get("model") if isinstance(request, dict) else None
-        # per-bucket tokens, split by model *and* direction so the frontend can price each
-        # bucket properly (pricing lives on the frontend — one source of truth for estimates).
-        if tok and created is not None:
-            b = series.get(_bucket_key(created))
-            if b is not None:
-                b["tokens"] += tok
+    fail_by_type_counts: dict[str, int] = {}
+
+    def _model_row(model: str) -> dict:
+        return by_model.setdefault(model, {"model": model, "calls": 0, "tokens": 0,
+                                           "input_tokens": 0, "output_tokens": 0,
+                                           "usage_spans": 0})
+
+    # ---- closed hours, from rollups -------------------------------------------------------
+    rolled = db.query(MetricRollup).filter(
+        MetricRollup.workspace_id == ws.id,
+        MetricRollup.bucket >= roll_start, MetricRollup.bucket < open_hour).all()
+    for r in rolled:
+        key = _bucket_key(r.bucket)
+        b = _bucket(key)
+        b["count"] += r.trace_count
+        b["errors"] += r.error_count
+        b["tokens"] += r.input_tokens + r.output_tokens
+        hists[key] = rollups.merge_histograms([hists[key], r.latency_hist or []])
+        total_hist = rollups.merge_histograms([total_hist, r.latency_hist or []])
+        count += r.trace_count
+        errors += r.error_count
+        total_in += r.input_tokens
+        total_out += r.output_tokens
+        model_calls += r.model_calls
+        usage_spans += r.usage_spans
+        for t, n in (r.fail_by_type or {}).items():
+            fail_by_type_counts[t] = fail_by_type_counts.get(t, 0) + n
+
+    for mr in db.query(ModelRollup).filter(
+            ModelRollup.workspace_id == ws.id,
+            ModelRollup.bucket >= roll_start, ModelRollup.bucket < open_hour).all():
+        m = _model_row(mr.model)
+        m["calls"] += mr.calls
+        m["input_tokens"] += mr.input_tokens
+        m["output_tokens"] += mr.output_tokens
+        m["tokens"] += mr.input_tokens + mr.output_tokens
+        m["usage_spans"] += mr.usage_spans
+        key = _bucket_key(mr.bucket)
+        if key in series and (mr.input_tokens or mr.output_tokens):
+            bm = series[key].setdefault("by_model", {})
+            prev = bm.get(mr.model) or {"input_tokens": 0, "output_tokens": 0}
+            prev["input_tokens"] += mr.input_tokens
+            prev["output_tokens"] += mr.output_tokens
+            bm[mr.model] = prev
+
+    # ---- the partial edges, live -----------------------------------------------------------
+    # At most two ranges — the tail of the hour the cutoff lands in, and the hour still
+    # filling now — so each is bounded by construction and needs no cap.
+    def _window(q, lo, hi):
+        q = q.filter(Run.workspace_id == ws.id, Run.created_at >= lo)
+        return q.filter(Run.created_at < hi) if hi is not None else q
+
+    for lo, hi in live_ranges:
+        for duration, status, created in _window(
+                db.query(Run.duration_ms, Run.status, Run.created_at)
+                .filter(Run.parent_span_id == ""), lo, hi).all():
+            key = _bucket_key(created or now)
+            b = _bucket(key)
+            b["count"] += 1
+            count += 1
+            if status == "failed":
+                b["errors"] += 1
+                errors += 1
+            rollups.add_to_histogram(hists[key], duration or 0)
+            rollups.add_to_histogram(total_hist, duration or 0)
+
+        for result, request, created in _window(
+                db.query(Run.result, Run.request, Run.created_at), lo, hi).all():
+            in_tok, out_tok, reported = _usage_pair(result)
+            tok = in_tok + out_tok
+            total_in += in_tok
+            total_out += out_tok
+            model = (request or {}).get("model") if isinstance(request, dict) else None
+            key = _bucket_key(created or now)
+            if tok and key in series:
+                series[key]["tokens"] += tok
                 if model:
-                    b.setdefault("by_model", {})
-                    prev = b["by_model"].get(model) or {"input_tokens": 0, "output_tokens": 0}
+                    bm = series[key].setdefault("by_model", {})
+                    prev = bm.get(model) or {"input_tokens": 0, "output_tokens": 0}
                     prev["input_tokens"] += in_tok
                     prev["output_tokens"] += out_tok
-                    b["by_model"][model] = prev
-        if model:
-            model_calls += 1
-            usage_spans += 1 if reported else 0
-            m = by_model.setdefault(model, {"model": model, "calls": 0, "tokens": 0,
-                                            "input_tokens": 0, "output_tokens": 0,
-                                            "usage_spans": 0})
-            m["calls"] += 1
-            m["tokens"] += tok
-            m["input_tokens"] += in_tok
-            m["output_tokens"] += out_tok
-            m["usage_spans"] += 1 if reported else 0
+                    bm[model] = prev
+            if model:
+                model_calls += 1
+                usage_spans += 1 if reported else 0
+                m = _model_row(model)
+                m["calls"] += 1
+                m["tokens"] += tok
+                m["input_tokens"] += in_tok
+                m["output_tokens"] += out_tok
+                m["usage_spans"] += 1 if reported else 0
+
+    for key, b in series.items():
+        b["p50"] = rollups.percentile(hists[key], 50)
+        b["p95"] = rollups.percentile(hists[key], 95)
+
+    total_tokens = total_in + total_out
 
     # Failure breakdown: which span types fail, the most common error messages, and the
     # latest failing spans — so the dashboard answers "what's broken?", not just "how often".
@@ -131,11 +189,19 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
         q = q.filter(Run.workspace_id == ws.id, Run.status == "failed")
         return q.filter(Run.created_at >= cutoff) if cutoff is not None else q
 
-    fail_by_type = [
-        {"type": t, "count": c}
-        for t, c in _fail_filter(db.query(Run.type, func.count(Run.id)))
-        .group_by(Run.type).order_by(func.count(Run.id).desc()).all()
-    ]
+    # Counts come from the rollups (which already carry per-type failures for closed hours)
+    # plus the open hour, so this stays correct over a 90-day window without a grouped scan.
+    for lo, hi in live_ranges:
+        q = _fail_filter(db.query(Run.type, func.count(Run.id))).filter(Run.created_at >= lo)
+        if hi is not None:
+            q = q.filter(Run.created_at < hi)
+        for t, c in q.group_by(Run.type).all():
+            fail_by_type_counts[t] = fail_by_type_counts.get(t, 0) + c
+    fail_by_type = [{"type": t, "count": c} for t, c in
+                    sorted(fail_by_type_counts.items(), key=lambda kv: kv[1], reverse=True)]
+
+    # These two stay raw: error *messages* are high-cardinality and not worth rolling up, and
+    # both are small limited queries covered by ix_runs_ws_status_created (#18).
     top_errors = [
         {"error": (e or "").splitlines()[0][:160] if e else "(no message)", "type": t, "count": c}
         for e, t, c in _fail_filter(db.query(Run.error, Run.type, func.count(Run.id)))
@@ -154,8 +220,8 @@ def compute_metrics(db: Session, ws: Workspace, window_hours: int) -> dict:
         "trace_count": count,
         "error_count": errors,
         "error_rate": round(errors / count, 4) if count else 0.0,
-        "latency_p50_ms": _pct(durations, 50),
-        "latency_p95_ms": _pct(durations, 95),
+        "latency_p50_ms": rollups.percentile(total_hist, 50),
+        "latency_p95_ms": rollups.percentile(total_hist, 95),
         "total_tokens": total_tokens,
         # How much of the cost estimate rests on real data: model calls that reported usage
         # vs. all model calls. A figure derived from 40% coverage should not be shown as though

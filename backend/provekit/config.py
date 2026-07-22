@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     # then gets a retriable 503 instead of becoming unbounded disk and DB pressure. 0 = off.
     spool_max_depth: int = 5000
 
+    # Dashboard metric rollups (services/rollups.py). The read path fills any gap itself, so
+    # this only keeps that cost off a user's first load.
+    rollup_interval_seconds: float = 900.0
+
     # Mask PII (emails, cards, SSNs, phones, common secret keys) in captured span
     # input/output/error before it's stored. Off by default; a safety net for hosted use.
     redact_pii: bool = False

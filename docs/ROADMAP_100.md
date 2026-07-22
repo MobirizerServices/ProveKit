@@ -47,7 +47,7 @@ data is worse than none — it produces confident wrong answers.
 Everything here is fine on a demo instance and breaks on a real one.
 
 15. **Cursor pagination on the trace list.** ~~Beyond 200 traces, older runs were unreachable.~~ `cursor=<last id>` on `/api/traces` and `/v1/traces`; keyset rather than offset so a continuously-filling list can't repeat or skip rows. 🔴 M ✅
-16. **Pre-aggregated metric rollups.** `/api/metrics` scans raw `Run` rows per request; a 90-day window on a busy project is a full table scan on every dashboard load. Roll up hourly. 🔴 L ✖
+16. **Pre-aggregated metric rollups.** ~~`/api/metrics` scanned raw `Run` rows per request, and capped the scan — so a wide window wasn't merely slow, it returned a truncated sample that rendered identically to a complete one.~~ Closed hours are folded into `metric_rollups` / `model_rollups` once and read thereafter; only the open hour (and the partial hour the cutoff lands in) is computed live, so a "last 48 hours" is exactly 48. Percentiles come from a mergeable latency histogram, because the p95 of a day is not the mean of 24 hourly p95s. 🔴 L ✅
 17. **Indexed full-text search.** Search is `ILIKE '%term%'` over `Run.result` — unindexable, and it degrades linearly. Postgres `tsvector` + GIN. 🔴 M ◑
 18. **Index audit.** ~~Several hot filters weren't covered.~~ Four composites on `runs` — root listing, the metrics window, the failures panel, session grouping — each traced to a predicate that actually appears in the code, with the plans asserted in `test_index_coverage.py` so a regression fails a test rather than a dashboard. The bare `span_id` index this item asked for was deliberately *not* added: nothing filters on it alone, and an unused index costs a write on every ingested span. 🔴 S ✅
 19. **Time-partitioned span storage.** Spans grow without bound and dominate the schema. Partition by time so retention becomes a partition drop, not a delete storm. 🟡 L ✖
@@ -179,7 +179,7 @@ evaluation:
 7. **Tool re-execution / VCR replay** (#53–54) — closes the fidelity gap in ProveKit's best differentiator. 🔴 L
 8. ~~**Statistical significance in experiments** (#41)~~ — **shipped.** Without it, the eval stack invited teams to ship on noise. 🔴 M
 9. ~~**TypeScript SDK** (#87)~~ — **shipped**, including OpenAI/Anthropic instrumentation. The largest single expansion in addressable users. 🔴 L
-10. **Metric rollups** (#16) — the dashboard is the most-loaded page and the first thing to fall over. 🔴 L
+10. ~~**Metric rollups** (#16)~~ — **shipped.** The dashboard is the most-loaded page and the first thing to fall over. 🔴 L
 
 **What I'd deliberately defer:** SCIM (#78), Terraform (#97), residency (#86), custom renderers
 (#99), and time-travel (#56). Each is real, and each is a *response to demand you don't have

@@ -60,11 +60,38 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     init_db()
-    drainer = asyncio.create_task(_drain_spool_forever())
+    tasks = [asyncio.create_task(_drain_spool_forever()),
+             asyncio.create_task(_roll_up_forever())]
     try:
         yield
     finally:
-        drainer.cancel()
+        for t in tasks:
+            t.cancel()
+
+
+async def _roll_up_forever() -> None:
+    """Fold closed hours into metric rollups in the background (services/rollups.py).
+
+    The read path builds whatever is missing anyway, so this is not required for correctness —
+    it just means the first dashboard load after a quiet night isn't the one that pays for it.
+    """
+    from .database import SessionLocal
+    from .services import rollups
+    interval = max(60.0, settings.rollup_interval_seconds)
+    while True:
+        try:
+            def _pass():
+                db = SessionLocal()
+                try:
+                    return rollups.backfill_all(db)
+                finally:
+                    db.close()
+            await run_in_threadpool(_pass)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger("provekit").exception("metric rollup pass failed")
+        await asyncio.sleep(interval)
 
 
 async def _drain_spool_forever() -> None:

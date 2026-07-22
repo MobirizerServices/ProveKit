@@ -266,6 +266,54 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
 
+class MetricRollup(Base):
+    """One hour of a project's dashboard numbers, pre-aggregated.
+
+    The dashboard used to recompute everything from raw spans per request, capped — so a wide
+    window was not just slow but silently truncated. A closed hour never changes, so it is
+    folded once and read thereafter; only the open hour is still computed live.
+
+    `latency_hist` is a bucketed histogram rather than stored percentiles, because percentiles
+    don't merge: the p95 of a day is not the average of 24 hourly p95s. See services/rollups.py
+    for the bucket layout.
+    """
+    __tablename__ = "metric_rollups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    bucket: Mapped[datetime] = mapped_column(DateTime, index=True)   # start of the hour, UTC
+    trace_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+    latency_hist: Mapped[list] = mapped_column(JSON, default=list)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    model_calls: Mapped[int] = mapped_column(Integer, default=0)     # usage-coverage denominator
+    usage_spans: Mapped[int] = mapped_column(Integer, default=0)     # ...and its numerator
+    fail_by_type: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    __table_args__ = (
+        Index("uq_metric_rollup", "workspace_id", "bucket", unique=True),
+    )
+
+
+class ModelRollup(Base):
+    """Per-model token totals for one hour. Separate from MetricRollup because model cardinality
+    is unbounded — folding it into a JSON column would make the common read carry every model a
+    project has ever called."""
+    __tablename__ = "model_rollups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    bucket: Mapped[datetime] = mapped_column(DateTime, index=True)
+    model: Mapped[str] = mapped_column(String(200), default="")
+    calls: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    usage_spans: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (
+        Index("uq_model_rollup", "workspace_id", "bucket", "model", unique=True),
+    )
+
+
 class SpanNote(Base):
     """A teammate's note pinned to one span of a trace — inline collaboration on a specific step."""
     __tablename__ = "span_notes"

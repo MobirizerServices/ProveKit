@@ -1,0 +1,25 @@
+{
+  "instrumentor": "llama_index",
+  "dialect": "openinference",
+  "gap": "An embedding call names its model in embedding.model_name (never llm.model_name), which is not in the model key list. Every embedding span — one per chunk on ingest, one per query at retrieval — stores model=null, so it is invisible to cost estimation and to any per-model breakdown.",
+  "note": "This fixture asserts the mapping we WANT, under xfail. It deliberately does not assert the run type: whether an embedding is an 'llm' run or a 'step' with a model is a product call, but losing the model name is not.",
+  "span": {
+    "traceId": "6666777788889999000011112222aaaa",
+    "spanId": "c1d2e3f405162738",
+    "parentSpanId": "",
+    "name": "OpenAIEmbedding.get_text_embedding",
+    "startTimeUnixNano": "1753144800000000000",
+    "endTimeUnixNano": "1753144800090000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "openinference.span.kind", "value": {"stringValue": "EMBEDDING"}},
+      {"key": "embedding.model_name", "value": {"stringValue": "text-embedding-3-small"}},
+      {"key": "embedding.embeddings.0.embedding.text", "value": {"stringValue": "ProveKit is drop-in tracing."}},
+      {"key": "llm.token_count.prompt", "value": {"intValue": "6"}}
+    ]
+  },
+  "expect": {
+    "request.model": "text-embedding-3-small",
+    "result.meta.model": "text-embedding-3-small"
+  }
+}

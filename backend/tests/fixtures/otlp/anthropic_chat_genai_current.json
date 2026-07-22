@@ -1,0 +1,47 @@
+{
+  "instrumentor": "anthropic",
+  "dialect": "genai_current",
+  "note": "Anthropic over the current gen_ai.* semconv. Carries session.id (the first session alias) rather than gen_ai.conversation.id, and only gen_ai.response.model — so the model must resolve through the request->response fallback.",
+  "span": {
+    "traceId": "11112222333344445555666677778888",
+    "spanId": "aabbccdd11223344",
+    "parentSpanId": "9999888877776666",
+    "name": "chat claude-sonnet-4-5",
+    "startTimeUnixNano": "1753142500000000000",
+    "endTimeUnixNano": "1753142502500000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.provider.name", "value": {"stringValue": "anthropic"}},
+      {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
+      {"key": "gen_ai.response.model", "value": {"stringValue": "claude-sonnet-4-5-20250929"}},
+      {"key": "session.id", "value": {"stringValue": "sess_9f2"}},
+      {"key": "gen_ai.input.messages", "value": {"stringValue": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Summarize this ticket.\"}]}]"}},
+      {"key": "gen_ai.output.messages", "value": {"stringValue": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Customer cannot log in.\"}]}]"}},
+      {"key": "gen_ai.usage.input_tokens", "value": {"intValue": "310"}},
+      {"key": "gen_ai.usage.output_tokens", "value": {"intValue": "24"}},
+      {"key": "gen_ai.response.finish_reasons", "value": {"arrayValue": {"values": [{"stringValue": "end_turn"}]}}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "chat claude-sonnet-4-5-20250929",
+    "status": "completed",
+    "duration_ms": 2500,
+    "trace_id": "11112222333344445555666677778888",
+    "span_id": "aabbccdd11223344",
+    "parent_span_id": "9999888877776666",
+    "session_id": "sess_9f2",
+    "request.provider": "anthropic",
+    "request.model": "claude-sonnet-4-5-20250929",
+    "request.operation": "chat",
+    "request.input": [{"role": "user", "parts": [{"type": "text", "content": "Summarize this ticket."}]}],
+    "result.text": [{"role": "assistant", "parts": [{"type": "text", "content": "Customer cannot log in."}]}],
+    "result.meta.provider": "anthropic",
+    "result.meta.model": "claude-sonnet-4-5-20250929",
+    "result.meta.session_id": "sess_9f2",
+    "result.meta.usage.input_tokens": 310,
+    "result.meta.usage.output_tokens": 24,
+    "result.meta.finish_reason": ["end_turn"]
+  },
+  "expect_absent": ["result.meta.tool", "result.meta.params"]
+}

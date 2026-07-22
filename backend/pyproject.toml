@@ -32,6 +32,9 @@ dependencies = [
 ]
 
 [project.scripts]
+# The CLI: an API client over the documented /v1 endpoints, so traces, datasets and eval
+# runs are scriptable from a shell or a CI job. Core deps only (httpx) — no server import.
+provekit = "provekit.cli:main"
 # The MCP debug server. Needs the [mcp] extra installed to run.
 provekit-mcp = "provekit.mcp:main"
 # A zero-setup smoke test: `provekit-demo` sends a gallery of traces to your portal.

@@ -1,0 +1,38 @@
+{
+  "instrumentor": "langchain",
+  "dialect": "openinference",
+  "note": "A LangChain CHAIN span (the root RunnableSequence). No model, no provider, no gen_ai.operation.name -> the last rung: a 'step' labelled with the span name, whose input is kept verbatim. LangChain serializes messages with a 'type' field (human/ai), never 'role' — the raw payload must reach storage unmangled so replay's role normalizer can read it (#178).",
+  "span": {
+    "traceId": "eeeeffff000011112222333344445555",
+    "spanId": "d4e5f60718293a4b",
+    "parentSpanId": "",
+    "name": "RunnableSequence",
+    "startTimeUnixNano": "1753143800000000000",
+    "endTimeUnixNano": "1753143804000000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "openinference.span.kind", "value": {"stringValue": "CHAIN"}},
+      {"key": "input.value", "value": {"stringValue": "{\"messages\": [{\"type\": \"human\", \"content\": \"What is ProveKit?\"}]}"}},
+      {"key": "input.mime_type", "value": {"stringValue": "application/json"}},
+      {"key": "output.value", "value": {"stringValue": "{\"type\": \"ai\", \"content\": \"Drop-in agent tracing.\"}"}},
+      {"key": "metadata", "value": {"stringValue": "{\"ls_provider\": \"openai\", \"ls_model_name\": \"gpt-4o\"}"}},
+      {"key": "session.id", "value": {"stringValue": "lc-thread-3"}}
+    ]
+  },
+  "expect": {
+    "type": "step",
+    "label": "RunnableSequence",
+    "status": "completed",
+    "duration_ms": 4000,
+    "session_id": "lc-thread-3",
+    "request.type": "step",
+    "request.provider": null,
+    "request.model": null,
+    "request.operation": "RunnableSequence",
+    "request.input": {"messages": [{"type": "human", "content": "What is ProveKit?"}]},
+    "result.text": {"type": "ai", "content": "Drop-in agent tracing."},
+    "result.meta.session_id": "lc-thread-3",
+    "result.meta.usage": {}
+  },
+  "expect_absent": ["result.meta.tool", "result.meta.params", "result.meta.finish_reason"]
+}

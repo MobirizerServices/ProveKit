@@ -1,0 +1,42 @@
+{
+  "instrumentor": "bedrock",
+  "dialect": "genai_current",
+  "note": "Bedrock Converse over the current gen_ai.* semconv. The provider is the cloud service ('aws.bedrock') while the model id names the vendor — both must survive, because cost attribution reads the model and routing reads the provider.",
+  "span": {
+    "traceId": "2222333344445555666677778888aaaa",
+    "spanId": "1a1a1a1a1a1a1a1a",
+    "parentSpanId": "",
+    "name": "chat anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "startTimeUnixNano": "1753142600000000000",
+    "endTimeUnixNano": "1753142600750000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.provider.name", "value": {"stringValue": "aws.bedrock"}},
+      {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
+      {"key": "gen_ai.request.model", "value": {"stringValue": "anthropic.claude-3-5-sonnet-20241022-v2:0"}},
+      {"key": "gen_ai.request.max_tokens", "value": {"intValue": "1024"}},
+      {"key": "gen_ai.input.messages", "value": {"stringValue": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"ping\"}]}]"}},
+      {"key": "gen_ai.output.messages", "value": {"stringValue": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"pong\"}]}]"}},
+      {"key": "gen_ai.usage.input_tokens", "value": {"intValue": "8"}},
+      {"key": "gen_ai.usage.output_tokens", "value": {"intValue": "3"}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "chat anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "status": "completed",
+    "duration_ms": 750,
+    "session_id": "",
+    "request.provider": "aws.bedrock",
+    "request.model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "request.operation": "chat",
+    "request.input": [{"role": "user", "parts": [{"type": "text", "content": "ping"}]}],
+    "result.text": [{"role": "assistant", "parts": [{"type": "text", "content": "pong"}]}],
+    "result.meta.provider": "aws.bedrock",
+    "result.meta.model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "result.meta.usage.input_tokens": 8,
+    "result.meta.usage.output_tokens": 3,
+    "result.meta.params.max_tokens": 1024
+  },
+  "expect_absent": ["result.meta.session_id", "result.meta.finish_reason", "result.meta.tool"]
+}

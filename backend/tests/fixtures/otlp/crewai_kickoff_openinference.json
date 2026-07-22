@@ -1,0 +1,32 @@
+{
+  "instrumentor": "crewai",
+  "dialect": "openinference",
+  "note": "The root Crew.kickoff span. CrewAI describes its own spans with openinference.span.kind (CHAIN/AGENT/TOOL) and never emits gen_ai.operation.name, so this lands as a 'step' — the crew's inputs and final answer still have to survive, because they are the run the reviewer opens.",
+  "span": {
+    "traceId": "0000111122223333444455556666aaaa",
+    "spanId": "18293a4b5c6d7e8f",
+    "parentSpanId": "",
+    "name": "Crew.kickoff",
+    "startTimeUnixNano": "1753144000000000000",
+    "endTimeUnixNano": "1753144045000000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "openinference.span.kind", "value": {"stringValue": "CHAIN"}},
+      {"key": "input.value", "value": {"stringValue": "{\"topic\": \"OTel adoption\"}"}},
+      {"key": "output.value", "value": {"stringValue": "Adoption is broad and accelerating."}},
+      {"key": "session.id", "value": {"stringValue": "crew-1"}}
+    ]
+  },
+  "expect": {
+    "type": "step",
+    "label": "Crew.kickoff",
+    "status": "completed",
+    "duration_ms": 45000,
+    "session_id": "crew-1",
+    "request.operation": "Crew.kickoff",
+    "request.input": {"topic": "OTel adoption"},
+    "result.text": "Adoption is broad and accelerating.",
+    "result.meta.session_id": "crew-1"
+  },
+  "expect_absent": ["result.meta.tool"]
+}

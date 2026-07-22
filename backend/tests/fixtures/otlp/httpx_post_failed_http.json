@@ -1,0 +1,30 @@
+{
+  "instrumentor": "httpx",
+  "dialect": "http",
+  "note": "opentelemetry-instrumentation-httpx on a 5xx: the instrumentor sets span status ERROR with the reason phrase, which is the only thing that tells a reviewer the tool call — not the model — is what broke the run.",
+  "span": {
+    "traceId": "1111222233334444555566667777bbbb",
+    "spanId": "3a4b5c6d7e8f90a1",
+    "parentSpanId": "18293a4b5c6d7e8f",
+    "name": "POST",
+    "startTimeUnixNano": "1753144200000000000",
+    "endTimeUnixNano": "1753144205000000000",
+    "status": {"code": 2, "message": "Internal Server Error"},
+    "attributes": [
+      {"key": "http.request.method", "value": {"stringValue": "POST"}},
+      {"key": "url.full", "value": {"stringValue": "https://vectors.example/v1/query"}},
+      {"key": "http.response.status_code", "value": {"intValue": "500"}}
+    ]
+  },
+  "expect": {
+    "type": "step",
+    "label": "POST",
+    "status": "failed",
+    "error": "Internal Server Error",
+    "duration_ms": 5000,
+    "request.operation": "POST",
+    "request.input": "",
+    "result.text": null
+  },
+  "expect_absent": ["result.meta.tool"]
+}

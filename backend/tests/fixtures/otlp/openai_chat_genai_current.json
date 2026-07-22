@@ -1,0 +1,61 @@
+{
+  "instrumentor": "openai",
+  "dialect": "genai_current",
+  "note": "OpenAI over the current gen_ai.* semconv (>=1.37): the span name is '{operation} {model}', messages travel as JSON in gen_ai.input.messages/gen_ai.output.messages, and the conversation id is gen_ai.conversation.id.",
+  "span": {
+    "traceId": "8f1a2b3c4d5e6f708192a3b4c5d6e7f8",
+    "spanId": "0102030405060708",
+    "parentSpanId": "",
+    "name": "chat gpt-4o-mini",
+    "startTimeUnixNano": "1753142400000000000",
+    "endTimeUnixNano": "1753142401234000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.provider.name", "value": {"stringValue": "openai"}},
+      {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
+      {"key": "gen_ai.request.model", "value": {"stringValue": "gpt-4o-mini"}},
+      {"key": "gen_ai.response.model", "value": {"stringValue": "gpt-4o-mini-2024-07-18"}},
+      {"key": "gen_ai.request.temperature", "value": {"doubleValue": 0.2}},
+      {"key": "gen_ai.request.top_p", "value": {"doubleValue": 0.95}},
+      {"key": "gen_ai.request.max_tokens", "value": {"intValue": "256"}},
+      {"key": "gen_ai.conversation.id", "value": {"stringValue": "conv_abc123"}},
+      {"key": "gen_ai.input.messages", "value": {"stringValue": "[{\"role\": \"system\", \"parts\": [{\"type\": \"text\", \"content\": \"You are terse.\"}]}, {\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Capital of France?\"}]}]"}},
+      {"key": "gen_ai.output.messages", "value": {"stringValue": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Paris.\"}], \"finish_reason\": \"stop\"}]"}},
+      {"key": "gen_ai.usage.input_tokens", "value": {"intValue": "41"}},
+      {"key": "gen_ai.usage.output_tokens", "value": {"intValue": "9"}},
+      {"key": "gen_ai.response.finish_reasons", "value": {"arrayValue": {"values": [{"stringValue": "stop"}]}}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "chat gpt-4o-mini",
+    "status": "completed",
+    "error": "",
+    "duration_ms": 1234,
+    "trace_id": "8f1a2b3c4d5e6f708192a3b4c5d6e7f8",
+    "span_id": "0102030405060708",
+    "parent_span_id": "",
+    "session_id": "conv_abc123",
+    "request.type": "llm",
+    "request.provider": "openai",
+    "request.model": "gpt-4o-mini",
+    "request.operation": "chat",
+    "request.input": [
+      {"role": "system", "parts": [{"type": "text", "content": "You are terse."}]},
+      {"role": "user", "parts": [{"type": "text", "content": "Capital of France?"}]}
+    ],
+    "result.text": [{"role": "assistant", "parts": [{"type": "text", "content": "Paris."}], "finish_reason": "stop"}],
+    "result.meta.provider": "openai",
+    "result.meta.model": "gpt-4o-mini",
+    "result.meta.source": "otel",
+    "result.meta.start_ns": "1753142400000000000",
+    "result.meta.session_id": "conv_abc123",
+    "result.meta.usage.input_tokens": 41,
+    "result.meta.usage.output_tokens": 9,
+    "result.meta.params.temperature": 0.2,
+    "result.meta.params.top_p": 0.95,
+    "result.meta.params.max_tokens": 256,
+    "result.meta.finish_reason": ["stop"]
+  },
+  "expect_absent": ["result.meta.tool", "result.meta.truncation"]
+}

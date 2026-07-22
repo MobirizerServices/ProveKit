@@ -1,0 +1,34 @@
+{
+  "instrumentor": "litellm",
+  "dialect": "genai_legacy",
+  "note": "LiteLLM proxies to whatever provider the caller asked for, so gen_ai.system names the UNDERLYING vendor and only the response model is known (the request model is the alias the caller used). Covers the gen_ai.response.model fallback in the legacy dialect.",
+  "span": {
+    "traceId": "aaaabbbbccccddddeeeeffff00001111",
+    "spanId": "9c9c9c9c9c9c9c9c",
+    "parentSpanId": "",
+    "name": "litellm.completion",
+    "startTimeUnixNano": "1753143400000000000",
+    "endTimeUnixNano": "1753143401500000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.system", "value": {"stringValue": "openai"}},
+      {"key": "gen_ai.response.model", "value": {"stringValue": "gpt-4o-2024-08-06"}},
+      {"key": "gen_ai.prompt", "value": {"stringValue": "ping"}},
+      {"key": "gen_ai.completion", "value": {"stringValue": "pong"}},
+      {"key": "gen_ai.usage.prompt_tokens", "value": {"intValue": "3"}},
+      {"key": "gen_ai.usage.completion_tokens", "value": {"intValue": "1"}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "chat gpt-4o-2024-08-06",
+    "duration_ms": 1500,
+    "request.provider": "openai",
+    "request.model": "gpt-4o-2024-08-06",
+    "result.meta.model": "gpt-4o-2024-08-06",
+    "result.meta.usage.input_tokens": 3,
+    "result.meta.usage.output_tokens": 1,
+    "result.text": "pong"
+  },
+  "expect_absent": ["result.meta.tool"]
+}

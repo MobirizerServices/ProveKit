@@ -1,0 +1,35 @@
+{
+  "instrumentor": "bedrock",
+  "dialect": "genai_legacy",
+  "note": "Legacy Bedrock InvokeModel with a provider but NO model attribute at all — the third rung of the ladder ('model OR provider' means llm). With no model the label falls back to the span name, and meta.model stays null so cost estimation can tell it does not know the model.",
+  "span": {
+    "traceId": "9999aaaabbbbccccddddeeeeffff0000",
+    "spanId": "8b8b8b8b8b8b8b8b",
+    "parentSpanId": "",
+    "name": "bedrock.invoke_model",
+    "startTimeUnixNano": "1753143300000000000",
+    "endTimeUnixNano": "1753143300900000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.system", "value": {"stringValue": "aws_bedrock"}},
+      {"key": "gen_ai.prompt", "value": {"stringValue": "Human: hi\n\nAssistant:"}},
+      {"key": "gen_ai.completion", "value": {"stringValue": "Hello!"}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "bedrock.invoke_model",
+    "status": "completed",
+    "duration_ms": 900,
+    "request.type": "llm",
+    "request.provider": "aws_bedrock",
+    "request.model": null,
+    "request.operation": "chat",
+    "request.input": "Human: hi\n\nAssistant:",
+    "result.text": "Hello!",
+    "result.meta.provider": "aws_bedrock",
+    "result.meta.model": null,
+    "result.meta.usage": {}
+  },
+  "expect_absent": ["result.meta.tool", "result.meta.session_id"]
+}

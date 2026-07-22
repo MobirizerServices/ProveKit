@@ -1,0 +1,41 @@
+{
+  "instrumentor": "anthropic",
+  "dialect": "genai_legacy",
+  "note": "Legacy Anthropic. There is no gen_ai.operation.name, so the operation defaults to 'chat' for a model call — the label is 'chat {model}' even though the span is named after the SDK method. Session comes from the bare 'session_id' alias (the last one tried).",
+  "span": {
+    "traceId": "8888999900001111222233334444aaaa",
+    "spanId": "7a7a7a7a7a7a7a7a",
+    "parentSpanId": "",
+    "name": "anthropic.messages.create",
+    "startTimeUnixNano": "1753143200000000000",
+    "endTimeUnixNano": "1753143203000000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.system", "value": {"stringValue": "anthropic"}},
+      {"key": "gen_ai.request.model", "value": {"stringValue": "claude-3-opus-20240229"}},
+      {"key": "gen_ai.request.max_tokens", "value": {"intValue": "512"}},
+      {"key": "gen_ai.prompt", "value": {"stringValue": "Write a haiku about traces."}},
+      {"key": "gen_ai.completion", "value": {"stringValue": "Spans bloom in the dark"}},
+      {"key": "gen_ai.usage.prompt_tokens", "value": {"intValue": "18"}},
+      {"key": "gen_ai.usage.completion_tokens", "value": {"intValue": "11"}},
+      {"key": "session_id", "value": {"stringValue": "s-legacy-42"}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "chat claude-3-opus-20240229",
+    "status": "completed",
+    "duration_ms": 3000,
+    "session_id": "s-legacy-42",
+    "request.provider": "anthropic",
+    "request.model": "claude-3-opus-20240229",
+    "request.operation": "chat",
+    "request.input": "Write a haiku about traces.",
+    "result.text": "Spans bloom in the dark",
+    "result.meta.session_id": "s-legacy-42",
+    "result.meta.usage.input_tokens": 18,
+    "result.meta.usage.output_tokens": 11,
+    "result.meta.params.max_tokens": 512
+  },
+  "expect_absent": ["result.meta.finish_reason"]
+}

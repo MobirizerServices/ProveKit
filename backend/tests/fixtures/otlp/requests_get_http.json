@@ -1,0 +1,36 @@
+{
+  "instrumentor": "requests",
+  "dialect": "http",
+  "note": "opentelemetry-instrumentation-requests: an outbound tool API call, one of the non-LLM spans ProveKit keeps so 'capture everything' is not just the model calls. No gen_ai.* at all, so it is a 'step' named after the HTTP method (the semconv span name for a client span with no route).",
+  "span": {
+    "traceId": "1111222233334444555566667777bbbb",
+    "spanId": "293a4b5c6d7e8f90",
+    "parentSpanId": "18293a4b5c6d7e8f",
+    "name": "GET",
+    "startTimeUnixNano": "1753144100000000000",
+    "endTimeUnixNano": "1753144100310000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "http.request.method", "value": {"stringValue": "GET"}},
+      {"key": "url.full", "value": {"stringValue": "https://api.weather.example/v1/current?city=berlin"}},
+      {"key": "server.address", "value": {"stringValue": "api.weather.example"}},
+      {"key": "http.response.status_code", "value": {"intValue": "200"}}
+    ]
+  },
+  "expect": {
+    "type": "step",
+    "label": "GET",
+    "status": "completed",
+    "error": "",
+    "duration_ms": 310,
+    "parent_span_id": "18293a4b5c6d7e8f",
+    "request.type": "step",
+    "request.operation": "GET",
+    "request.provider": null,
+    "request.model": null,
+    "request.input": "",
+    "result.text": null,
+    "result.meta.usage": {}
+  },
+  "expect_absent": ["result.meta.tool", "result.meta.session_id", "result.meta.params"]
+}

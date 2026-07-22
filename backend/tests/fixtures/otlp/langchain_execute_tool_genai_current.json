@@ -1,0 +1,38 @@
+{
+  "instrumentor": "langchain",
+  "dialect": "genai_current",
+  "note": "A LangChain tool call. gen_ai.tool.name is the TOP rung of the ladder: it wins even though this span also carries a model and an operation of its own, because the tool is what the reader is looking at.",
+  "span": {
+    "traceId": "55556666777788889999000011112222",
+    "spanId": "4d4d4d4d4d4d4d4d",
+    "parentSpanId": "3c3c3c3c3c3c3c3c",
+    "name": "execute_tool get_weather",
+    "startTimeUnixNano": "1753142900000000000",
+    "endTimeUnixNano": "1753142900085000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
+      {"key": "gen_ai.tool.name", "value": {"stringValue": "get_weather"}},
+      {"key": "gen_ai.tool.call.id", "value": {"stringValue": "call_7712"}},
+      {"key": "gen_ai.tool.description", "value": {"stringValue": "Current weather by city"}},
+      {"key": "gen_ai.request.model", "value": {"stringValue": "gpt-4o-mini"}},
+      {"key": "input.value", "value": {"stringValue": "{\"city\": \"Berlin\"}"}},
+      {"key": "output.value", "value": {"stringValue": "{\"temp_c\": 21}"}}
+    ]
+  },
+  "expect": {
+    "type": "tool",
+    "label": "execute_tool gpt-4o-mini",
+    "status": "completed",
+    "duration_ms": 85,
+    "parent_span_id": "3c3c3c3c3c3c3c3c",
+    "request.type": "tool",
+    "request.operation": "execute_tool",
+    "request.model": "gpt-4o-mini",
+    "request.input": {"city": "Berlin"},
+    "result.text": {"temp_c": 21},
+    "result.meta.tool": "get_weather",
+    "result.meta.model": "gpt-4o-mini"
+  },
+  "expect_absent": ["result.meta.session_id"]
+}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, Dataset, DatasetDetail, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
+import RegressionTriage from "@/components/RegressionTriage";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import TopNav from "@/components/TopNav";
 
@@ -108,6 +109,9 @@ export default function DatasetsPage() {
                       </div>
                     )}
                     {cmp && <Significance cmp={cmp} />}
+                    {/* The significance verdict says whether the move is real; triage says which
+                        rows moved. Both hang off the same two-run selection. */}
+                    {cmpPick.length === 2 && <RegressionTriage a={cmpPick[0]} b={cmpPick[1]} />}
                   </div>
                 )}
 

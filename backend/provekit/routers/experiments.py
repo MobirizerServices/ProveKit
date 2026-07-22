@@ -78,6 +78,122 @@ def _pairs_by_item(a_rows: list[ExperimentResult], b_rows: list[ExperimentResult
     return [(a_idx[i], b_idx[i]) for i in sorted(a_idx.keys() & b_idx.keys())]
 
 
+# A row "passes" at or above this score. Most scorers emit 0/1 or a 0..1 fraction, so half-way
+# is the only defensible default; a scorer on another scale takes ?pass_at=.
+PASS_AT = 0.5
+# Rows returned per scorer per direction. The counts stay exact when the lists are cut — nobody
+# triages past the first screen, and a 10k-row experiment should not return a 10k-row payload.
+TRIAGE_LIMIT = 50
+
+
+def _num(scores: dict | None, scorer: str) -> float | None:
+    """One scorer's value as a float, or None when absent or non-numeric."""
+    try:
+        return float((scores or {})[scorer])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _clip(s: str, n: int) -> str:
+    return s if len(s) <= n else s[:n] + "…"
+
+
+def _index_by_item(rows: list[ExperimentResult]) -> tuple[dict[int, ExperimentResult], int, int]:
+    """item_id -> row, plus counts of what could not be indexed.
+
+    An item scored twice in one run gives no way to know which attempt the other run should be
+    compared against, so both copies are dropped rather than picking one arbitrarily and
+    reporting the difference as if it were a code change.
+    """
+    by_item: dict[int, ExperimentResult] = {}
+    dupes: set[int] = set()
+    no_id = 0
+    for r in rows:
+        if r.item_id is None:
+            no_id += 1
+        elif r.item_id in by_item:
+            dupes.add(r.item_id)
+        else:
+            by_item[r.item_id] = r
+    for i in dupes:
+        by_item.pop(i)
+    return by_item, no_id, len(dupes)
+
+
+def _pair_rows(a_rows: list[ExperimentResult], b_rows: list[ExperimentResult]) -> tuple[list, dict, list[str]]:
+    """Rows the two runs genuinely share, with an accounting of everything left out.
+
+    Pairing is by item_id only. Pairing by position would happily line up row 7 of one run
+    against row 7 of another and report the difference as a regression, which is confident
+    nonsense the moment the two runs saw different material — the exact failure this endpoint
+    exists to avoid. Rows whose stored input differs under the same item_id mean the dataset
+    item itself was edited between the runs; they are dropped for the same reason.
+    """
+    a_idx, a_no_id, a_dupes = _index_by_item(a_rows)
+    b_idx, b_no_id, b_dupes = _index_by_item(b_rows)
+    paired, drifted = [], 0
+    for i in sorted(a_idx.keys() & b_idx.keys()):
+        ra, rb = a_idx[i], b_idx[i]
+        if ra.input and rb.input and ra.input != rb.input:
+            drifted += 1
+        else:
+            paired.append((i, ra, rb))
+
+    counts = {"paired": len(paired), "drifted": drifted,
+              "only_in_a": len(a_idx.keys() - b_idx.keys()), "only_in_b": len(b_idx.keys() - a_idx.keys()),
+              "no_item_id": a_no_id + b_no_id, "duplicate_item_id": a_dupes + b_dupes}
+    notes = []
+    if drifted:
+        notes.append(f"{drifted} item(s) have a different input in the two runs — the dataset item "
+                     f"changed between them, so those rows are not comparable and were dropped.")
+    if counts["only_in_a"] or counts["only_in_b"]:
+        notes.append(f"{counts['only_in_a']} row(s) only in A and {counts['only_in_b']} only in B — "
+                     f"an item scored in one run and not the other has nothing to diff against.")
+    if counts["no_item_id"]:
+        notes.append(f"{counts['no_item_id']} row(s) carry no item id and were skipped; rows are never "
+                     f"paired by position, which would compare unrelated examples.")
+    if counts["duplicate_item_id"]:
+        notes.append(f"{counts['duplicate_item_id']} item(s) were scored more than once in a run — "
+                     f"ambiguous which attempt to compare, so they were skipped.")
+    return paired, counts, notes
+
+
+def _triage_scorer(paired: list, scorer: str, pass_at: float, limit: int) -> dict:
+    """Per-row movement for one scorer, worst regression first."""
+    regressed, improved, unchanged, only_a, only_b = [], [], 0, 0, 0
+    for item_id, ra, rb in paired:
+        av, bv = _num(ra.scores, scorer), _num(rb.scores, scorer)
+        if av is None and bv is None:
+            continue
+        if av is None:
+            only_b += 1   # scored in B only — the scorer was added, not a regression
+            continue
+        if bv is None:
+            only_a += 1   # scored in A only — the scorer stopped running
+            continue
+        delta = bv - av
+        if delta == 0:
+            unchanged += 1
+            continue
+        crossed = ("pass_to_fail" if av >= pass_at > bv else
+                   "fail_to_pass" if bv >= pass_at > av else "")
+        entry = {"item_id": item_id, "a_score": av, "b_score": bv, "delta": delta, "crossed": crossed,
+                 "input": _clip(ra.input or rb.input, 400), "expected": _clip(ra.expected or rb.expected, 400),
+                 "a_output": _clip(ra.output, 600), "b_output": _clip(rb.output, 600)}
+        (regressed if delta < 0 else improved).append(entry)
+
+    # A pass that became a fail is a break; a 0.9 → 0.7 dip is a degradation. Sorting the breaks
+    # to the top, then by size of drop, puts the row that needs a human first.
+    regressed.sort(key=lambda r: (r["crossed"] != "pass_to_fail", r["delta"]))
+    improved.sort(key=lambda r: (r["crossed"] != "fail_to_pass", -r["delta"]))
+    return {"regressed_count": len(regressed), "improved_count": len(improved), "unchanged": unchanged,
+            "pass_to_fail": sum(r["crossed"] == "pass_to_fail" for r in regressed),
+            "fail_to_pass": sum(r["crossed"] == "fail_to_pass" for r in improved),
+            "scored_only_in_a": only_a, "scored_only_in_b": only_b,
+            "regressed": regressed[:limit], "improved": improved[:limit],
+            "truncated": len(regressed) > limit or len(improved) > limit}
+
+
 def _experiment_row(db: Session, e: Experiment) -> dict:
     results = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == e.id).all()
     return {"id": e.id, "name": e.name, "dataset_id": e.dataset_id,
@@ -171,6 +287,49 @@ def compare_experiments(eid: int, other_id: int, db: Session = Depends(get_db),
             "b": {"id": b.id, "name": b.name, "dataset_id": b.dataset_id,
                   "created_at": iso_utc(b.created_at)},
             "alpha": stats.ALPHA, "warning": warning, "scorers": scorers}
+
+
+@router.get("/{eid}/triage/{other_id}")
+def triage_experiments(eid: int, other_id: int, pass_at: float = PASS_AT, limit: int = TRIAGE_LIMIT,
+                       db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    """Which rows regressed — the question a score delta cannot answer.
+
+    /compare says the mean moved by -0.08 and that the move is real. That still leaves someone
+    reading the whole result table to find the handful of examples that broke. This pairs rows
+    by dataset item and returns, per scorer, what got worse (worst first), what got better, and
+    what crossed the pass/fail line, so "what broke" is one request rather than an afternoon.
+
+    Rows that cannot be paired are reported, never guessed at: see `pairing` and `notes`.
+    """
+    a, b = _get_experiment(db, ws, eid), _get_experiment(db, ws, other_id)
+    limit = max(1, min(limit, 500))
+    a_rows = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == a.id).all()
+    b_rows = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == b.id).all()
+
+    out = {"a": {"id": a.id, "name": a.name, "dataset_id": a.dataset_id, "created_at": iso_utc(a.created_at)},
+           "b": {"id": b.id, "name": b.name, "dataset_id": b.dataset_id, "created_at": iso_utc(b.created_at)},
+           "pass_at": pass_at, "comparable": False, "warning": "", "notes": [],
+           "pairing": {"paired": 0, "drifted": 0, "only_in_a": 0, "only_in_b": 0,
+                       "no_item_id": 0, "duplicate_item_id": 0},
+           "scorers": {}}
+
+    if a.dataset_id != b.dataset_id:
+        # Item ids are only meaningful within a dataset, so a row-level diff across two of them
+        # would be comparing unrelated examples. Refuse rather than produce a plausible table.
+        out["warning"] = ("These experiments ran against different datasets, so their rows are not "
+                          "the same examples and cannot be diffed row by row.")
+        return out
+
+    paired, counts, notes = _pair_rows(a_rows, b_rows)
+    out["pairing"], out["notes"], out["comparable"] = counts, notes, bool(paired)
+    if not paired:
+        out["warning"] = ("No dataset items were scored in both runs, so there is nothing to diff "
+                          "row by row.")
+        return out
+
+    scorers = {k for _, ra, rb in paired for k in (list(ra.scores or {}) + list(rb.scores or {}))}
+    out["scorers"] = {name: _triage_scorer(paired, name, pass_at, limit) for name in sorted(scorers)}
+    return out
 
 
 @router.delete("/{eid}")

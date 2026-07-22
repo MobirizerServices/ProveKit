@@ -1,0 +1,25 @@
+{
+  "instrumentor": "crewai",
+  "dialect": "openinference",
+  "gap": "openinference.span.kind=AGENT is not on the classification ladder, so every agent turn captured by the CrewAI/LangChain/LlamaIndex/smolagents instrumentors ProveKit itself installs lands as a generic 'step'. Only frameworks that emit gen_ai.operation.name=invoke_agent ever produce an agent run.",
+  "note": "This fixture asserts the mapping we WANT, under xfail. It turns green on its own the day the ladder reads openinference.span.kind.",
+  "span": {
+    "traceId": "2222333344445555666677778888cccc",
+    "spanId": "5c6d7e8f90a1b2c3",
+    "parentSpanId": "18293a4b5c6d7e8f",
+    "name": "Agent._execute_core",
+    "startTimeUnixNano": "1753144400000000000",
+    "endTimeUnixNano": "1753144412000000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "openinference.span.kind", "value": {"stringValue": "AGENT"}},
+      {"key": "agent.name", "value": {"stringValue": "researcher"}},
+      {"key": "input.value", "value": {"stringValue": "Research OTel adoption"}},
+      {"key": "output.value", "value": {"stringValue": "Adoption is broad."}}
+    ]
+  },
+  "expect": {
+    "type": "agent",
+    "request.type": "agent"
+  }
+}

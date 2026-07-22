@@ -1,0 +1,32 @@
+{
+  "instrumentor": "urllib",
+  "dialect": "http",
+  "note": "The same call under the OLD HTTP semconv (http.method/http.url/http.status_code), which opentelemetry-instrumentation-* still emits when OTEL_SEMCONV_STABILITY_OPT_IN is unset. Neither naming carries into the run, so the mapping must be identical for both — a step that keeps its place in the tree.",
+  "span": {
+    "traceId": "1111222233334444555566667777bbbb",
+    "spanId": "4b5c6d7e8f90a1b2",
+    "parentSpanId": "18293a4b5c6d7e8f",
+    "name": "HTTP GET",
+    "startTimeUnixNano": "1753144300000000000",
+    "endTimeUnixNano": "1753144300045000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "http.method", "value": {"stringValue": "GET"}},
+      {"key": "http.url", "value": {"stringValue": "https://docs.example/robots.txt"}},
+      {"key": "http.status_code", "value": {"intValue": "200"}}
+    ]
+  },
+  "expect": {
+    "type": "step",
+    "label": "HTTP GET",
+    "status": "completed",
+    "duration_ms": 45,
+    "trace_id": "1111222233334444555566667777bbbb",
+    "span_id": "4b5c6d7e8f90a1b2",
+    "parent_span_id": "18293a4b5c6d7e8f",
+    "request.operation": "HTTP GET",
+    "request.input": "",
+    "result.text": null
+  },
+  "expect_absent": ["result.meta.tool", "result.meta.session_id"]
+}

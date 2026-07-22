@@ -1,0 +1,38 @@
+{
+  "instrumentor": "google_genai",
+  "dialect": "genai_current",
+  "note": "Gemini over the current gen_ai.* semconv. gen_ai.response.finish_reasons arrives as a single string here (not an array) — instrumentors disagree on the shape, and both must map.",
+  "span": {
+    "traceId": "3333444455556666777788889999aaaa",
+    "spanId": "2b2b2b2b2b2b2b2b",
+    "parentSpanId": "",
+    "name": "chat gemini-2.0-flash",
+    "startTimeUnixNano": "1753142700000000000",
+    "endTimeUnixNano": "1753142700430000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "gen_ai.provider.name", "value": {"stringValue": "gcp.gemini"}},
+      {"key": "gen_ai.operation.name", "value": {"stringValue": "generate_content"}},
+      {"key": "gen_ai.request.model", "value": {"stringValue": "gemini-2.0-flash"}},
+      {"key": "gen_ai.input.messages", "value": {"stringValue": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"two plus two\"}]}]"}},
+      {"key": "gen_ai.output.messages", "value": {"stringValue": "[{\"role\": \"model\", \"parts\": [{\"type\": \"text\", \"content\": \"4\"}]}]"}},
+      {"key": "gen_ai.usage.input_tokens", "value": {"intValue": "6"}},
+      {"key": "gen_ai.usage.output_tokens", "value": {"intValue": "1"}},
+      {"key": "gen_ai.response.finish_reasons", "value": {"stringValue": "STOP"}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "generate_content gemini-2.0-flash",
+    "status": "completed",
+    "duration_ms": 430,
+    "request.provider": "gcp.gemini",
+    "request.model": "gemini-2.0-flash",
+    "request.operation": "generate_content",
+    "result.text": [{"role": "model", "parts": [{"type": "text", "content": "4"}]}],
+    "result.meta.usage.input_tokens": 6,
+    "result.meta.usage.output_tokens": 1,
+    "result.meta.finish_reason": "STOP"
+  },
+  "expect_absent": ["result.meta.tool"]
+}

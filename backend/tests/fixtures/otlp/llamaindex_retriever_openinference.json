@@ -1,0 +1,36 @@
+{
+  "instrumentor": "llama_index",
+  "dialect": "openinference",
+  "note": "A LlamaIndex RETRIEVER span. Not a model call, so it lands as a 'step' — but it is exactly the kind of span that must NOT be dropped: a RAG answer is unreviewable without the query that fetched the context. The retrieved documents themselves travel in retrieval.documents.* and are not mapped (see the report).",
+  "span": {
+    "traceId": "ffff0000111122223333444455556666",
+    "spanId": "f60718293a4b5c6d",
+    "parentSpanId": "",
+    "name": "BaseRetriever.retrieve",
+    "startTimeUnixNano": "1753143900000000000",
+    "endTimeUnixNano": "1753143900120000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "openinference.span.kind", "value": {"stringValue": "RETRIEVER"}},
+      {"key": "input.value", "value": {"stringValue": "What is ProveKit?"}},
+      {"key": "input.mime_type", "value": {"stringValue": "text/plain"}},
+      {"key": "retrieval.documents.0.document.id", "value": {"stringValue": "doc-1"}},
+      {"key": "retrieval.documents.0.document.score", "value": {"doubleValue": 0.82}},
+      {"key": "retrieval.documents.0.document.content", "value": {"stringValue": "ProveKit is drop-in tracing for AI agents."}}
+    ]
+  },
+  "expect": {
+    "type": "step",
+    "label": "BaseRetriever.retrieve",
+    "status": "completed",
+    "duration_ms": 120,
+    "request.type": "step",
+    "request.operation": "BaseRetriever.retrieve",
+    "request.model": null,
+    "request.provider": null,
+    "request.input": "What is ProveKit?",
+    "result.text": null,
+    "result.meta.usage": {}
+  },
+  "expect_absent": ["result.meta.tool", "result.meta.session_id"]
+}

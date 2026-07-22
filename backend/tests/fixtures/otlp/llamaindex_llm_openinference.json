@@ -1,0 +1,43 @@
+{
+  "instrumentor": "llama_index",
+  "dialect": "openinference",
+  "note": "The synthesis call under a LlamaIndex query engine. Its only prompt attributes are the indexed input messages (no input.value at all — hide_inputs redaction or the SDK's 128-attribute cap), the exact case #178 fixed: a literal 'llm.input_messages' lookup would store a blank prompt.",
+  "span": {
+    "traceId": "ffff0000111122223333444455556666",
+    "spanId": "0718293a4b5c6d7e",
+    "parentSpanId": "f60718293a4b5c6d",
+    "name": "OpenAI.chat",
+    "startTimeUnixNano": "1753143900200000000",
+    "endTimeUnixNano": "1753143901700000000",
+    "status": {"code": 1},
+    "attributes": [
+      {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+      {"key": "llm.model_name", "value": {"stringValue": "gpt-4o-mini"}},
+      {"key": "llm.provider", "value": {"stringValue": "openai"}},
+      {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "system"}},
+      {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "Answer from the context only."}},
+      {"key": "llm.input_messages.1.message.role", "value": {"stringValue": "user"}},
+      {"key": "llm.input_messages.1.message.content", "value": {"stringValue": "Context: ProveKit is drop-in tracing.\nQ: What is ProveKit?"}},
+      {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+      {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "Drop-in tracing for agents."}},
+      {"key": "llm.token_count.prompt", "value": {"intValue": "88"}},
+      {"key": "llm.token_count.completion", "value": {"intValue": "7"}}
+    ]
+  },
+  "expect": {
+    "type": "llm",
+    "label": "chat gpt-4o-mini",
+    "duration_ms": 1500,
+    "parent_span_id": "f60718293a4b5c6d",
+    "request.provider": "openai",
+    "request.model": "gpt-4o-mini",
+    "request.input": [
+      {"role": "system", "content": "Answer from the context only."},
+      {"role": "user", "content": "Context: ProveKit is drop-in tracing.\nQ: What is ProveKit?"}
+    ],
+    "result.text": [{"role": "assistant", "content": "Drop-in tracing for agents."}],
+    "result.meta.usage.input_tokens": 88,
+    "result.meta.usage.output_tokens": 7
+  },
+  "expect_absent": ["result.meta.tool"]
+}

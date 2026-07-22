@@ -21,6 +21,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, RetentionEvent, Run, SpanNote, Workspace, _now, iso_utc
 from ..services import apikey, deploy, limits, otel, redact, share, spool
+from ..services import search as search_svc
 from ..services.auth import get_current_user
 from ..services.workspace import current_workspace
 
@@ -152,7 +153,7 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
     if not fresh:
         return 0
     for kw in fresh:
-        db.add(Run(workspace_id=ws.id, **kw))
+        db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw), **kw))
     try:
         db.commit()
         return len(fresh)
@@ -164,7 +165,7 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
         for kw in fresh:
             try:
                 with db.begin_nested():
-                    db.add(Run(workspace_id=ws.id, **kw))
+                    db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw), **kw))
             except IntegrityError:
                 continue              # the other request stored it; nothing to do
             stored += 1
@@ -328,11 +329,9 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
     if search and search.strip():
         # Full-text-ish: match a trace if ANY of its spans contains the term in its label or its
         # (JSON) request/result — so you can find a run by something it said, not just the label.
-        term = f"%{search.strip()}%"
         match_tids = [t for (t,) in db.query(Run.trace_id).filter(
             Run.workspace_id == ws.id,
-            or_(Run.label.ilike(term), cast(Run.request, String).ilike(term),
-                cast(Run.result, String).ilike(term))).distinct().limit(_SEARCH_MATCH_CAP).all()]
+            search_svc.clause(db, search)).distinct().limit(_SEARCH_MATCH_CAP).all()]
         if len(match_tids) >= _SEARCH_MATCH_CAP:
             # The candidate set is capped, so paging past it would end early and silently look
             # like "no more results". Say so rather than let the UI imply the search was total.

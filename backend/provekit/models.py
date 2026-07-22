@@ -109,6 +109,11 @@ class Run(Base):
     # Captured from a span's session.id / gen_ai.conversation.id attribute when present.
     session_id: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    # Flattened label + input/output text for search, built at write time by
+    # services/search.text_for — from the row *after* redaction, so this never becomes a
+    # fast-to-query copy of the PII redaction just removed. Nullable: rows written before
+    # this column existed fall back to the old JSON scan.
+    search_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # OTLP exporters retry on 5xx by replaying the whole batch, so without this a retry
     # silently doubles span counts, tokens and cost. Keyed on trace_id too because OTel only

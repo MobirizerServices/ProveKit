@@ -32,7 +32,8 @@ export default function FlowsPage() {
   const [testInput, setTestInput] = useState("");
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<FlowRun | null>(null);
-  const [panel, setPanel] = useState<"inspector" | "runs" | "versions">("inspector");
+  const [tab, setTab] = useState<"build" | "runs" | "versions">("build");
+  const [libQ, setLibQ] = useState("");
   // Bumped when a different graph is loaded, so the canvas reseeds; canvas edits never bump it.
   const [rev, setRev] = useState(0);
 
@@ -81,7 +82,7 @@ export default function FlowsPage() {
       setDirty(false);
       await loadFlows();
       api.flowVersions(id).then(setVersions).catch(() => {});
-      setPanel("versions");
+      setTab("versions");
     } catch (e) { setErr(msg(e)); }
   };
 
@@ -95,7 +96,7 @@ export default function FlowsPage() {
         ...(connId === "mock" ? { provider: "mock" } : { connection_id: Number(connId) }),
       });
       setLastRun(r);
-      setPanel("runs");
+      setTab("runs");
       api.flowRuns(id).then(setRuns).catch(() => {});
     } catch (e) { setErr(msg(e)); }
     finally { setRunning(false); }
@@ -126,7 +127,7 @@ export default function FlowsPage() {
     };
     update({ ...graph, nodes: [...graph.nodes, n] });
     setSelected(n.id);
-    setPanel("inspector");
+    setTab("build");
   };
 
   const node = graph.nodes.find((n) => n.id === selected) || null;
@@ -152,172 +153,207 @@ export default function FlowsPage() {
 
   return (
     <ConsoleShell>
-      <div className="flows-ws" style={{ height: "calc(100vh - var(--cs-top))" }}>
-        {/* ---------------- flow list ---------------- */}
-        <div className="flow-list">
-          <div className="side-head">
-            <span>FLOWS</span>
-            <button onClick={create} title="New flow">+</button>
+      {id == null ? (
+        /* ── All flows: a gallery of flow cards ── */
+        <div className="cs-page fg" style={{ maxWidth: 1180 }}>
+          <div className="fg-head">
+            <div>
+              <div className="page-eyebrow">Visual builder</div>
+              <h1>Agent Flows</h1>
+              <p className="muted" style={{ fontSize: 13.5, margin: "6px 0 0" }}>
+                Compose agents, models, logic and approvals on a canvas, then test-run them with
+                trace evidence attached.
+              </p>
+            </div>
+            <button className="btn btn-run" onClick={create}>+ New flow</button>
           </div>
-          {flows == null ? <div className="side-empty">Loading…</div>
-            : flows.length === 0 ? <div className="side-empty">No flows yet.<br />Create one to start.</div>
-            : flows.map((f) => (
-              <div key={f.id} className={`fl-item ${id === f.id ? "on" : ""}`} onClick={() => open(f.id)}>
-                <div className="fl-name">{f.name}</div>
-                <div className="fl-desc">
-                  v{f.version}
-                  {f.published_version ? ` · published v${f.published_version}` : " · draft"}
-                  {f.run_count ? ` · ${f.run_count} run${f.run_count === 1 ? "" : "s"}` : ""}
-                </div>
-              </div>
-            ))}
-        </div>
-
-        {/* ---------------- canvas ---------------- */}
-        <div className="flow-canvas">
-          <div className="flow-bar">
-            <div className="fb-pal">
-              {TYPES.map((t) => (
-                <button key={t} className="pal-chip" style={{ ["--nc" as string]: NODE_META[t].color }}
-                  disabled={id == null} onClick={() => addNode(t)} title={NODE_META[t].hint}>
-                  {NODE_META[t].label}
-                </button>
-              ))}
-            </div>
-            <span className="fb-sep" />
-            <input className="flow-input" placeholder="Test input…" value={testInput}
-              onChange={(e) => setTestInput(e.target.value)} disabled={id == null} />
-            <select className="reg-sel" value={connId} onChange={(e) => setConnId(e.target.value)}>
-              <option value="mock">Mock</option>
-              {conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
-            </select>
-            <button className="btn btn-sm" disabled={id == null || running} onClick={test}>
-              {running ? "Running…" : "▷ Test"}
-            </button>
-            <button className="btn btn-sm" disabled={id == null || !dirty || saving} onClick={save}>
-              {saving ? "Saving…" : dirty ? "Save draft" : "Saved"}
-            </button>
-            <button className="btn btn-sm btn-run" disabled={id == null} onClick={publish}>Publish</button>
-            {lastRun && (
-              <span className={`fb-status ${lastRun.status}`}>
-                {lastRun.status} · {lastRun.duration_ms}ms
-              </span>
-            )}
-          </div>
-
-          {err && <div className="auth-err" style={{ margin: "10px 14px 0" }}>{err}</div>}
-
-          {id == null ? (
-            <div className="flow-empty">
-              <div className="fe-icon">◆</div>
-              <h3>No flow open</h3>
-              <p>Create a flow to compose agents, models, logic and approvals on a canvas, then
-                test-run it with trace evidence attached.</p>
-              <button className="btn btn-run" onClick={create}>New flow</button>
-            </div>
-          ) : (
-            <FlowCanvas graph={graph} onChange={update} selected={selected}
-              onSelect={(s) => { setSelected(s); if (s) setPanel("inspector"); }} runState={runState} revision={rev} />
-          )}
-        </div>
-
-        {/* ---------------- right panel ---------------- */}
-        {id != null && (
-          <div className="node-insp">
-            <div className="ni-head">
-              <div className="side-tabs" style={{ padding: 0, flex: 1 }}>
-                <button className={panel === "inspector" ? "on" : ""} onClick={() => setPanel("inspector")}>Inspector</button>
-                <button className={panel === "runs" ? "on" : ""} onClick={() => setPanel("runs")}>Runs</button>
-                <button className={panel === "versions" ? "on" : ""} onClick={() => setPanel("versions")}>Versions</button>
-              </div>
-            </div>
-
-            <div className="ni-body">
-              {panel === "inspector" && (!node ? (
-                <>
-                  <div className="ni-eyebrow">FLOW</div>
-                  <div className="ni-title" style={{ marginBottom: 12 }}>{current?.name}</div>
-                  <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-                    Select a node to configure it, or add one from the palette. Drag from a node&apos;s
-                    right handle to connect it to the next step.
-                  </p>
-                  <div className="ni-run" style={{ marginTop: 16 }}>
-                    <div className="ni-run-h">GRAPH</div>
-                    <div className="muted" style={{ fontSize: 12.5 }}>
-                      {graph.nodes.length} node{graph.nodes.length === 1 ? "" : "s"} ·{" "}
-                      {graph.edges.length} connection{graph.edges.length === 1 ? "" : "s"}
+          {flows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
+            : flows.length === 0 ? (
+              <div className="pr-card"><span className="muted">No flows yet. Create one to compose
+                your first agent workflow.</span></div>
+            ) : (
+              <div className="fg-grid">
+                {flows.map((f) => (
+                  <button key={f.id} className="fg-card" onClick={() => open(f.id)}>
+                    <div className="fg-card-top">
+                      <span className="fg-card-ic">◆</span>
+                      <span className={`fs-pill ${f.published_version ? "pub" : "draft"}`}>
+                        {f.published_version ? "Published" : "Draft"}
+                      </span>
                     </div>
-                  </div>
-                  <button className="btn btn-sm btn-ghost" style={{ marginTop: 18, color: "var(--err)" }}
-                    onClick={remove}>Delete flow</button>
-                </>
-              ) : (
-                <>
-                  <div className="ni-eyebrow">{node.type.toUpperCase()}</div>
-                  <div className="ni-title">{node.label}</div>
+                    <div className="fg-card-name">{f.name}</div>
+                    <div className="fg-card-sub">
+                      {(f.graph?.nodes?.length ?? 0)} node{(f.graph?.nodes?.length ?? 0) === 1 ? "" : "s"} · v{f.version}
+                      {f.run_count ? ` · ${f.run_count} run${f.run_count === 1 ? "" : "s"}` : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+        </div>
+      ) : (
+        /* ── Flow editor: header + Build/Runs/Versions tabs ── */
+        <div className="fs2" style={{ height: "calc(100vh - var(--cs-top))" }}>
+          <div className="fs-head">
+            <button className="fs-back" onClick={() => setId(null)}>‹ All flows</button>
+            <h1 className="fs-title">{current?.name}</h1>
+            <span className={`fs-pill ${current?.published_version ? "pub" : "draft"}`}>
+              {current?.published_version ? "Published" : "Draft"}
+            </span>
+            <span className="fs-saved">{dirty ? "Unsaved changes" : "All changes saved"}</span>
+            <div className="fs-head-actions">
+              <button className="btn btn-sm" disabled={!dirty || saving} onClick={save}>
+                {saving ? "Saving…" : "Save draft"}
+              </button>
+              <button className="btn btn-sm" disabled={running} onClick={test}>
+                {running ? "Running…" : "▷ Test flow"}
+              </button>
+              <button className="btn btn-sm btn-run" onClick={publish}>Publish</button>
+            </div>
+          </div>
 
-                  <div className="field" style={{ marginTop: 14 }}>
-                    <label>Label</label>
-                    <input value={node.label} onChange={(e) => patchNode({ label: e.target.value })} />
-                  </div>
+          <div className="fs-tabbar">
+            <button className={tab === "build" ? "on" : ""} onClick={() => setTab("build")}>Build</button>
+            <button className={tab === "runs" ? "on" : ""} onClick={() => setTab("runs")}>
+              Runs {runs.length > 0 && <em>{runs.length}</em>}
+            </button>
+            <button className={tab === "versions" ? "on" : ""} onClick={() => setTab("versions")}>
+              Versions {versions.length > 0 && <em>{versions.length}</em>}
+            </button>
+            <span className="fs-crumb">Flows / {current?.name}</span>
+          </div>
 
-                  {(node.type === "agent" || node.type === "model") && (
+          {err && <div className="auth-err" style={{ margin: "10px 16px 0" }}>{err}</div>}
+
+          {tab === "build" ? (
+            <div className="fs-build">
+              {/* left: node library */}
+              <div className="fs-lib">
+                <div className="fs-lib-head">Node library<small>Drag or click to add</small></div>
+                <input className="fs-lib-search" placeholder="Search nodes…" value={libQ}
+                  onChange={(e) => setLibQ(e.target.value)} />
+                <div className="fs-lib-group-h">Building blocks</div>
+                {TYPES.filter((t) => NODE_META[t].label.toLowerCase().includes(libQ.toLowerCase())).map((t) => (
+                  <button key={t} className="fs-lib-item" onClick={() => addNode(t)}>
+                    <span className="fs-lib-ic" style={{ background: NODE_META[t].color }}>{NODE_META[t].icon}</span>
+                    <span className="fs-lib-main">
+                      <span className="fs-lib-name">{NODE_META[t].label}</span>
+                      <span className="fs-lib-desc">{NODE_META[t].hint}</span>
+                    </span>
+                    <span className="fs-lib-add">+</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* center: canvas */}
+              <div className="fs-canvas-col">
+                <div className="fs-testbar">
+                  <input className="flow-input" placeholder="Test input…" value={testInput}
+                    onChange={(e) => setTestInput(e.target.value)} />
+                  <select className="reg-sel" value={connId} onChange={(e) => setConnId(e.target.value)}>
+                    <option value="mock">Mock</option>
+                    {conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
+                  </select>
+                  <button className="btn btn-sm" disabled={running} onClick={test}>{running ? "Running…" : "▷ Test"}</button>
+                  {lastRun && <span className={`fb-status ${lastRun.status}`}>{lastRun.status} · {lastRun.duration_ms}ms</span>}
+                </div>
+                <FlowCanvas graph={graph} onChange={update} selected={selected}
+                  onSelect={(s) => { setSelected(s); setTab("build"); }} runState={runState} revision={rev} />
+              </div>
+
+              {/* right: node inspector (Configure) */}
+              <div className="node-insp">
+                <div className="ni-body">
+                  {!node ? (
                     <>
-                      <div className="field">
-                        <label>Model</label>
-                        <input className="mono" value={node.config?.model || ""} placeholder="gpt-4o-mini"
-                          onChange={(e) => patchNode({ config: { ...node.config, model: e.target.value } })} />
+                      <div className="ni-eyebrow">Flow</div>
+                      <div className="ni-title" style={{ marginBottom: 12 }}>{current?.name}</div>
+                      <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                        Select a node to configure it, or add one from the library. Drag from a
+                        node&apos;s right handle to connect it to the next step.
+                      </p>
+                      <div className="ni-run" style={{ marginTop: 16 }}>
+                        <div className="ni-run-h">Graph</div>
+                        <div className="muted" style={{ fontSize: 12.5 }}>
+                          {graph.nodes.length} node{graph.nodes.length === 1 ? "" : "s"} ·{" "}
+                          {graph.edges.length} connection{graph.edges.length === 1 ? "" : "s"}
+                        </div>
                       </div>
-                      <div className="field">
-                        <label>System <span className="hint">optional</span></label>
-                        <textarea rows={3} value={node.config?.system || ""}
-                          onChange={(e) => patchNode({ config: { ...node.config, system: e.target.value } })} />
+                      <button className="btn btn-sm btn-ghost" style={{ marginTop: 18, color: "var(--err)" }}
+                        onClick={remove}>Delete flow</button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="ni-head-node">
+                        <span className="ni-node-ic" style={{ background: NODE_META[node.type].color }}>{NODE_META[node.type].icon}</span>
+                        <div>
+                          <div className="ni-title">{node.label}</div>
+                          <div className="ni-eyebrow">{node.type} node</div>
+                        </div>
                       </div>
-                      <div className="field">
-                        <label>Prompt <span className="hint">{"{{input}}"} is the incoming text</span></label>
-                        <textarea rows={5} className="mono" value={node.config?.prompt ?? "{{input}}"}
-                          onChange={(e) => patchNode({ config: { ...node.config, prompt: e.target.value } })} />
+
+                      <div className="field" style={{ marginTop: 14 }}>
+                        <label>Display name</label>
+                        <input value={node.label} onChange={(e) => patchNode({ label: e.target.value })} />
                       </div>
+
+                      {(node.type === "agent" || node.type === "model") && (
+                        <>
+                          <div className="field">
+                            <label>Model</label>
+                            <input className="mono" value={node.config?.model || ""} placeholder="gpt-4o-mini"
+                              onChange={(e) => patchNode({ config: { ...node.config, model: e.target.value } })} />
+                          </div>
+                          <div className="field">
+                            <label>System instruction <span className="hint">optional</span></label>
+                            <textarea rows={3} value={node.config?.system || ""}
+                              onChange={(e) => patchNode({ config: { ...node.config, system: e.target.value } })} />
+                          </div>
+                          <div className="field">
+                            <label>Prompt <span className="hint">{"{{input}}"} is the incoming text</span></label>
+                            <textarea rows={5} className="mono" value={node.config?.prompt ?? "{{input}}"}
+                              onChange={(e) => patchNode({ config: { ...node.config, prompt: e.target.value } })} />
+                          </div>
+                        </>
+                      )}
+
+                      {node.type === "logic" && (
+                        <ConditionEditor node={node} onChange={(conditions) =>
+                          patchNode({ config: { ...node.config, conditions } })} />
+                      )}
+
+                      {node.type === "knowledge" && (
+                        <div className="wiz-note">No retriever is configured for this workspace, so this
+                          node is skipped at run time rather than returning an invented document.</div>
+                      )}
+                      {node.type === "approval" && (
+                        <div className="wiz-note">A test run auto-approves and records that it did — it
+                          can&apos;t block on a reviewer.</div>
+                      )}
+
+                      {lastRun?.steps.find((s) => s.node_id === node.id) && (
+                        <div className="ni-run">
+                          <div className="ni-run-h">Last run</div>
+                          <StepDetail step={lastRun.steps.find((s) => s.node_id === node.id)!} />
+                        </div>
+                      )}
+
+                      <button className="btn btn-sm btn-ghost" style={{ marginTop: 18, color: "var(--err)" }}
+                        onClick={deleteNode}>Delete node</button>
                     </>
                   )}
-
-                  {node.type === "logic" && (
-                    <ConditionEditor node={node} onChange={(conditions) =>
-                      patchNode({ config: { ...node.config, conditions } })} />
-                  )}
-
-                  {node.type === "knowledge" && (
-                    <div className="wiz-note">
-                      No retriever is configured for this workspace, so this node is skipped at run
-                      time rather than returning an invented document.
-                    </div>
-                  )}
-
-                  {node.type === "approval" && (
-                    <div className="wiz-note">
-                      A test run auto-approves and records that it did — it can&apos;t block on a
-                      reviewer.
-                    </div>
-                  )}
-
-                  {lastRun?.steps.find((s) => s.node_id === node.id) && (
-                    <div className="ni-run">
-                      <div className="ni-run-h">LAST RUN</div>
-                      <StepDetail step={lastRun.steps.find((s) => s.node_id === node.id)!} />
-                    </div>
-                  )}
-
-                  <button className="btn btn-sm btn-ghost" style={{ marginTop: 18, color: "var(--err)" }}
-                    onClick={deleteNode}>Delete node</button>
-                </>
-              ))}
-
-              {panel === "runs" && (
-                runs.length === 0 ? <span className="muted" style={{ fontSize: 12.5 }}>No runs yet.</span> : (
+                </div>
+              </div>
+            </div>
+          ) : tab === "runs" ? (
+            <div className="fs-tabview">
+              {runs.length === 0 ? (
+                <div className="pr-card"><span className="muted">No runs yet. Use ▷ Test flow to execute this flow.</span></div>
+              ) : (
+                <div className="fs-runs">
                   <div className="fr-list">
                     {runs.map((r) => (
-                      <button key={r.id} className={`fr-item ${lastRun?.id === r.id ? "on" : ""}`}
-                        onClick={() => setLastRun(r)}>
+                      <button key={r.id} className={`fr-item ${lastRun?.id === r.id ? "on" : ""}`} onClick={() => setLastRun(r)}>
                         <span className={`fr-dot ${r.status}`} />
                         <span className="fr-main">
                           <span className="fr-top">v{r.version} · {r.duration_ms}ms</span>
@@ -330,53 +366,54 @@ export default function FlowsPage() {
                       </button>
                     ))}
                   </div>
-                )
-              )}
-
-              {panel === "versions" && (
-                versions.length === 0 ? (
-                  <span className="muted" style={{ fontSize: 12.5 }}>
-                    Nothing published yet. Publishing freezes the current draft as a version you can
-                    roll back to.
-                  </span>
-                ) : (
-                  <div className="fr-list">
-                    {versions.map((v) => (
-                      <div key={v.id} className="fv-item">
-                        <div>
-                          <b>v{v.version}</b>
-                          {current?.published_version === v.version && <span className="reg-label production">live</span>}
-                          <div className="fr-sub">{v.note || <em>no note</em>}</div>
-                          <div className="fr-time">{new Date(v.created_at).toLocaleString()}</div>
+                  <div className="fs-run-detail">
+                    {!lastRun ? <div className="muted" style={{ fontSize: 13, padding: 20 }}>Select a run.</div> : (
+                      <>
+                        <div className="fr-out-head">
+                          <span className="ni-run-h">Output · v{lastRun.version}</span>
+                          {lastRun.trace_id
+                            ? <a className="btn btn-sm btn-ghost" href={`/traces?trace=${lastRun.trace_id}`}>View trace ↗</a>
+                            : <span className="muted" style={{ fontSize: 11 }} title="The run executed; writing its trace did not.">no trace</span>}
                         </div>
-                        <button className="btn btn-sm btn-ghost" onClick={() => restore(v.version)}>Restore</button>
-                      </div>
-                    ))}
+                        <div className="fr-out-body" style={{ maxHeight: "none" }}>{lastRun.error || lastRun.output || <span className="muted">empty</span>}</div>
+                        <div className="ni-run-h" style={{ marginTop: 16 }}>Steps</div>
+                        {(lastRun.steps || []).map((s) => (
+                          <div key={s.node_id} className="fs-step-row">
+                            <span className={`fr-dot ${s.status === "ok" ? "completed" : s.status === "failed" ? "failed" : "skipped"}`} />
+                            <b>{s.label}</b><span className="muted">{s.type} · {s.duration_ms}ms</span>
+                            {s.note && <span className="fs-step-note">{s.note}</span>}
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
-                )
+                </div>
               )}
             </div>
-
-            {lastRun && panel === "runs" && (
-              <div className="fr-out">
-                <div className="fr-out-head">
-                  <span className="ni-run-h">OUTPUT</span>
-                  {lastRun.trace_id ? (
-                    <a className="btn btn-sm btn-ghost" href={`/traces?trace=${lastRun.trace_id}`}>
-                      View trace ↗
-                    </a>
-                  ) : (
-                    <span className="muted" style={{ fontSize: 11 }} title="The run executed; writing its trace did not.">
-                      no trace
-                    </span>
-                  )}
+          ) : (
+            <div className="fs-tabview">
+              {versions.length === 0 ? (
+                <div className="pr-card"><span className="muted">Nothing published yet. Publishing
+                  freezes the current draft as a version you can roll back to.</span></div>
+              ) : (
+                <div className="fs-versions">
+                  {versions.map((v) => (
+                    <div key={v.id} className="fv-item">
+                      <div>
+                        <b>v{v.version}</b>
+                        {current?.published_version === v.version && <span className="reg-label production">live</span>}
+                        <div className="fr-sub">{v.note || <em>no note</em>}</div>
+                        <div className="fr-time">{new Date(v.created_at).toLocaleString()}</div>
+                      </div>
+                      <button className="btn btn-sm btn-ghost" onClick={() => restore(v.version)}>Restore</button>
+                    </div>
+                  ))}
                 </div>
-                <div className="fr-out-body">{lastRun.error || lastRun.output || <span className="muted">empty</span>}</div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </ConsoleShell>
   );
 }

@@ -1940,3 +1940,84 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
   color: var(--purple); padding: 8px 16px; }
 .tx-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--border); }
 .tx-detail-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FLOW STUDIO v2 (.fs2 / .fg) — header, Build/Runs/Versions tabs, node library
+   ═════════════════════════════════════════════════════════════════════════ */
+/* All-flows gallery */
+.fg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.fg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.fg-card { text-align: left; background: var(--glass); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 18px; cursor: pointer; transition: transform .16s var(--ease), border-color .16s; }
+.fg-card:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+.fg-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.fg-card-ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; font-size: 15px;
+  color: #fff; background: linear-gradient(150deg, var(--accent-2), var(--accent-dark)); }
+.fg-card-name { font-size: 15px; font-weight: 600; }
+.fg-card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.fs-pill { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; }
+.fs-pill.pub { color: var(--green); background: color-mix(in srgb, var(--green) 15%, transparent); }
+.fs-pill.draft { color: var(--muted); background: var(--panel-3); }
+
+/* editor shell */
+.fs2 { display: flex; flex-direction: column; overflow: hidden; }
+.fs-head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); flex: none; }
+.fs-back { background: transparent; border: none; color: var(--muted); font-size: 13px; }
+.fs-back:hover { color: var(--text); }
+.fs-title { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+.fs-saved { font-size: 12px; color: var(--faint); }
+.fs-head-actions { margin-left: auto; display: flex; gap: 8px; }
+.fs-tabbar { display: flex; align-items: center; gap: 4px; padding: 0 18px; border-bottom: 1px solid var(--border); flex: none; }
+.fs-tabbar button { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+  font-size: 13.5px; font-weight: 500; padding: 11px 4px; margin-right: 14px; display: inline-flex; align-items: center; gap: 7px; }
+.fs-tabbar button:hover { color: var(--text); }
+.fs-tabbar button.on { color: var(--text); border-bottom-color: var(--accent); }
+.fs-tabbar button em { font-style: normal; font-family: var(--mono); font-size: 10px; padding: 1px 7px; border-radius: 999px;
+  background: var(--panel-3); color: var(--muted); }
+.fs-crumb { margin-left: auto; font-size: 12px; color: var(--faint); }
+
+/* build: 3 columns */
+.fs-build { flex: 1; display: grid; grid-template-columns: 240px 1fr 336px; overflow: hidden; }
+.fs-lib { border-right: 1px solid var(--border); background: var(--bg); overflow-y: auto; padding: 14px; }
+.fs-lib-head { font-size: 13px; font-weight: 600; }
+.fs-lib-head small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.fs-lib-search { width: 100%; margin: 12px 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: var(--r-md); padding: 8px 11px; font-size: 12.5px; }
+.fs-lib-group-h { font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--faint); margin: 4px 0 8px; }
+.fs-lib-item { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; padding: 9px 8px;
+  border-radius: var(--r-md); background: transparent; border: 1px solid transparent; margin-bottom: 3px; }
+.fs-lib-item:hover { background: var(--panel-2); border-color: var(--border); }
+.fs-lib-ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; font-size: 14px; color: #fff; flex: none; }
+.fs-lib-main { flex: 1; min-width: 0; }
+.fs-lib-name { display: block; font-size: 13px; font-weight: 600; }
+.fs-lib-desc { display: block; font-size: 11px; color: var(--muted); }
+.fs-lib-add { color: var(--faint); font-size: 15px; }
+.fs-lib-item:hover .fs-lib-add { color: var(--accent-2); }
+
+.fs-canvas-col { display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.fs-testbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg); flex: none; }
+.fs-testbar .flow-input { flex: 1; max-width: 280px; }
+.fs-build .rf-wrap { flex: 1; }
+.fs-build .node-insp { border-left: 1px solid var(--border); }
+
+/* runs / versions tab views */
+.fs-tabview { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.fs-runs { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; max-width: 1100px; }
+.fs-run-detail { background: var(--glass); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; }
+.fs-step-row { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 12.5px; flex-wrap: wrap; }
+.fs-step-row b { font-weight: 600; } .fs-step-row .muted { font-family: var(--mono); font-size: 11px; }
+.fs-step-note { flex-basis: 100%; font-size: 11.5px; color: var(--muted); padding-left: 18px; }
+.fs-versions { display: grid; gap: 10px; max-width: 720px; }
+
+/* node inspector header with icon */
+.ni-head-node { display: flex; align-items: center; gap: 12px; }
+.ni-node-ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; font-size: 15px; color: #fff; flex: none; }
+
+@media (max-width: 1000px) {
+  .fs-build { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .fs-lib { border-right: none; border-bottom: 1px solid var(--border); max-height: 200px; }
+  .fs-build .node-insp { display: none; }
+  .fs-runs { grid-template-columns: 1fr; }
+}

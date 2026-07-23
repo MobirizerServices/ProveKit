@@ -1,8 +1,10 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, API_BASE, getProjectId, TraceSpan, TraceSummary } from "@/lib/api";
+import { fmtCost } from "@/lib/cost";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
@@ -13,29 +15,6 @@ import Tour, { TourStep, useTour } from "@/components/Tour";
 
 function ListSkeleton() {
   return <><Skeleton w="65%" h={12} /><Skeleton w="85%" h={10} mt={5} /><SkeletonStyles /></>;
-}
-
-function TraceRow({ t, active, onClick, fmt, indent }: {
-  t: TraceSummary; active: boolean; onClick: () => void; fmt: (s?: string) => string; indent?: boolean;
-}) {
-  return (
-    <button onClick={onClick} style={{ ...row(active), paddingLeft: indent ? 26 : 14 }} title={fmt(t.created_at)}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-        <span style={{ fontWeight: 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {t.label || `run ${t.id}`}
-        </span>
-        {t.incomplete
-          ? <span style={partialBadge} title="No root span arrived — the run ended before it could report finishing (crash, OOM, or timeout). What was captured before it stopped is shown below.">partial</span>
-          : t.status === "failed"
-            ? <span style={failBadge}>failed</span>
-            : <span style={{ ...dot, background: "var(--green)" }} />}
-      </div>
-      <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-        {t.span_count} span{t.span_count === 1 ? "" : "s"} · {t.duration_ms}ms{t.tokens ? ` · ${t.tokens} tok` : ""} · {relTime(t.created_at)}
-        {!indent && t.session_id ? <span style={{ color: "var(--purple)" }}> · ◆ {t.session_id}</span> : ""}
-      </div>
-    </button>
-  );
 }
 
 // Group traces by session_id (ungrouped last), with per-group token totals.
@@ -88,7 +67,6 @@ export default function TracesPage() {
   const [loaded, setLoaded] = useState(false);
   const [more, setMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [listOpen, setListOpen] = useState(true);
   // True while the selected project is the preloaded sample. Fabricated traces shown without
   // saying so would break the one promise a tracing tool has to keep, so this banner rides
   // above the list for as long as the sample project is open.
@@ -241,111 +219,110 @@ export default function TracesPage() {
           </div>
         )}
 
-        {traces.length === 0 && !failuresOnly && !windowHours ? (
+        {traces.length === 0 && !failuresOnly && !windowHours && !dq ? (
           <EmptyState origin={origin} />
-        ) : (
-          <div className="traces-grid" style={{ display: "grid", gridTemplateColumns: listOpen ? "300px 1fr" : "0 1fr", gap: listOpen ? 16 : 0, transition: "grid-template-columns .2s, gap .2s", position: "relative" }}>
-            {/* collapse the trace list to give the flow studio the whole width */}
-            {sel && (
-              <button onClick={() => setListOpen((o) => !o)} title={listOpen ? "Hide list" : "Show list"}
-                style={{ position: "absolute", top: 6, left: listOpen ? 300 : -4, zIndex: 6, width: 22, height: 22, borderRadius: 6, border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--muted)", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "grid", placeItems: "center" }}>
-                {listOpen ? "‹" : "›"}
-              </button>
-            )}
-            <div data-tour="trace-list" style={{ display: listOpen ? "flex" : "none", flexDirection: "column", gap: 8, maxHeight: "76vh" }}>
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search label or content…"
-                style={{ background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 }} />
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => setFailuresOnly((v) => !v)} style={chip(failuresOnly)}
-                  title="Show only failed traces">Failures only</button>
-                <select value={windowHours} onChange={(e) => setWindowHours(Number(e.target.value))}
-                  style={{ ...chip(windowHours > 0), flex: 1, appearance: "none" }}>
-                  {WINDOWS.map((w) => <option key={w.hours} value={w.hours}>{w.label}</option>)}
-                </select>
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                {modelOptions.length > 1 && (
-                  <select value={model} onChange={(e) => setModel(e.target.value)}
-                    style={{ ...chip(!!model), flex: 1, appearance: "none" }} title="Filter by model">
-                    <option value="">All models</option>
-                    {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                )}
-                <select value={sort} onChange={(e) => setSort(e.target.value as any)}
-                  style={{ ...chip(sort !== "recent"), flex: 1, appearance: "none" }} title="Sort">
-                  <option value="recent">↓ Recent</option>
-                  <option value="slowest">↓ Slowest</option>
-                  <option value="tokens">↓ Most tokens</option>
-                </select>
-                {hasSessions && (
-                  <button onClick={() => setGroupBySession((v) => !v)} style={chip(groupBySession)}
-                    title="Group multi-turn runs by session">◆ Sessions</button>
-                )}
-              </div>
-              <div style={{ ...panel, padding: 0, overflowY: "auto" }}>
-              {!loaded ? (
-                <div style={{ padding: 12 }}>
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} style={{ padding: "8px 2px" }}>
-                      <ListSkeleton />
-                    </div>
+        ) : sel ? (
+          /* ── detail view: the selected trace's flow, full width ── */
+          <div>
+            <div className="tx-detail-bar">
+              <button className="btn btn-sm btn-ghost" onClick={() => { setSel(null); setVs(null); }}>← All traces</button>
+              {!vs && spans && (
+                <select value="" data-tour="compare" className="reg-sel" style={{ marginLeft: "auto" }}
+                  onChange={(e) => e.target.value && setVs(e.target.value)} title="Compare this trace against another">
+                  <option value="">⇄ Compare with…</option>
+                  {shown.filter((t) => t.trace_id && t.trace_id !== sel).slice(0, 30).map((t) => (
+                    <option key={t.trace_id} value={t.trace_id}>{t.label} · {t.trace_id.slice(0, 8)}</option>
                   ))}
-                </div>
-              ) : shown.length === 0 ? (
-                <div className="muted" style={{ padding: 14, fontSize: 12.5 }}>No traces match.</div>
-              ) : groupBySession ? (
-                sessionGroups(shown).map((g) => (
-                  <div key={g.key}>
-                    <div style={sessionHeader}>
-                      <span>{g.session ? `◆ ${g.session}` : "No session"}</span>
-                      <span className="muted" style={{ fontWeight: 400 }}>
-                        {g.items.length} turn{g.items.length === 1 ? "" : "s"}{g.tokens ? ` · ${g.tokens} tok` : ""}
-                      </span>
-                    </div>
-                    {g.items.map((t) => (
-                      <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => { setSel(t.trace_id); setVs(null); }} fmt={fmt} indent />
-                    ))}
-                  </div>
-                ))
-              ) : shown.map((t) => (
-                <TraceRow key={t.trace_id || t.id} t={t} active={sel === t.trace_id} onClick={() => { setSel(t.trace_id); setVs(null); }} fmt={fmt} />
-              ))}
-              {/* Client-side filters (model, sort) narrow what's loaded, so keep paging offered
-                  whenever the server has more — otherwise a model filter can look empty when
-                  the matching traces are simply on a later page. */}
-              {more && (
-                <button className="btn btn-sm" onClick={loadMore} disabled={loadingMore}
-                  style={{ width: "100%", marginTop: 8 }}>
-                  {loadingMore ? "Loading…" : `Load ${PAGE} more`}
-                </button>
+                </select>
               )}
-              </div>
             </div>
-
-            <div style={{ ...panel, minHeight: 220 }}>
-              {!sel ? (
-                <div className="muted" style={{ fontSize: 13 }}>Select a trace to see its flow.</div>
-              ) : vs ? (
-                <TraceCompare aId={sel} bId={vs} onClose={() => setVs(null)} />
-              ) : !spans ? (
-                <DetailSkeleton />
-              ) : (
-                <>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-                    <select value="" data-tour="compare" onChange={(e) => e.target.value && setVs(e.target.value)}
-                      title="Compare this trace against another"
-                      style={{ background: "var(--panel-2)", color: "var(--muted)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "5px 9px", fontSize: 12 }}>
-                      <option value="">⇄ Compare with…</option>
-                      {shown.filter((t) => t.trace_id && t.trace_id !== sel).slice(0, 30).map((t) => (
-                        <option key={t.trace_id} value={t.trace_id}>{t.label} · {t.trace_id.slice(0, 8)} · {fmt(t.created_at).replace(/:\d\d /, " ")}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <TraceDetail spans={spans} traceId={sel ?? undefined} />
-                </>
-              )}
+            <div style={{ ...panel, minHeight: 300 }}>
+              {vs ? <TraceCompare aId={sel} bId={vs} onClose={() => setVs(null)} />
+                : !spans ? <DetailSkeleton />
+                : <TraceDetail spans={spans} traceId={sel ?? undefined} />}
             </div>
           </div>
+        ) : (
+          /* ── table view: the reference trace explorer ── */
+          <>
+            <div className="tx-filters">
+              <div className="tx-search">
+                <span aria-hidden>⌕</span>
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by trace name or content…" />
+              </div>
+              <select className="tx-sel" value={failuresOnly ? "failed" : "all"}
+                onChange={(e) => setFailuresOnly(e.target.value === "failed")}>
+                <option value="all">All</option>
+                <option value="failed">Failures</option>
+              </select>
+              {modelOptions.length > 1 && (
+                <select className="tx-sel" value={model} onChange={(e) => setModel(e.target.value)}>
+                  <option value="">Model: All</option>
+                  {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
+              <select className="tx-sel" value={windowHours} onChange={(e) => setWindowHours(Number(e.target.value))}>
+                {WINDOWS.map((w) => <option key={w.hours} value={w.hours}>{w.label}</option>)}
+              </select>
+              <select className="tx-sel" value={sort} onChange={(e) => setSort(e.target.value as any)}>
+                <option value="recent">↓ Recent</option>
+                <option value="slowest">↓ Slowest</option>
+                <option value="tokens">↓ Most tokens</option>
+              </select>
+              {hasSessions && (
+                <button className={`tx-sel ${groupBySession ? "on" : ""}`} onClick={() => setGroupBySession((v) => !v)}
+                  title="Group multi-turn runs by session">◆ Sessions</button>
+              )}
+              <span className="tx-count">{shown.length}{more ? "+" : ""} trace{shown.length === 1 ? "" : "s"}</span>
+            </div>
+
+            <div data-tour="trace-list" style={{ ...panel, padding: 0, overflowX: "auto" }}>
+              {!loaded ? (
+                <div style={{ padding: 16 }}>{Array.from({ length: 6 }).map((_, i) => <div key={i} style={{ padding: "10px 2px" }}><ListSkeleton /></div>)}</div>
+              ) : shown.length === 0 ? (
+                <div className="muted" style={{ padding: 20, fontSize: 13, textAlign: "center" }}>No traces match.</div>
+              ) : (
+                <table className="tx-table">
+                  <thead>
+                    <tr><th>Trace</th><th>Type</th><th>Status</th><th>Duration</th><th>Tokens</th><th>Cost</th><th>Created</th></tr>
+                  </thead>
+                  <tbody>
+                    {(groupBySession ? sessionGroups(shown) : [{ key: "_", session: "", items: shown, tokens: 0 }]).map((g) => (
+                      <React.Fragment key={g.key}>
+                        {groupBySession && (
+                          <tr className="tx-group"><td colSpan={7}>
+                            {g.session ? `◆ ${g.session}` : "No session"} · {g.items.length} turn{g.items.length === 1 ? "" : "s"}
+                          </td></tr>
+                        )}
+                        {g.items.map((t) => (
+                          <tr key={t.trace_id || t.id} className="tx-row" onClick={() => { setSel(t.trace_id); setVs(null); }} title={fmt(t.created_at)}>
+                            <td className="tx-name">
+                              <b>{t.label || `run ${t.id}`}</b>
+                              <span className="tx-id">{t.trace_id ? t.trace_id.slice(0, 10) : `#${t.id}`}</span>
+                            </td>
+                            <td><span className={`tx-type ${t.type}`}>{t.type}</span></td>
+                            <td><TxStatus t={t} /></td>
+                            <td className="tx-num">{fmtDur(t.duration_ms)}</td>
+                            <td className="tx-num">{t.tokens ? t.tokens.toLocaleString() : "—"}</td>
+                            <td className="tx-num">{t.cost != null ? fmtCost(t.cost) : "—"}</td>
+                            <td className="tx-when">{relTime(t.created_at)}</td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {more && (
+                <div className="tx-foot">
+                  <span className="muted">{shown.length} loaded{inSample ? " · sample data" : ""}</span>
+                  <button className="btn btn-sm" onClick={loadMore} disabled={loadingMore}>
+                    {loadingMore ? "Loading…" : `Load ${PAGE} more`}
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </main>
       <Tour steps={tourSteps} open={tour.open} onClose={tour.close} />
@@ -373,6 +350,17 @@ function DetailSkeleton() {
   );
 }
 
+function fmtDur(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
+}
+
+// ● Success / ● Error / ⚠ partial — the reference's status pill.
+function TxStatus({ t }: { t: TraceSummary }) {
+  if (t.incomplete) return <span className="tx-status partial" title="Ended before it could report finishing">⚠ Partial</span>;
+  if (t.status === "failed") return <span className="tx-status err">● Error</span>;
+  return <span className="tx-status ok">● Success</span>;
+}
+
 const sampleBanner: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 14px",
   borderRadius: 10, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-dim)",
@@ -382,34 +370,3 @@ const sampleBanner: React.CSSProperties = {
 const panel: React.CSSProperties = {
   background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16,
 };
-const dot: React.CSSProperties = { width: 8, height: 8, borderRadius: 999, flexShrink: 0, marginTop: 4 };
-// Distinct from `failed`: the run didn't report an error, it stopped reporting at all.
-const partialBadge: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase",
-  color: "var(--amber)", border: "1px solid var(--amber)", borderRadius: 999,
-  padding: "1px 6px", flexShrink: 0,
-};
-const failBadge: React.CSSProperties = {
-  flexShrink: 0, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
-  color: "var(--red)", border: "1px solid var(--red)", borderRadius: 5, padding: "1px 6px",
-};
-const sessionHeader: React.CSSProperties = {
-  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-  padding: "7px 14px", fontSize: 11.5, fontWeight: 600, color: "var(--purple)",
-  background: "var(--bg-2)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0,
-};
-function row(active: boolean): React.CSSProperties {
-  return {
-    display: "block", width: "100%", textAlign: "left", padding: "11px 14px",
-    background: active ? "var(--accent-soft)" : "transparent", color: "var(--text)",
-    border: "none", borderBottom: "1px solid var(--border)", cursor: "pointer",
-  };
-}
-function chip(active: boolean): React.CSSProperties {
-  return {
-    fontSize: 12, padding: "6px 11px", borderRadius: 8, cursor: "pointer",
-    background: active ? "var(--accent-soft)" : "var(--panel-2)",
-    color: active ? "var(--accent)" : "var(--muted)",
-    border: `1px solid ${active ? "var(--accent)" : "var(--border-strong)"}`,
-  };
-}

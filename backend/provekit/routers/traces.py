@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, RetentionEvent, Run, SpanNote, Workspace, _now, iso_utc
-from ..services import apikey, deploy, limits, otel, redact, share, spool
+from ..services import apikey, deploy, limits, otel, pricing, redact, share, spool
 from ..services import payloads
 from ..services import search as search_svc
 from ..services.auth import get_current_user
@@ -354,6 +354,7 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
     counts: dict = {}
     tokens: dict = {}
     models: dict = {}
+    cost: dict = {}
     if trace_ids:
         for tid, cnt in (db.query(Run.trace_id, func.count(Run.id))
                          .filter(Run.workspace_id == ws.id, Run.trace_id.in_(trace_ids))
@@ -364,12 +365,18 @@ def _list_traces(db: Session, ws: Workspace, limit: int, status: str | None,
             meta = (result or {}).get("meta", {}) if isinstance(result, dict) else {}
             u = meta.get("usage", {})
             tokens[tid] = tokens.get(tid, 0) + (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
+            # Priced from the input/output split each span reports — the same estimate the
+            # dashboard uses. Accumulated here because this loop already visits every span, so
+            # a Cost column costs nothing extra to serve. None until a span reports usage.
+            c = pricing.estimate(meta.get("model"), u.get("input_tokens"), u.get("output_tokens"))
+            if c:
+                cost[tid] = (cost.get(tid) or 0) + c
             if meta.get("model") and tid not in models:   # first model seen in the trace
                 models[tid] = meta["model"]
     return [{"id": r.id, "trace_id": r.trace_id, "label": r.label, "type": r.type,
              "status": r.status, "duration_ms": r.duration_ms,
              "span_count": counts.get(r.trace_id, 1) if r.trace_id else 1,
-             "tokens": tokens.get(r.trace_id, 0), "session_id": r.session_id,
+             "tokens": tokens.get(r.trace_id, 0), "cost": cost.get(r.trace_id), "session_id": r.session_id,
              "model": models.get(r.trace_id),
              # True when this row is standing in for a root that never arrived, so the client
              # can say "ended unexpectedly" rather than present a partial run as a whole one.

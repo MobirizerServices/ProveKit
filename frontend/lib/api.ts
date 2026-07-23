@@ -21,6 +21,9 @@ export interface RunDetail {
 export interface TraceSummary {
   id: number; trace_id: string; label: string; type: string; status: string;
   duration_ms: number; span_count: number; tokens?: number; session_id?: string;
+  // Estimated USD from the input/output split each span reported. null until any span reports
+  // usage — priced, not guessed, so a row with no usage shows "—" rather than $0.
+  cost?: number | null;
   // True when no root span ever arrived — the run ended before it could report finishing.
   incomplete?: boolean;
   model?: string | null; created_at: string;

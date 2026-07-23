@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, getProjectId, Member, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 import ModelConnections from "@/components/ModelConnections";
 import ActivityFeed from "@/components/ActivityFeed";
 
@@ -60,8 +60,7 @@ export default function SettingsPage() {
   const removeMember = (uid: number) => wrap(async () => { if (sel) { await api.removeMember(sel, uid); api.members(sel).then(setMembers); } });
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <main style={{ maxWidth: 900, margin: "0 auto", padding: "24px 20px 80px" }}>
         <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Projects</h1>
         <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
@@ -183,7 +182,7 @@ export default function SettingsPage() {
           </div>
         </div>
       </main>
-    </>
+    </ConsoleShell>
   );
 }
 

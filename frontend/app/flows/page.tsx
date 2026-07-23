@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api, Flow, FlowGraph, FlowNode, FlowNodeType, FlowRun, FlowVersionSnapshot, ProviderConnection,
 } from "@/lib/api";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 import FlowCanvas, { NODE_META, RunState } from "@/components/FlowCanvas";
 
 const TYPES: FlowNodeType[] = ["trigger", "agent", "model", "knowledge", "logic", "approval", "output"];
@@ -151,9 +151,8 @@ export default function FlowsPage() {
   }, [lastRun]);
 
   return (
-    <>
-      <TopNav />
-      <div className="flows-ws" style={{ height: "calc(100vh - var(--topbar-h))" }}>
+    <ConsoleShell>
+      <div className="flows-ws" style={{ height: "calc(100vh - var(--cs-top))" }}>
         {/* ---------------- flow list ---------------- */}
         <div className="flow-list">
           <div className="side-head">
@@ -378,7 +377,7 @@ export default function FlowsPage() {
           </div>
         )}
       </div>
-    </>
+    </ConsoleShell>
   );
 }
 

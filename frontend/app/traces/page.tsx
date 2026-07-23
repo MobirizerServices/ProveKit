@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, API_BASE, getProjectId, TraceSpan, TraceSummary } from "@/lib/api";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 import TraceDetail from "@/components/TraceDetail";
 import TraceCompare from "@/components/TraceCompare";
 import EmptyState, { SAMPLE_PROJECT_NAME, sampleBadge } from "@/components/EmptyState";
@@ -221,8 +221,7 @@ export default function TracesPage() {
   ];
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <main style={{ maxWidth: sel ? 1600 : 1180, margin: "0 auto", padding: "24px 20px 80px", transition: "max-width .2s" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Traces</h1>
@@ -358,7 +357,7 @@ export default function TracesPage() {
         )}
       </main>
       <Tour steps={tourSteps} open={tour.open} onClose={tour.close} />
-    </>
+    </ConsoleShell>
   );
 }
 

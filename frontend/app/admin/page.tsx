@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { API_BASE, AdminProject, AdminStats, AdminUser, AuditEntry, api } from "@/lib/api";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 
 // Fleet health (roadmap #84). Typed here rather than in lib/api because it is only ever read
 // by this page — the operator console is the one surface that looks across tenants.
@@ -66,8 +66,7 @@ export default function AdminPage() {
   };
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <main style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 80px" }}>
         <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Admin</h1>
         <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
@@ -197,7 +196,7 @@ export default function AdminPage() {
           </>
         )}
       </main>
-    </>
+    </ConsoleShell>
   );
 }
 

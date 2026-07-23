@@ -145,6 +145,17 @@ export interface ExperimentComparison {
   alpha: number; warning: string; scorers: Record<string, ScorerComparison>;
 }
 
+export interface Evaluator { name: string; category: string; description: string }
+export interface Automation {
+  id: number; name: string; match: Record<string, any>; action: string;
+  target_dataset_id: number | null; scorers: string[]; sample: number; enabled: boolean;
+  created_at: string;
+}
+export interface AutomationIn {
+  name?: string; match?: Record<string, any>; action?: string;
+  target_dataset_id?: number | null; scorers?: string[]; sample?: number; enabled?: boolean;
+}
+
 // ---- Agent Flow Studio ----
 export type FlowNodeType = "trigger" | "agent" | "model" | "knowledge" | "logic" | "approval" | "output";
 export interface FlowNode {
@@ -223,6 +234,7 @@ export const api = {
   forgotPassword: (email: string) => j("/api/auth/forgot", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ email }) }),
   resetPassword: (token: string, password: string) => j("/api/auth/reset", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ token, password }) }),
   verifyEmail: (token: string) => j<Me>("/api/auth/verify", { method: "POST", noAuthRedirect: true, body: JSON.stringify({ token }) }),
+  ssoConfig: () => j<{ enabled: boolean; label: string; issuer: string; start_url: string }>("/api/auth/sso/config", { noAuthRedirect: true }),
   // project keys
   apiKeys: () => j<ApiKey[]>("/api/api-keys"),
   createApiKey: (name: string) => j<ApiKey & { key: string }>("/api/api-keys", { method: "POST", body: JSON.stringify({ name }) }),
@@ -296,6 +308,13 @@ export const api = {
   experiment: (id: number) => j<Experiment>(`/api/experiments/${id}`),
   compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),
   deleteExperiment: (id: number) => j(`/api/experiments/${id}`, { method: "DELETE" }),
+
+  // ---- evaluators (scorer catalog) + automations ----
+  evaluators: () => j<Evaluator[]>("/api/evaluators"),
+  automations: () => j<Automation[]>("/api/automation"),
+  createAutomation: (a: AutomationIn) => j<Automation>("/api/automation", { method: "POST", body: JSON.stringify(a) }),
+  deleteAutomation: (id: number) => j(`/api/automation/${id}`, { method: "DELETE" }),
+  runAutomation: (id: number) => j<{ considered: number; matched: number; acted: number }>(`/api/automation/${id}/run`, { method: "POST" }),
 
   // ---- Agent Flow Studio ----
   flows: () => j<Flow[]>("/api/flows"),

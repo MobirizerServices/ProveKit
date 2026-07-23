@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, PROMPT_LABELS, SavedPrompt } from "@/lib/api";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 import { DiffText } from "@/components/DiffText";
 
 /**
@@ -68,8 +68,7 @@ export default function PromptsPage() {
     : null;
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
           <div className="page-head">
@@ -258,7 +257,7 @@ export default function PromptsPage() {
           )}
         </div>
       </div>
-    </>
+    </ConsoleShell>
   );
 }
 

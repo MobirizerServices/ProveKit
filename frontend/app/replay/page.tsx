@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ProviderConnection, ReplayResult, TraceSpan, TraceSummary } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 import TraceCompare from "@/components/TraceCompare";
 import { parseMessages } from "@/components/TraceDetail";
 
@@ -98,8 +98,7 @@ export default function ReplayPage() {
   const candStats = useMemo(() => summarise(candidate), [candidate]);
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
           <div className="page-head">
@@ -230,7 +229,7 @@ export default function ReplayPage() {
       {showDiff && result && (
         <TraceCompare aId={originId} bId={result.new_trace_id} onClose={() => setShowDiff(false)} />
       )}
-    </>
+    </ConsoleShell>
   );
 }
 

@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, Metrics } from "@/lib/api";
+import { api, Me, Metrics } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import AreaChart from "@/components/AreaChart";
 import TrendChart from "@/components/TrendChart";
 import AlertsPanel from "@/components/AlertsPanel";
 import { CardGridSkeleton, Skeleton, SkeletonStyles } from "@/components/Skeleton";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 
 const WINDOWS = [
   { label: "1h", hours: 1 }, { label: "24h", hours: 24 }, { label: "7d", hours: 168 },
@@ -16,10 +16,12 @@ const WINDOWS = [
 
 export default function DashboardPage() {
   const [m, setM] = useState<Metrics | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [hours, setHours] = useState(24);
   const [chart, setChart] = useState<"traffic" | "latency" | "tokens" | "cost">("traffic");
   const load = useCallback(() => { api.metrics(hours).then(setM).catch(() => {}); }, [hours]);
   useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { api.me().then(setMe).catch(() => {}); }, []);
 
   // Priced from the real input/output split the API now reports. This used to assume 50/50,
   // which is wrong by a wide margin on anything input-heavy (RAG especially) since output
@@ -33,40 +35,51 @@ export default function DashboardPage() {
   const covPct = cov && cov.model_calls ? Math.round((cov.reported / cov.model_calls) * 100) : 100;
 
   return (
-    <>
-      <TopNav />
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 20px 80px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Dashboard</h1>
-            <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>Volume, errors, latency, and token usage across your traces.</p>
+    <ConsoleShell>
+      <div className="cs-page ov">
+        {/* ── greeting banner ── */}
+        <section className="ov-hero">
+          <div className="ov-hero-in">
+            <div>
+              <div className="ov-eyebrow"><i />Production workspace</div>
+              <h1>{greeting()}{me?.name ? `, ${me.name.split(" ")[0]}` : ""}.</h1>
+              <p>{healthLine(m)}</p>
+            </div>
+            <div className="ov-hero-actions">
+              <div className="ov-range">
+                {WINDOWS.map((w) => (
+                  <button key={w.hours} onClick={() => setHours(w.hours)} className={hours === w.hours ? "on" : ""}>{w.label}</button>
+                ))}
+              </div>
+              <a href="/api-keys" className="btn btn-run btn-sm">Instrument agent</a>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2 }}>
-            {WINDOWS.map((w) => (
-              <button key={w.hours} onClick={() => setHours(w.hours)} style={toggle(hours === w.hours)}>{w.label}</button>
-            ))}
-          </div>
-        </div>
+        </section>
 
         {!m ? (
           <>
-            <CardGridSkeleton n={6} />
-            <div style={{ ...panel, marginTop: 20 }}><Skeleton w="30%" h={10} /><Skeleton h={170} mt={14} r={10} /></div>
+            <CardGridSkeleton n={4} />
+            <div style={{ ...panel, marginTop: 16 }}><Skeleton w="30%" h={10} /><Skeleton h={170} mt={14} r={10} /></div>
             <SkeletonStyles />
           </>
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
-              <Stat label="Traces" value={m.trace_count.toLocaleString()} />
-              <Stat label="Error rate" value={`${(m.error_rate * 100).toFixed(1)}%`} accent={m.error_rate > 0 ? "var(--red)" : undefined} />
-              <Stat label="Latency p50" value={`${m.latency_p50_ms} ms`} />
-              <Stat label="Latency p95" value={`${m.latency_p95_ms} ms`} />
-              <Stat label="Tokens" value={m.total_tokens.toLocaleString()} />
-              <Stat label="Est. cost" value={cost || "—"}
+            {/* ── stat tiles with real deltas + sparklines ── */}
+            <div className="ov-tiles">
+              <Tile label="Total traces" icon="◇" value={m.trace_count.toLocaleString()}
+                delta={deltaOf(m.series, "count")} series={m.series.map((b) => b.count)} tone="var(--blue)" />
+              <Tile label="Error rate" icon="⚠" value={`${(m.error_rate * 100).toFixed(2)}%`}
+                delta={deltaOf(m.series, "errors")} deltaGoodDown series={m.series.map((b) => b.errors)} tone="var(--red)" />
+              <Tile label="P95 latency" icon="◷" value={fmtMs(m.latency_p95_ms)}
+                delta={deltaOf(m.series, "p95")} deltaGoodDown series={m.series.map((b) => b.p95 || 0)} tone="var(--amber)" />
+              <Tile label="Total cost" icon="$" value={cost || "—"}
+                series={m.series.map((b) => costOfBucket(b).cost)} tone="var(--green)"
                 note={partial ? `${covPct}% of calls reported usage` : undefined} />
             </div>
 
-            <div style={{ ...panel, marginBottom: 20 }}>
+            {/* ── volume chart + health donut ── */}
+            <div className="ov-split">
+              <div style={{ ...panel }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", gap: 3, background: "var(--bg-2)", borderRadius: 8, padding: 2 }}>
                   {(["traffic", "latency", "tokens", "cost"] as const).map((c) => (
@@ -102,6 +115,14 @@ export default function DashboardPage() {
                   )}
                 </div>
               )}
+              </div>
+
+              {/* trace-health donut — real success/error split */}
+              <div style={panel} className="ov-health">
+                <div style={label}>Trace health</div>
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{m.trace_count.toLocaleString()} total</div>
+                <HealthDonut ok={m.trace_count - m.error_count} err={m.error_count} />
+              </div>
             </div>
 
             <div style={panel}>
@@ -134,8 +155,96 @@ export default function DashboardPage() {
             <AlertsPanel />
           </>
         )}
-      </main>
-    </>
+      </div>
+    </ConsoleShell>
+  );
+}
+
+// ── Overview helpers ──────────────────────────────────────────────────────
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+function healthLine(m: Metrics | null): string {
+  if (!m) return "Loading your reliability signals…";
+  if (m.trace_count === 0) return "No traces yet — instrument an agent to start capturing evidence.";
+  const fails = (m.recent_failures ?? []).length + (m.error_count || 0);
+  if (fails === 0) return "Your agents are healthy. No reliability signals need attention.";
+  return `Your agents are running. ${m.error_count} error${m.error_count === 1 ? "" : "s"} in this window need${m.error_count === 1 ? "s" : ""} a look.`;
+}
+// A real "vs previous period": compare the recent half of the series to the older half.
+// One fetch, real data — no invented baseline.
+function deltaOf(series: Metrics["series"], key: "count" | "errors" | "p95"): number | null {
+  if (series.length < 4) return null;
+  const mid = Math.floor(series.length / 2);
+  const older = series.slice(0, mid), recent = series.slice(mid);
+  const agg = (rows: Metrics["series"]) => key === "p95"
+    ? rows.reduce((s, b) => s + (b.p95 || 0), 0) / Math.max(1, rows.length)
+    : rows.reduce((s, b) => s + (b[key] || 0), 0);
+  const a = agg(older), b = agg(recent);
+  if (a === 0) return b === 0 ? 0 : null;
+  return ((b - a) / a) * 100;
+}
+
+function Tile({ label, icon, value, delta, deltaGoodDown, series, tone, note }: {
+  label: string; icon: string; value: string; delta?: number | null; deltaGoodDown?: boolean;
+  series: number[]; tone: string; note?: string;
+}) {
+  const good = delta == null ? null : (deltaGoodDown ? delta <= 0 : delta >= 0);
+  return (
+    <div className="ov-tile">
+      <div className="ov-tile-top">
+        <span className="ov-tile-ic" style={{ color: tone, background: `color-mix(in srgb, ${tone} 14%, transparent)` }}>{icon}</span>
+        <span className="ov-tile-label">{label}</span>
+      </div>
+      <div className="ov-tile-val">{value}</div>
+      <div className="ov-tile-foot">
+        {delta != null && (
+          <span className={`ov-delta ${good ? "up" : "down"}`}>
+            {delta >= 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}%
+          </span>
+        )}
+        {note ? <span className="ov-tile-note">{note}</span>
+          : delta != null && <span className="ov-tile-note">vs previous</span>}
+        <Sparkline data={series} color={tone} />
+      </div>
+    </div>
+  );
+}
+
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  const w = 72, h = 26;
+  if (!data.length || Math.max(...data) === 0) return <svg className="ov-spark" width={w} height={h} />;
+  const max = Math.max(...data), n = data.length;
+  const pts = data.map((v, i) => `${(i / (n - 1)) * w},${h - (v / max) * (h - 3) - 1.5}`).join(" ");
+  return (
+    <svg className="ov-spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+    </svg>
+  );
+}
+
+function HealthDonut({ ok, err }: { ok: number; err: number }) {
+  const total = Math.max(1, ok + err);
+  const pct = (ok / total) * 100;
+  const r = 52, c = 2 * Math.PI * r;
+  return (
+    <div className="ov-donut">
+      <svg viewBox="0 0 128 128">
+        <circle cx="64" cy="64" r={r} fill="none" stroke="var(--panel-3)" strokeWidth="13" />
+        <circle cx="64" cy="64" r={r} fill="none" stroke="var(--accent)" strokeWidth="13" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} transform="rotate(-90 64 64)" />
+        {err > 0 && (
+          <circle cx="64" cy="64" r={r} fill="none" stroke="var(--red)" strokeWidth="13"
+            strokeDasharray={c} strokeDashoffset={c * (pct / 100)} transform="rotate(-90 64 64)" opacity="0.9" />
+        )}
+      </svg>
+      <b>{pct.toFixed(1)}%<small>success</small></b>
+      <div className="ov-donut-legend">
+        <span><i style={{ background: "var(--accent)" }} />Success <b>{ok.toLocaleString()}</b></span>
+        <span><i style={{ background: "var(--red)" }} />Error <b>{err.toLocaleString()}</b></span>
+      </div>
+    </div>
   );
 }
 

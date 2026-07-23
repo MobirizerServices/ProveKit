@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, Dataset, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 
 /**
  * Experiment results: what a scored run actually says, and whether the difference from a
@@ -49,8 +49,7 @@ export default function ExperimentsPage() {
   const dsName = (id: number | null) => datasets.find((d) => d.id === id)?.name || (id ? `#${id}` : "—");
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
           <div className="page-head">
@@ -174,7 +173,7 @@ export default function ExperimentsPage() {
           )}
         </div>
       </div>
-    </>
+    </ConsoleShell>
   );
 }
 

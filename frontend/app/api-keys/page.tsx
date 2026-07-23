@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiKey } from "@/lib/api";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -38,8 +38,7 @@ export default function ApiKeysPage() {
   const fmt = (s: string | null | undefined) => (s ? new Date(s).toLocaleString() : "—");
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <main style={{ maxWidth: 860, margin: "0 auto", padding: "28px 20px 80px" }}>
         <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Project keys</h1>
         <p className="muted" style={{ margin: "0 0 24px", fontSize: 13.5 }}>
@@ -133,7 +132,7 @@ def run_agent(question: str) -> str:
         </div>
       </main>
       {toast && <div className="toast">{toast}</div>}
-    </>
+    </ConsoleShell>
   );
 }
 

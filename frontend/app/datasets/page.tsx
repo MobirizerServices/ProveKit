@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Dataset, DatasetDetail, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
 import RegressionTriage from "@/components/RegressionTriage";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
-import TopNav from "@/components/TopNav";
+import ConsoleShell from "@/components/ConsoleShell";
 
 export default function DatasetsPage() {
   const [list, setList] = useState<Dataset[]>([]);
@@ -38,8 +38,7 @@ export default function DatasetsPage() {
   };
 
   return (
-    <>
-      <TopNav />
+    <ConsoleShell>
       <main style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 20px 80px" }}>
         <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Datasets</h1>
         <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
@@ -136,7 +135,7 @@ export default function DatasetsPage() {
           </div>
         </div>
       </main>
-    </>
+    </ConsoleShell>
   );
 }
 

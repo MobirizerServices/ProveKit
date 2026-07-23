@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Flow, FlowRun, FlowVersion, ProviderConnection, Workspace, _now, iso_utc
-from ..services import errors, flow_trace, limits
+from ..services import errors, flow_trace, limits, pricing
 from ..services.llm_client import LLMError, complete
 from ..services.sealing import unseal
 from ..services.workspace import current_workspace
@@ -31,6 +31,10 @@ NODE_TYPES = ("trigger", "agent", "model", "knowledge", "logic", "approval", "ou
 #: Hard stop on a walk. A graph with a cycle is legal to draw (a retry loop) but must not run
 #: forever; the run fails with the cap named rather than hanging the request.
 MAX_STEPS = 25
+
+#: Per-node completion ceiling — the same value the playground enforces, so a flow can't run
+#: an unbounded (and unbounded-cost) completion the interactive path would have clamped.
+_MAX_TOKENS_CAP = 4096
 
 
 # ---------------------------------------------------------------- serialisation
@@ -193,8 +197,18 @@ async def _run_node(node: dict, text: str, db: Session, ws: Workspace,
         messages = ([{"role": "system", "content": system}] if system else []) + \
                    [{"role": "user", "content": prompt}]
         params = dict(cfg.get("params") or {})
+        # Same ceiling the playground enforces: a node config can't ask for an unbounded
+        # completion and run up the bill. A flow can chain up to MAX_STEPS of these.
+        if params.get("max_tokens"):
+            params["max_tokens"] = min(int(params["max_tokens"]), _MAX_TOKENS_CAP)
         result = await complete(provider, model, messages, params,
                                 api_key=api_key, base_url=base_url)
+        # Accrue the call's cost toward the monthly cap. Each node is a real billable call, so
+        # a flow that skipped this would let the executor spend past a cap the playground and
+        # replay both respect — the check at run start would never see what the run spent.
+        usage = result.get("usage") or {}
+        limits.record_spend(ws.id, pricing.estimate(model, usage.get("input_tokens"),
+                                                    usage.get("output_tokens")))
         return result.get("output", ""), f"{provider} · {model}"
 
     return text, ""

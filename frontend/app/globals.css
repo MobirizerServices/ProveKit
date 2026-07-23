@@ -1514,3 +1514,6 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 .rf-wrap .react-flow__handle { background: var(--panel); border: 2px solid var(--nc, var(--accent)); }
 .fr-out-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
 .fr-traced { color: var(--accent-2); }
+.rp-row2 { display: grid; grid-template-columns: 1fr 120px; gap: 12px; }
+.rp-hint { font-weight: 400; font-size: 10.5px; color: var(--faint); text-transform: none; letter-spacing: 0; }
+@media (max-width: 900px) { .rp-row2 { grid-template-columns: 1fr; } }

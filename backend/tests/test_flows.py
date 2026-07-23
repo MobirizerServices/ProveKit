@@ -355,3 +355,88 @@ def test_deleting_a_project_removes_its_flows_versions_and_runs():
         assert s.query(FlowRun).filter(FlowRun.workspace_id == ws_id).count() == 0
     finally:
         s.close()
+
+
+# ---------------------------------------------------------------- spend + token guards
+
+def test_each_model_node_meters_its_spend(monkeypatch):
+    """A flow can chain several model calls behind one spend-cap check at run start. If those
+    calls don't record spend, the executor bills past a cap the playground and replay respect —
+    the check that gated the run never sees what the run then spent."""
+    from provekit.routers import flows as fl
+
+    seen: list[float] = []
+    monkeypatch.setattr(fl.limits, "record_spend", lambda ws_id, usd: seen.append(usd))
+    c = _client()
+    # two model nodes in a row, so we can count the metered calls
+    g = {
+        "nodes": [
+            {"id": "a", "type": "trigger", "label": "in", "position": {"x": 0, "y": 0}},
+            {"id": "b", "type": "agent", "label": "A", "position": {"x": 1, "y": 0},
+             "config": {"model": "gpt-4o", "prompt": "{{input}}"}},
+            {"id": "d", "type": "model", "label": "B", "position": {"x": 2, "y": 0},
+             "config": {"model": "gpt-4o", "prompt": "{{input}}"}},
+        ],
+        "edges": [{"id": "e1", "source": "a", "target": "b"},
+                  {"id": "e2", "source": "b", "target": "d"}],
+    }
+    f = c.post("/api/flows", json={"name": "billed", "graph": g}).json()
+    r = c.post(f"/api/flows/{f['id']}/run", json={"input": "hi", "provider": "mock"})
+    assert r.status_code == 200
+    assert len(seen) == 2, "one record_spend per model node, not zero"
+
+
+def test_a_node_cannot_ask_for_more_than_the_token_ceiling(monkeypatch):
+    """The playground clamps max_tokens so one edit can't run an unbounded completion; a flow
+    node has to be clamped the same way or it's an escape hatch around the ceiling."""
+    from provekit.routers import flows as fl
+
+    captured: dict = {}
+
+    async def spy(provider, model, messages, params, **kw):
+        captured["max_tokens"] = params.get("max_tokens")
+        return {"output": "ok", "usage": {"input_tokens": 1, "output_tokens": 1}}
+
+    monkeypatch.setattr(fl, "complete", spy)
+    c = _client()
+    g = {
+        "nodes": [
+            {"id": "a", "type": "trigger", "label": "in", "position": {"x": 0, "y": 0}},
+            {"id": "b", "type": "agent", "label": "A", "position": {"x": 1, "y": 0},
+             "config": {"model": "gpt-4o", "prompt": "{{input}}", "params": {"max_tokens": 1_000_000}}},
+        ],
+        "edges": [{"id": "e", "source": "a", "target": "b"}],
+    }
+    f = c.post("/api/flows", json={"name": "greedy", "graph": g}).json()
+    c.post(f"/api/flows/{f['id']}/run", json={"input": "hi", "provider": "mock"})
+    assert captured["max_tokens"] == fl._MAX_TOKENS_CAP
+
+
+def test_a_run_is_refused_once_the_spend_cap_is_already_reached(monkeypatch):
+    """The run-start check still holds: a project already over its cap can't start a flow."""
+    from provekit.config import get_settings
+    from provekit.routers import flows as fl
+    from provekit.services import limits
+
+    c = _client()
+    f = _make(c)
+    get_settings.cache_clear(); limits._window.cache_clear()
+    monkeypatch.setenv("PLAYGROUND_MONTHLY_USD_CAP", "0.01")
+    get_settings.cache_clear()
+    # push this project over the cap, then a run must be refused with 402
+    limits.record_spend(_ws_of(c, f["id"]), 0.05)
+    r = c.post(f"/api/flows/{f['id']}/run", json={"input": "x", "provider": "mock"})
+    assert r.status_code == 402
+    get_settings.cache_clear(); limits._window.cache_clear()
+    monkeypatch.delenv("PLAYGROUND_MONTHLY_USD_CAP", raising=False)
+    get_settings.cache_clear()
+
+
+def _ws_of(c, flow_id: int) -> int:
+    from provekit.database import SessionLocal
+    from provekit.models import Flow
+    s = SessionLocal()
+    try:
+        return s.query(Flow).filter(Flow.id == flow_id).one().workspace_id
+    finally:
+        s.close()

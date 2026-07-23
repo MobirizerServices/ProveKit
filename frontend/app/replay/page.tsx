@@ -26,6 +26,11 @@ export default function ReplayPage() {
 
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
+  // The captured span doesn't record the original sampling params, so there's nothing to carry
+  // forward — but the backend replay honours whatever params it's sent. Exposing temperature
+  // lets you match the original (if you know it) instead of being silently pinned to the
+  // provider default. Blank = default.
+  const [temperature, setTemperature] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [result, setResult] = useState<ReplayResult | null>(null);
@@ -70,11 +75,14 @@ export default function ReplayPage() {
       if (idx >= 0) msgs[idx] = { ...msgs[idx], content: prompt };
       else msgs.push({ role: "user", content: prompt });
 
+      const t = temperature.trim();
+      const params = t !== "" && !Number.isNaN(Number(t)) ? { temperature: Number(t) } : {};
       const r = await api.replay({
         origin_trace_id: originId,
         fork_span_id: fork.span_id,
         model: model || fork.request?.model || "",
         messages: msgs,
+        params,
         ...(connId === "mock" ? { provider: "mock" } : { connection_id: Number(connId) }),
       });
       setResult(r);
@@ -154,13 +162,20 @@ export default function ReplayPage() {
               {/* ---------------- the edit ---------------- */}
               <div className="rp-edit">
                 <div className="rp-panel-h">Candidate</div>
-                <label className="rp-field">
-                  <span>Model</span>
-                  <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-4o-mini" />
-                </label>
+                <div className="rp-row2">
+                  <label className="rp-field">
+                    <span>Model</span>
+                    <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-4o-mini" />
+                  </label>
+                  <label className="rp-field">
+                    <span>Temperature <span className="rp-hint">default</span></span>
+                    <input type="number" min={0} max={2} step={0.1} value={temperature}
+                      placeholder="—" onChange={(e) => setTemperature(e.target.value)} />
+                  </label>
+                </div>
                 <label className="rp-field">
                   <span>Prompt</span>
-                  <textarea value={prompt} rows={12} onChange={(e) => setPrompt(e.target.value)} />
+                  <textarea value={prompt} rows={11} onChange={(e) => setPrompt(e.target.value)} />
                 </label>
                 <div className="rp-origin-note">
                   Original: <b className="mono">{fork.request?.model || "—"}</b> · forking at{" "}

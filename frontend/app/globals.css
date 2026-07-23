@@ -1811,3 +1811,29 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 .au-ran { font-size: 12px; color: var(--green); margin-top: 6px; }
 .au-card-actions { display: flex; gap: 6px; flex: none; }
 @media (max-width: 720px) { .au-form { grid-template-columns: 1fr; } .ev-stats { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SECTION HERO BANNER (.hero-banner) — the dark header every console page leads with
+   ═════════════════════════════════════════════════════════════════════════ */
+.hero-banner { border-radius: var(--r-xl); overflow: hidden; margin-bottom: 20px;
+  background: linear-gradient(120deg, #16131f 6%, #221934 58%, #1a1420 100%); border: 1px solid #2a2536; }
+.hero-banner-in { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  padding: 26px 30px; position: relative; }
+.hero-banner-in::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(46% 120% at 92% 0, rgba(116,88,255,.2), transparent 70%); }
+.hero-banner-copy { position: relative; min-width: 0; }
+.hero-banner-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 10px;
+  font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: #b3a1ff; margin-bottom: 12px; }
+.hero-banner-eyebrow i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); }
+.hero-banner h1 { font-size: clamp(24px, 3vw, 34px); font-weight: 500; letter-spacing: -0.03em; margin: 0; color: #fff; }
+.hero-banner p { font-size: 14px; color: #a9a3bb; margin: 8px 0 0; max-width: 68ch; }
+.hero-banner-actions { position: relative; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hero-banner-status { position: relative; display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+  padding: 0 30px 16px; margin-top: -6px; font-size: 12px; color: #8d87a1; }
+.hero-banner-status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.hero-banner .btn-hero { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  padding: 9px 15px; border-radius: var(--r-md); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+  color: #fff; text-decoration: none; }
+.hero-banner .btn-hero:hover { background: rgba(255,255,255,.1); }
+.hero-banner .btn-hero.solid { background: var(--accent); border-color: transparent; box-shadow: 0 8px 22px -10px var(--accent-ring); }
+.hero-banner .btn-hero.solid:hover { background: var(--accent-dark); }

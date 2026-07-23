@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, Evaluator } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 
 /** The evaluator catalog — every built-in scorer an experiment or automation can run,
  *  grouped by what it measures. Read-only: descriptions come from the backend registry. */
@@ -20,14 +21,9 @@ export default function EvaluatorsPage() {
   return (
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1100 }}>
-        <div className="page-head" style={{ marginBottom: 22 }}>
-          <div>
-            <div className="page-eyebrow">Quality</div>
-            <h1>Evaluators</h1>
-            <p>The scorers an experiment or automation can run. Reference one by name in{" "}
-              <code className="mono">pk.evaluate(scorers=[…])</code> or attach it to an automation.</p>
-          </div>
-        </div>
+        <PageHero eyebrow="Quality" title="Evaluators"
+          sub={<>The scorers an experiment or automation can run. Reference one by name in{" "}
+            <code className="mono">pk.evaluate(scorers=[…])</code> or attach it to an automation.</>} />
 
         {rows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           : groups.map(([cat, items]) => (

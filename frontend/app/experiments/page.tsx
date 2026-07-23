@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, Dataset, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 
 /**
  * Experiment results: what a scored run actually says, and whether the difference from a
@@ -52,22 +53,15 @@ export default function ExperimentsPage() {
     <ConsoleShell>
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
-          <div className="page-head">
-            <div>
-              <div className="page-eyebrow">Quality</div>
-              <h1>Experiments</h1>
-              <p>
-                Scored runs over a dataset. Pick a baseline to see whether a change is a real
-                improvement or inside the noise.
-              </p>
-            </div>
-            <div className="spacer" />
-            <select className="reg-sel" value={filter}
-              onChange={(e) => { setFilter(e.target.value === "" ? "" : Number(e.target.value)); setSel(null); setBaseline(null); }}>
-              <option value="">All datasets</option>
-              {datasets.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
+          <PageHero eyebrow="Controlled comparison" title="Experiments"
+            sub="Scored runs over a dataset. Pick a baseline to see whether a change is a real improvement or inside the noise."
+            actions={
+              <select className="reg-sel" value={filter}
+                onChange={(e) => { setFilter(e.target.value === "" ? "" : Number(e.target.value)); setSel(null); setBaseline(null); }}>
+                <option value="">All datasets</option>
+                {datasets.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            } />
 
           {rows == null ? (
             <div className="muted" style={{ fontSize: 13 }}>Loading…</div>

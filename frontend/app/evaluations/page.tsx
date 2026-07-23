@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, Dataset, Experiment } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 
 /**
  * Evaluations — the cross-dataset feed of every scored run, newest first. Experiments is the
@@ -23,14 +24,8 @@ export default function EvaluationsPage() {
   return (
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1100 }}>
-        <div className="page-head" style={{ marginBottom: 22 }}>
-          <div>
-            <div className="page-eyebrow">Quality</div>
-            <h1>Evaluations</h1>
-            <p>Every scored run across your datasets. Open one in Experiments for the per-scorer
-              breakdown and baseline comparison.</p>
-          </div>
-        </div>
+        <PageHero eyebrow="Quality" title="Evaluations"
+          sub="Every scored run across your datasets. Open one in Experiments for the per-scorer breakdown and baseline comparison." />
 
         {rows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           : scored.length === 0 ? (

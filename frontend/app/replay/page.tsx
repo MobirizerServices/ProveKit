@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ProviderConnection, ReplayResult, TraceSpan, TraceSummary } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 import TraceCompare from "@/components/TraceCompare";
 import { parseMessages } from "@/components/TraceDetail";
 
@@ -101,16 +102,8 @@ export default function ReplayPage() {
     <ConsoleShell>
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
-          <div className="page-head">
-            <div>
-              <div className="page-eyebrow">Debugging</div>
-              <h1>Replay workspace</h1>
-              <p>
-                Replace the prompt or model, preserve the recorded tool responses, and see
-                precisely where execution diverges.
-              </p>
-            </div>
-          </div>
+          <PageHero eyebrow="Debugging" title="Replay workspace"
+            sub="Replace the prompt or model, preserve the recorded tool responses, and see precisely where execution diverges." />
 
           {/* ---------------- pick an origin ---------------- */}
           <div className="rp-bar">

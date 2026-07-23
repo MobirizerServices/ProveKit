@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, PROMPT_LABELS, SavedPrompt } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 import { DiffText } from "@/components/DiffText";
 
 /**
@@ -71,17 +72,10 @@ export default function PromptsPage() {
     <ConsoleShell>
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
-          <div className="page-head">
-            <div>
-              <div className="page-eyebrow">Control</div>
-              <h1>Prompt registry</h1>
-              <p>
-                Version, label, compare and roll back prompts without a deploy. Your app fetches
-                by label — <code className="mono">GET /v1/prompts/&#123;name&#125;?label=production</code> —
-                so moving the pointer here changes what production runs.
-              </p>
-            </div>
-          </div>
+          <PageHero eyebrow="Control" title="Prompt registry"
+            sub={<>Version, label, compare and roll back prompts without a deploy. Your app fetches
+              by label — <code className="mono">GET /v1/prompts/&#123;name&#125;?label=production</code> —
+              so moving the pointer here changes what production runs.</>} />
 
           {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
 

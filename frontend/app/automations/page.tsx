@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, Automation, Dataset, Evaluator } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 
 /**
  * Automations — standing rules that route production traces into a dataset and (optionally)
@@ -60,16 +61,9 @@ export default function AutomationsPage() {
   return (
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1000 }}>
-        <div className="page-head" style={{ marginBottom: 20 }}>
-          <div>
-            <div className="page-eyebrow">Control</div>
-            <h1>Automations</h1>
-            <p>Turn matching production traces into dataset items automatically — so a real
-              failure becomes a regression test without anyone lifting it by hand.</p>
-          </div>
-          <div className="spacer" />
-          {!creating && <button className="btn btn-run btn-sm" onClick={() => setCreating(true)}>New rule</button>}
-        </div>
+        <PageHero eyebrow="Control" title="Automations"
+          sub="Turn matching production traces into dataset items automatically — so a real failure becomes a regression test without anyone lifting it by hand."
+          actions={!creating && <button className="btn-hero solid" onClick={() => setCreating(true)}>+ New rule</button>} />
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
 

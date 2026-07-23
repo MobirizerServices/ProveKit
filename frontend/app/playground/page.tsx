@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, PlaygroundMessage, PlaygroundResult, ProviderConnection } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 
 /**
  * Standalone playground — compose messages and run a model without wiring an SDK. Uses the same
@@ -48,14 +49,8 @@ export default function PlaygroundPage() {
   return (
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1180 }}>
-        <div className="page-head" style={{ marginBottom: 18 }}>
-          <div>
-            <div className="page-eyebrow">Debugging</div>
-            <h1>Playground</h1>
-            <p>Run a model against an ad-hoc prompt. Use Mock to try it without a key, or pick a
-              connection from Settings → Model connections.</p>
-          </div>
-        </div>
+        <PageHero eyebrow="Debugging" title="Playground"
+          sub="Run a model against an ad-hoc prompt. Use Mock to try it without a key, or pick a connection from Settings → Model connections." />
 
         <div className="rp-bar" style={{ marginBottom: 16 }}>
           <label><span>Connection</span>

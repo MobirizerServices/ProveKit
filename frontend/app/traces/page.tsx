@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, API_BASE, getProjectId, TraceSpan, TraceSummary } from "@/lib/api";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 import TraceDetail from "@/components/TraceDetail";
 import TraceCompare from "@/components/TraceCompare";
 import EmptyState, { SAMPLE_PROJECT_NAME, sampleBadge } from "@/components/EmptyState";
@@ -223,19 +224,10 @@ export default function TracesPage() {
   return (
     <ConsoleShell>
       <main style={{ maxWidth: sel ? 1600 : 1180, margin: "0 auto", padding: "24px 20px 80px", transition: "max-width .2s" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Traces</h1>
-          {/* The tour is one-shot, so dismissing it has to be safe: this is the way back in. */}
-          {shown.length > 0 && (
-            <button className="btn btn-sm btn-ghost" onClick={tour.start} title="Replay the walkthrough">
-              ✦ Tour
-            </button>
-          )}
-        </div>
-        <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
-          Every run your agent makes, captured from one decorator — the whole flow of model
-          calls, tools, and steps, nested as it actually ran.
-        </p>
+        <PageHero eyebrow="Observability" title="Trace explorer"
+          sub="Every run your agent makes, captured from one decorator — the whole flow of model calls, tools, and steps, nested as it actually ran."
+          actions={shown.length > 0 &&
+            <button className="btn-hero" onClick={tour.start} title="Replay the walkthrough">✦ Tour</button>} />
 
         {inSample && (
           <div style={sampleBanner}>

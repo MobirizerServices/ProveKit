@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, TraceSummary } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 
 /**
  * Sessions — multi-turn conversations, grouped from the session_id captured on traces. There's
@@ -38,14 +39,8 @@ export default function SessionsPage() {
   return (
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1100 }}>
-        <div className="page-head" style={{ marginBottom: 22 }}>
-          <div>
-            <div className="page-eyebrow">Observability</div>
-            <h1>Sessions</h1>
-            <p>Multi-turn conversations, grouped by the session id your agent reports. Each turn
-              is a captured trace — open one to inspect its spans.</p>
-          </div>
-        </div>
+        <PageHero eyebrow="Observability" title="Sessions"
+          sub="Multi-turn conversations, grouped by the session id your agent reports. Each turn is a captured trace — open one to inspect its spans." />
 
         {traces == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           : sessions.length === 0 ? (

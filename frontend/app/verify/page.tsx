@@ -19,7 +19,7 @@ function VerifyInner() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="auth-brand"><span className="logo">◇</span>Agent<b>Man</b></div>
+        <div className="auth-brand"><span className="logo">///</span>ProveKit</div>
         {state === "working" && <div className="auth-sub">Verifying your email…</div>}
         {state === "ok" && <div className="auth-note">Email verified ✓ Signing you in…</div>}
         {state === "bad" && <>

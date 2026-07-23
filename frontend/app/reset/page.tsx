@@ -28,7 +28,7 @@ function ResetForm() {
   return (
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={submit}>
-        <div className="auth-brand"><span className="logo">◇</span>Agent<b>Man</b></div>
+        <div className="auth-brand"><span className="logo">///</span>ProveKit</div>
         <div className="auth-sub">Choose a new password</div>
         {!token && <div className="auth-err">Missing reset token — use the link from your email.</div>}
         {done ? (

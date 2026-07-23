@@ -18,7 +18,7 @@ export default function ForgotPage() {
   return (
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={submit}>
-        <div className="auth-brand"><span className="logo">◇</span>Agent<b>Man</b></div>
+        <div className="auth-brand"><span className="logo">///</span>ProveKit</div>
         <div className="auth-sub">Reset your password</div>
         {sent ? (
           <div className="auth-note">If an account exists for <b>{email}</b>, a reset link is on its way. Check your inbox (and, if self-hosting without SMTP, your server logs).</div>

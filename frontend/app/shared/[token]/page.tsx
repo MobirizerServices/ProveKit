@@ -17,8 +17,8 @@ export default function SharedTracePage({ params }: { params: Promise<{ token: s
 
   return (
     <main style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 20px 80px" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16 }}>
-        <span style={{ fontSize: 18, fontWeight: 700 }}>ProveKit</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <span className="brand"><span className="logo">///</span>ProveKit</span>
         <span className="muted" style={{ fontSize: 12.5 }}>shared trace · read-only</span>
       </div>
       <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16, minHeight: 200 }}>

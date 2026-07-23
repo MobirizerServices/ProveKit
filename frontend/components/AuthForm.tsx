@@ -42,7 +42,7 @@ export default function AuthForm({ initial }: { initial: "login" | "signup" }) {
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={submit}>
         <Link href="/" className="auth-brand" style={{ textDecoration: "none", color: "inherit" }}>
-          <span className="logo">◇</span>Prove<b>Kit</b>
+          <span className="logo">///</span>ProveKit
         </Link>
         <div className="auth-sub">{signup ? "Create your account" : "Sign in to your workspace"}</div>
         {signup && (

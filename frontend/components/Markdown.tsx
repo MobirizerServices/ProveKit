@@ -52,7 +52,15 @@ export default function Markdown({ source }: { source: string }) {
     }
     if (line.startsWith("- ")) {
       const items: string[] = [];
-      while (i < lines.length && lines[i].startsWith("- ")) { items.push(lines[i].slice(2)); i++; }
+      while (i < lines.length && lines[i].startsWith("- ")) {
+        let item = lines[i].slice(2); i++;
+        // Lazy continuation: a wrapped line under a bullet belongs to that bullet, not to
+        // a new paragraph after the list.
+        while (i < lines.length && lines[i].trim() !== "" && !/^(#|`{3}|- |> )/.test(lines[i])) {
+          item += " " + lines[i].trim(); i++;
+        }
+        items.push(item);
+      }
       out.push(<ul key={k++} className="md-ul">{items.map((it, j) => <li key={j}>{inline(it, `li${k}-${j}`)}</li>)}</ul>);
       continue;
     }

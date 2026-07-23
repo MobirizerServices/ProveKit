@@ -13,7 +13,7 @@ const TYPE_COLOR: Record<string, string> = {
 // Concrete hex for the minimap — its canvas doesn't resolve CSS variables (they'd render
 // black), so the mini node dots need literal colors.
 const MINI_COLOR: Record<string, string> = {
-  agent: "#d8b45f", llm: "#6ea8ff", tool: "#c98cf0", step: "#97979f",
+  agent: "#7458ff", llm: "#6a74ff", tool: "#9a82ff", step: "#9b96ab",
 };
 
 const NODE_W = 210;  // node box width for the layout engine
@@ -261,10 +261,10 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
         {/* Minimap only for big graphs (small ones fit on screen). A near-transparent mask so
             the coloured node dots stay visible instead of a dark void. */}
         {nodes.length >= 18 && (
-          <MiniMap pannable zoomable nodeColor={(n) => MINI_COLOR[(n.data as any)?.span?.type] || "#97979f"}
-            nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "#f0736f" : "#2a2a33")}
-            nodeStrokeWidth={2} nodeBorderRadius={2} style={{ background: "#1b1b21" }}
-            maskColor="rgba(20,20,24,0.15)" />
+          <MiniMap pannable zoomable nodeColor={(n) => MINI_COLOR[(n.data as any)?.span?.type] || "#9b96ab"}
+            nodeStrokeColor={(n) => ((n.data as any)?.span?.status === "failed" ? "#e95252" : "#2f2c40")}
+            nodeStrokeWidth={2} nodeBorderRadius={2} style={{ background: "#16151f" }}
+            maskColor="rgba(11,10,16,0.15)" />
         )}
       </ReactFlow>
     </div>

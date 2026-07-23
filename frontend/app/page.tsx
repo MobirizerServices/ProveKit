@@ -1,519 +1,912 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import GitHubStars from "@/components/GitHubStars";
+
+const DOCS = "https://github.com/MobirizerServices/ProveKit/tree/main/docs";
+const REPO = "https://github.com/MobirizerServices/ProveKit";
 
 export default function Landing() {
   const [authed, setAuthed] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [banner, setBanner] = useState(true);
+  const [faq, setFaq] = useState(0);
+
   useEffect(() => { api.me().then(() => setAuthed(true)).catch(() => {}); }, []);
-  const primary = authed ? { href: "/traces", label: "Open portal" } : { href: "/signup", label: "Get started free" };
-  const navLinks = (
-    <>
-      <a href="#features" onClick={() => setMenuOpen(false)}>Features</a>
-      <a href="#flow" onClick={() => setMenuOpen(false)}>Agent flow</a>
-      <Link href="/blog" onClick={() => setMenuOpen(false)}>Blog</Link>
-      <a href="https://github.com/MobirizerServices/ProveKit" target="_blank" rel="noreferrer">GitHub</a>
-      {!authed && <Link href="/login">Sign in</Link>}
-    </>
-  );
+  useReveal();
+
+  // Signed-in visitors get sent into the workspace instead of the signup flow.
+  const start = authed ? "/traces" : "/signup";
+  const startLabel = authed ? "Open workspace" : "Start tracing free";
 
   const ld = {
     "@context": "https://schema.org", "@type": "SoftwareApplication",
     name: "ProveKit", applicationCategory: "DeveloperApplication", operatingSystem: "Any",
-    description: "Drop-in tracing, evaluation, and observability for AI agents. Open source and self-hostable.",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-    url: "https://github.com/MobirizerServices/ProveKit",
+    description: "Design, trace, replay, and evaluate every agent decision in one reliability workspace.",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" }, url: REPO,
   };
 
   return (
-    <div className="lp">
+    <div className="pk">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
-      <header className="lp-nav">
-        <div className="lp-brand"><span className="lp-logo">◇</span> Prove<b>Kit</b></div>
-        <nav className="lp-navlinks">
-          <span className="lp-navdesktop">{navLinks}</span>
-          <Link href={authed ? "/traces" : "/signup"} className="lp-signin">{authed ? "Portal" : "Sign up"}</Link>
-          <button className="lp-burger" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
-            {menuOpen ? "✕" : "☰"}
+
+      {/* ─────────────────────────── Header ─────────────────────────── */}
+      <header className="pk-header">
+        <div className="pk-header-in">
+          <Link href="/" className="pk-wordmark"><Mark />PROVEKIT</Link>
+          <nav className="pk-nav">
+            <a href="#product">Product</a>
+            <Link href="/traces">Live sandbox</Link>
+            <a href="#teams">Solutions</a>
+            <a href="#pricing">Pricing</a>
+            <a href={DOCS} target="_blank" rel="noreferrer">Docs</a>
+            <a href="#trust">Trust center</a>
+          </nav>
+          <div className="pk-header-cta">
+            <Link href={authed ? "/traces" : "/login"} className="pk-signin">{authed ? "Workspace" : "Sign in"}</Link>
+            <Link href={start} className="pk-start">Start tracing <Arrow /></Link>
+          </div>
+          <button className="pk-burger" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu((o) => !o)}>
+            {menu ? "✕" : "☰"}
           </button>
-        </nav>
+        </div>
       </header>
-      {menuOpen && <div className="lp-mobilemenu">{navLinks}</div>}
+      {menu && (
+        <div className="pk-mobile" onClick={() => setMenu(false)}>
+          <a href="#product">Product</a>
+          <Link href="/traces">Live sandbox</Link>
+          <a href="#teams">Solutions</a>
+          <a href="#pricing">Pricing</a>
+          <a href={DOCS} target="_blank" rel="noreferrer">Docs</a>
+          <a href="#trust">Trust center</a>
+          <Link href={authed ? "/traces" : "/login"}>{authed ? "Workspace" : "Sign in"}</Link>
+          <Link href={start}>{startLabel}</Link>
+        </div>
+      )}
 
-      <section className="lp-hero">
-        <div className="lp-hero-copy">
-          <div className="lp-pill">Open source · Self-hostable · OpenTelemetry-native</div>
-          <h1>See exactly what your AI agent did.</h1>
-          <p>
-            Add <b>one decorator</b> and every run your agent makes — the model calls, the tools,
-            the retries, the whole nested flow — shows up in your portal. Then evaluate it, watch
-            it, and gate your CI on it. No connections to wire, no framework lock-in.
-          </p>
-          <div className="lp-cta">
-            <Link href={primary.href} className="btn lp-btn-primary">{primary.label}</Link>
-            <a href="#how" className="btn btn-ghost lp-btn">See how it works</a>
+      {/* ───────────────────── Announcement banner ──────────────────── */}
+      {banner && (
+        <div className="pk-announce">
+          <div className="pk-announce-in">
+            <span className="pk-announce-tag">✦ New release</span>
+            <span>
+              <b>Replay comparisons are now live.</b>{" "}
+              <span className="pk-announce-dim">Change the agent. Keep the evidence.</span>
+            </span>
+            <a href="#replay">See deterministic replay <Arrow /></a>
           </div>
-          <div className="lp-trust">
-            <span>◆ One SDK, zero lock-in</span><span>◆ Traces · Evals · Dashboards</span><span>◆ Docker / Compose</span>
+          <button className="pk-announce-x" aria-label="Dismiss announcement" onClick={() => setBanner(false)}>⊗</button>
+        </div>
+      )}
+
+      {/* ───────────────────────────  Hero  ─────────────────────────── */}
+      <section className="pk-hero">
+        <div className="pk-hero-in">
+          <div>
+            <div className="pk-hero-kicker">
+              <span className="pk-kicker-tag"><i className="pk-dot" />AI reliability workspace</span>
+              <span>Trace → Replay → Evaluate</span>
+            </div>
+            <div className="pk-hero-eyebrow"><i />The evidence layer for production AI</div>
+            <h1>
+              Build agents.<br />
+              <span className="pk-grad">Prove they work.</span>
+            </h1>
+            <p className="pk-lede">
+              Design, trace, replay, and evaluate every agent decision in one reliability
+              workspace—without stitching together five different tools.
+            </p>
+            <div className="pk-btns">
+              <Link href={start} className="pk-btn pk-btn-primary">{startLabel} <Arrow /></Link>
+              <Link href="/traces" className="pk-btn pk-btn-dark">Try the live sandbox <Play /></Link>
+            </div>
+            <div className="pk-hero-notes">
+              <span><i />No credit card</span>
+              <span><i />OpenTelemetry native</span>
+              <span><i />Self-host ready</span>
+            </div>
           </div>
-          <p className="lp-whofor">For engineers building agents on OpenAI, Anthropic, LangChain, LlamaIndex, or CrewAI.</p>
-        </div>
-        <TracePreview />
-      </section>
-
-      <section className="lp-logos">
-        <div className="lp-logos-label">Captures the tools you already use</div>
-        <div className="lp-logos-row">
-          {["OpenAI", "Anthropic", "LangChain", "LlamaIndex", "CrewAI", "OpenTelemetry"].map((n) => (
-            <span key={n} className="lp-logo-chip">{n}</span>
-          ))}
+          <FlowStudioMock />
         </div>
       </section>
 
-      <section className="lp-code-band">
-        <div className="lp-code-copy">
-          <h2>Two lines to your first trace.</h2>
-          <p>
-            The SDK auto-instruments OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI and more —
-            plus your outbound HTTP — so you capture the full flow with no per-call wiring.
-          </p>
-          <ul className="lp-check">
-            <li>Fail-open by design — tracing never takes your agent down.</li>
-            <li>Nested spans classified agent · llm · tool · step.</li>
-            <li>Tokens, cost, latency, logs, and errors on every span.</li>
-          </ul>
-        </div>
-        <pre className="lp-code">{`pip install "provekit[trace]"
-
-# .env
-PROVEKIT_API_KEY=pk_...
-PROVEKIT_ENDPOINT=https://your-host
-
-import provekit.auto          # one import — captures everything
-
-# optional: group a run under a named root
-import provekit.trace as pk
-
-@pk.trace(name="support-agent")
-def run(question):
-    ...   # OpenAI / Anthropic / tools capture themselves`}</pre>
-      </section>
-
-      <section id="flow" className="lp-flowsec">
-        <h2 className="lp-h2">The whole agent flow, as it ran.</h2>
-        <p className="lp-sub">Nested agents, tool calls, retries and failures — a live node graph with the execution path lit up.</p>
-        <FlowVisual />
-      </section>
-
-      <section className="lp-demo">
-        <h2 className="lp-h2">See it in action</h2>
-        <p className="lp-sub">A real 37-span run — nested sub-agents, RAG retrieval, a failed-then-retried tool — in the Flow and Waterfall views.</p>
-        <div className="lp-demo-frame">
-          <div className="lp-demo-bar"><span className="lp-dot r" /><span className="lp-dot y" /><span className="lp-dot g" /></div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/demo-trace.gif" alt="ProveKit portal showing an agent trace as a node graph and a waterfall"
-            loading="lazy" width={1512} height={697} className="lp-demo-img" />
+      {/* ─────────────────────── Proof strip ────────────────────────── */}
+      <section className="pk-proof pk-tone-paper">
+        <div className="pk-shell pk-proof-in">
+          <span className="pk-proof-label">Guided demo evidence</span>
+          <div className="pk-proof-items">
+            {PROOF.map((p) => (
+              <div key={p.label} className="pk-proof-item"><b>{p.value}</b><span>{p.label}</span></div>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section id="features" className="lp-features">
-        <h2 className="lp-h2">Everything to prove your agent works</h2>
-        <p className="lp-sub">From the first trace to a CI regression gate — one platform, self-hostable.</p>
-        <div className="lp-grid">
-          {FEATURES.map((f) => (
-            <div key={f.t} className="lp-card">
-              <div className="lp-card-ic" style={{ color: f.c }}>{f.ic}</div>
-              <div className="lp-card-t">{f.t}</div>
-              <div className="lp-card-d">{f.d}</div>
+      {/* ─────────────────────── Stack rail ─────────────────────────── */}
+      <section className="pk-rail pk-tone-paper">
+        <div className="pk-rail-in">
+          <div>
+            <span className="pk-rail-h">Works with your stack</span>
+            <strong className="pk-rail-title">Open standards in. Portable evidence out.</strong>
+          </div>
+          <div className="pk-rail-names">
+            {STACK.map((n) => <span key={n}>{n}</span>)}
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────────── One reliability workspace ────────────────── */}
+      <section id="product" className="pk-section pk-tone-paper">
+        <div className="pk-shell">
+          <div className="pk-intro pk-reveal">
+            <span className="pk-eyebrow">One reliability workspace</span>
+            <h2 className="pk-h2">Everything between an idea<br />and a dependable agent.</h2>
+            <p className="pk-lede">
+              Build the flow, observe every decision, reproduce failures, and measure the fix
+              without losing context between tools.
+            </p>
+          </div>
+          <div className="pk-grid pk-grid-3">
+            {CAPABILITIES.map((c) => (
+              <article key={c.title} className="pk-card pk-reveal"
+                style={{ "--ic": c.color, "--ic-bg": c.tint, "--glow": c.glow } as React.CSSProperties}>
+                <span className="pk-card-ic"><Icon name={c.icon} /></span>
+                <div className="pk-card-eyebrow">{c.eyebrow}</div>
+                <h3>{c.title}</h3>
+                <p>{c.body}</p>
+                <Link href={c.href} className="pk-link">Explore <ArrowNE /></Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────────────────── Tour banner ──────────────────────── */}
+      <section className="pk-tour pk-tone-paper">
+        <div className="pk-shell">
+          <div className="pk-tour-in pk-reveal">
+            <div className="pk-tour-play"><Play /></div>
+            <div className="pk-tour-copy">
+              <span className="pk-eyebrow">4-minute interactive tour</span>
+              <h2>Watch one agent go from failure to verified release.</h2>
+              <p>
+                Follow the complete ProveKit loop with realistic production data—flow design,
+                nested trace, deterministic replay, and quality verdict included.
+              </p>
             </div>
-          ))}
-        </div>
-      </section>
-
-      <section id="how" className="lp-how">
-        <h2 className="lp-h2">Live in two minutes</h2>
-        <div className="lp-steps">
-          {STEPS.map((s) => (
-            <div key={s.n} className="lp-step">
-              <div className="lp-step-n">{s.n}</div>
-              <div className="lp-step-t">{s.t}</div>
-              <div className="lp-step-d">{s.d}</div>
+            <div className="pk-tour-stats">
+              <div className="pk-tour-stat"><span>Trace depth</span><b>14 spans</b></div>
+              <div className="pk-tour-stat"><span>Replay saving</span><b>−57% cost</b></div>
+              <div className="pk-tour-stat"><span>Quality</span><b>94.2 score</b></div>
             </div>
-          ))}
+            <Link href="/traces" className="pk-btn pk-btn-light">Open live sandbox <Arrow /></Link>
+          </div>
         </div>
       </section>
 
-      <section className="lp-compare">
-        <h2 className="lp-h2">Why ProveKit</h2>
-        <p className="lp-sub">Observability-tool depth, activation in one line — and it runs on your own infra.</p>
-        <div className="lp-table-wrap">
-          <table className="lp-table">
-            <thead><tr><th>&nbsp;</th><th>Raw logs</th><th>Hosted SaaS tools</th><th>ProveKit</th></tr></thead>
-            <tbody>
-              {COMPARE.map((r) => (
-                <tr key={r.f}>
-                  <td>{r.f}</td>
-                  <td className={cls(r.logs)}>{sym(r.logs)}</td>
-                  <td className={cls(r.saas)}>{sym(r.saas)}</td>
-                  <td className={cls(r.pk)}>{sym(r.pk)}</td>
-                </tr>
+      {/* ────────────────────── The reliability loop ────────────────── */}
+      <section className="pk-section pk-tone-paper" style={{ paddingTop: 0 }}>
+        <div className="pk-shell">
+          <div className="pk-reveal" style={{ maxWidth: 780, marginBottom: 56 }}>
+            <span className="pk-eyebrow">The reliability loop</span>
+            <h2 className="pk-h2">From “it failed” to<br /><span className="pk-accent">exactly why.</span></h2>
+            <p className="pk-lede">
+              One continuous workflow turns every production run into evidence your team can
+              inspect, reproduce, and improve.
+            </p>
+          </div>
+          <div className="pk-grid pk-grid-3">
+            {LOOP.map((s) => (
+              <article key={s.title} className="pk-card pk-reveal"
+                style={{ "--ic": "var(--violet)", "--ic-bg": "var(--violet-soft)" } as React.CSSProperties}>
+                <span className="pk-card-ic"><Icon name={s.icon} /></span>
+                <span className="pk-card-num">{s.num}</span>
+                <div className="pk-card-eyebrow">{s.eyebrow}</div>
+                <h3>{s.title}</h3>
+                <p>{s.body}</p>
+                <Link href={s.href} className="pk-link">Explore {s.eyebrow.toLowerCase()} <Arrow /></Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────────────────── Trace explorer ───────────────────── */}
+      <section id="trace" className="pk-section pk-tone-dark">
+        <div className="pk-shell pk-split">
+          <div className="pk-reveal">
+            <span className="pk-eyebrow">Trace explorer</span>
+            <h2 className="pk-h2">See the<br />decision.<br />Not just the<br />output.</h2>
+            <p className="pk-lede">
+              Move from a fleet-wide signal to the exact span that changed. Prove where time,
+              cost, and quality were lost with complete nested context.
+            </p>
+            <ul className="pk-checks">
+              <li><span className="pk-tick">✓</span>Waterfall, flow graph, events, and metadata</li>
+              <li><span className="pk-tick">✓</span>Input/output inspection with PII masking</li>
+              <li><span className="pk-tick">✓</span>Session, model, token, latency, and cost attribution</li>
+            </ul>
+            <div className="pk-btns">
+              <Link href="/traces" className="pk-btn pk-btn-dark">Inspect a production trace <Arrow /></Link>
+            </div>
+          </div>
+          <div className="pk-split-visual pk-reveal"><TraceMock /></div>
+        </div>
+      </section>
+
+      {/* ────────────────────── Replay + evaluate ───────────────────── */}
+      <section id="replay" className="pk-section pk-tone-dark" style={{ paddingTop: 0 }}>
+        <div className="pk-shell">
+          <div className="pk-intro pk-reveal">
+            <span className="pk-eyebrow">Replay + evaluate</span>
+            <h2 className="pk-h2">Change the system.<br />Keep the evidence.</h2>
+            <p className="pk-lede">
+              Every rerun carries its configuration, provenance, structural diff, and quality verdict.
+            </p>
+          </div>
+          <div className="pk-compare">
+            <article className="pk-story pk-reveal">
+              <div className="pk-story-top">
+                <span className="pk-story-ic"><Icon name="replay" /></span>
+                <span className="pk-story-tag">Deterministic</span>
+              </div>
+              <h3>Replay a failure faithfully.</h3>
+              <p>Replace the prompt or model, preserve recorded tools, and see precisely where execution diverges.</p>
+              <div className="pk-ab">
+                <div>
+                  <span>Original</span><b>1.84s</b>
+                  <small>$0.0428 · 4,291 tokens</small>
+                </div>
+                <div className="pk-ab-arrow">→</div>
+                <div>
+                  <span>Candidate</span><b>1.12s</b>
+                  <small>$0.0182 · 2,903 tokens</small>
+                </div>
+              </div>
+              <div className="pk-verdict">
+                <i><Icon name="shield" /></i>
+                <div>
+                  <b>Reliable comparison</b>
+                  <small>No input-dependent tool spans changed.</small>
+                </div>
+              </div>
+              <Link href="/traces" className="pk-link">Open replay workspace <ArrowNE /></Link>
+            </article>
+
+            <article className="pk-story pk-reveal">
+              <div className="pk-story-top">
+                <span className="pk-story-ic"><Icon name="spark" /></span>
+                <span className="pk-story-tag">Quality passed</span>
+              </div>
+              <h3>Prove the candidate is better.</h3>
+              <p>Compare correctness, groundedness, trajectory, latency, tokens, and cost against a versioned baseline.</p>
+              <div className="pk-score-head">
+                <div>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: "#6d6780" }}>
+                    Overall score
+                  </span>
+                  <div className="pk-score-big">94.2</div>
+                  <div className="pk-score-delta">+4.8%</div>
+                </div>
+                <ScoreRing value={94} />
+              </div>
+              {SCORES.map((s) => (
+                <div key={s.label} className="pk-score-row">
+                  <span>{s.label}</span>
+                  <span className="pk-score-track"><span className="pk-score-fill" style={{ width: `${s.value}%` }} /></span>
+                  <b>{s.value}</b>
+                </div>
               ))}
-            </tbody>
-          </table>
+              <Link href="/datasets" className="pk-link">View experiment results <ArrowNE /></Link>
+            </article>
+          </div>
         </div>
       </section>
 
-      <section className="lp-quotes">
-        <h2 className="lp-h2">Built for agent developers</h2>
-        <div className="lp-quote-grid">
-          {QUOTES.map((q) => (
-            <div key={q.by} className="lp-quote">
-              <div className="lp-quote-text">“{q.t}”</div>
-              <div className="lp-quote-by">— {q.by}</div>
+      {/* ──────────────────── Visual agent flow studio ──────────────── */}
+      <section id="flow" className="pk-section pk-tone-paper">
+        <div className="pk-shell pk-split pk-split-rev">
+          <div className="pk-split-visual pk-reveal"><FlowCanvasMock /></div>
+          <div className="pk-reveal">
+            <span className="pk-eyebrow">Visual agent flow studio</span>
+            <h2 className="pk-h2">Design, test, and debug on one living canvas.</h2>
+            <p className="pk-lede">
+              Build reusable workflows with AI agents, models, tools, logic, human approvals,
+              triggers, and typed outputs—then execute them with trace evidence attached.
+            </p>
+            <div className="pk-chips">
+              {["Drag-and-drop nodes", "Test execution", "Run history", "Version restore", "Input/output mapping", "Publish controls"].map((c) => (
+                <span key={c}>{c}</span>
+              ))}
             </div>
-          ))}
+            <div className="pk-btns">
+              <Link href="/traces" className="pk-btn pk-btn-primary">Open Agent Flow Studio <Arrow /></Link>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section id="faq" className="lp-faq">
+      {/* ───────────────────────── Ecosystem ────────────────────────── */}
+      <section className="pk-section pk-tone-paper2">
+        <div className="pk-shell">
+          <div className="pk-intro pk-reveal">
+            <span className="pk-eyebrow">Open by design</span>
+            <h2 className="pk-h2">Meet your stack<br />where it already runs.</h2>
+            <p className="pk-lede">
+              Drop-in SDKs and OpenTelemetry-native ingestion keep your telemetry portable and
+              your architecture flexible.
+            </p>
+          </div>
+          <div className="pk-eco">
+            <OrbitMock />
+            <div className="pk-eco-side">
+              <article className="pk-card pk-reveal">
+                <span className="pk-card-ic"><Icon name="plug" /></span>
+                <div className="pk-card-eyebrow">Ingest</div>
+                <h3>OTLP JSON + protobuf</h3>
+                <p>Preserve distributed trace context through collectors and custom instrumentation.</p>
+                <a href={DOCS} target="_blank" rel="noreferrer" className="pk-link">OpenTelemetry guide <Arrow /></a>
+              </article>
+              <article className="pk-card pk-reveal">
+                <span className="pk-card-ic"><Icon name="cloud" /></span>
+                <div className="pk-card-eyebrow">Deploy</div>
+                <h3>Cloud or self-hosted</h3>
+                <p>Use the managed control plane or deploy with Helm inside your own infrastructure.</p>
+                <a href={DOCS} target="_blank" rel="noreferrer" className="pk-link">Enterprise deployment <Arrow /></a>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────── Enterprise control ─────────────────── */}
+      <section id="trust" className="pk-section pk-tone-dark">
+        <div className="pk-shell pk-split">
+          <div className="pk-reveal">
+            <span className="pk-story-tag" style={{ marginLeft: 0, display: "inline-flex", marginBottom: 26 }}>Enterprise control</span>
+            <h2 className="pk-h2">Production<br />evidence,<br />governed your<br />way.</h2>
+            <p className="pk-lede">
+              Protect sensitive AI telemetry without sacrificing the detail your teams need to
+              debug and improve it.
+            </p>
+            <div className="pk-btns">
+              <a href="#assurance" className="pk-btn pk-btn-light">Open the trust center <Arrow /></a>
+            </div>
+          </div>
+          <div className="pk-split-visual pk-grid pk-grid-2">
+            {SECURITY.map((s) => (
+              <article key={s.title} className="pk-card pk-card-dark pk-reveal" style={{ minHeight: 210 }}>
+                <span className="pk-card-ic"><Icon name={s.icon} /></span>
+                <h3 style={{ marginTop: 34, fontSize: 19 }}>{s.title}</h3>
+                <p style={{ fontSize: 13.5 }}>{s.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ────────────────────── Trust architecture ──────────────────── */}
+      <section id="assurance" className="pk-ledger pk-tone-paper">
+        <div className="pk-shell pk-ledger-in pk-reveal">
+          <div className="pk-ledger-intro">
+            <span className="pk-ledger-ic"><Icon name="shield" /></span>
+            <div>
+              <span className="pk-eyebrow">Trust architecture</span>
+              <h2>Enterprise control without a black box.</h2>
+              <p>Keep the evidence your teams need while controlling identity, sensitive data, residency, retention, and deployment.</p>
+            </div>
+          </div>
+          <div className="pk-ledger-items">
+            {LEDGER.map((l) => (
+              <div key={l.title} className="pk-ledger-item">
+                <i><Icon name={l.icon} /></i>
+                <div><b>{l.title}</b><small>{l.body}</small></div>
+              </div>
+            ))}
+          </div>
+          <div className="pk-ledger-actions">
+            <Link href="/settings" className="pk-btn pk-btn-primary">Explore enterprise <Arrow /></Link>
+            <Link href="/community" className="pk-link">Talk to an architect <ArrowNE /></Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────── Open source SDK ────────────────────── */}
+      <section className="pk-section pk-tone-dark">
+        <div className="pk-shell pk-intro pk-reveal" style={{ marginBottom: 0 }}>
+          <span className="pk-eyebrow">Open source SDK</span>
+          <h2 className="pk-h2">Instrument once.<br />Understand everything.</h2>
+          <p className="pk-lede">One decorator at the entrypoint. Full nested visibility from the first request.</p>
+          <div className="pk-code">
+            <pre>
+              <span className="k">from</span> <span className="d">provekit</span> <span className="k">import</span> <span className="d">trace</span>{"\n\n"}
+              <span className="d">@trace.agent(</span><span className="s">&quot;support-agent&quot;</span><span className="d">)</span>{"\n"}
+              <span className="k">def</span> <span className="d">run(message: str):</span>{"\n"}
+              {"    "}<span className="k">return</span> <span className="d">agent.invoke(message)</span>
+            </pre>
+          </div>
+          <div className="pk-btns" style={{ justifyContent: "center" }}>
+            <a href={DOCS} target="_blank" rel="noreferrer" className="pk-btn pk-btn-light">Read the quickstart <Arrow /></a>
+          </div>
+        </div>
+      </section>
+
+      {/* ────────────────────────── Teams ───────────────────────────── */}
+      <section id="teams" className="pk-section pk-tone-paper">
+        <div className="pk-shell">
+          <div className="pk-intro pk-reveal">
+            <span className="pk-eyebrow">One source of truth</span>
+            <h2 className="pk-h2">Built for every team<br />responsible for AI.</h2>
+          </div>
+          <div className="pk-grid pk-grid-4">
+            {TEAMS.map((t) => (
+              <article key={t.title} className="pk-card pk-reveal" style={{ minHeight: 300 }}>
+                <span className="pk-card-ic"><Icon name={t.icon} /></span>
+                <h3 style={{ marginTop: 34 }}>{t.title}</h3>
+                <p>{t.body}</p>
+                <Link href={t.href} className="pk-link">See the workflow <ArrowNE /></Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────────────────── Pricing ──────────────────────────── */}
+      <section id="pricing" className="pk-section pk-tone-paper2">
+        <div className="pk-shell pk-pricing">
+          <div className="pk-reveal">
+            <span className="pk-eyebrow">Start without friction</span>
+            <h2 className="pk-h2">Free to prove.<br />Ready to scale.</h2>
+            <p className="pk-lede">
+              Begin with 50,000 traces per month, core replay and evaluation, and no credit card.
+              Move to team or enterprise controls when production demands it.
+            </p>
+            <div className="pk-btns">
+              <Link href={start} className="pk-btn pk-btn-primary">Create free workspace <Arrow /></Link>
+              <a href="#faq" className="pk-btn pk-btn-light">Compare plans</a>
+            </div>
+          </div>
+          <div className="pk-plan pk-reveal">
+            <div className="pk-plan-top">
+              <span className="pk-plan-tag">Developer</span>
+              <div className="pk-plan-price"><b>$0</b><span>/ month</span></div>
+            </div>
+            <ul>
+              {["50k traces / month", "7-day retention", "Core replay & evaluation", "OpenTelemetry ingestion"].map((f) => (
+                <li key={f}><i>✓</i>{f}</li>
+              ))}
+            </ul>
+            <div className="pk-plan-foot">Team from $299 / month <ArrowNE /></div>
+          </div>
+        </div>
+      </section>
+
+      {/* ──────────────────────────── FAQ ──────────────────────────── */}
+      <section id="faq" className="pk-section pk-tone-paper">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
           "@context": "https://schema.org", "@type": "FAQPage",
-          mainEntity: FAQ.map((f) => ({ "@type": "Question", name: f.q,
-            acceptedAnswer: { "@type": "Answer", text: f.a } })),
+          mainEntity: FAQ.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
         }) }} />
-        <h2 className="lp-h2">Questions</h2>
-        <div className="lp-faq-grid">
-          {FAQ.map((f) => (
-            <div key={f.q} className="lp-faq-item">
-              <div className="lp-faq-q">{f.q}</div>
-              <div className="lp-faq-a">{f.a}</div>
-            </div>
-          ))}
+        <div className="pk-shell pk-faq">
+          <div className="pk-reveal">
+            <span className="pk-eyebrow">Common questions</span>
+            <h2 className="pk-h2">Clear answers before<br />your first trace.</h2>
+          </div>
+          <div className="pk-faq-list pk-reveal">
+            {FAQ.map((f, i) => (
+              <div key={f.q} className="pk-faq-item">
+                <button className="pk-faq-q" aria-expanded={faq === i} onClick={() => setFaq(faq === i ? -1 : i)}>
+                  {f.q}<span>{faq === i ? "−" : "+"}</span>
+                </button>
+                {faq === i && <div className="pk-faq-a">{f.a}</div>}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="lp-final">
-        <h2>Ship your first trace today.</h2>
-        <p>Open source, self-hostable, and free to run. Bring your own keys, own your data.</p>
-        <div className="lp-cta" style={{ justifyContent: "center" }}>
-          <Link href={primary.href} className="btn lp-btn-primary">{primary.label}</Link>
-          <GitHubStars />
+      {/* ─────────────────────── Final CTA ─────────────────────────── */}
+      <section className="pk-final">
+        <div className="pk-final-in pk-reveal">
+          <span className="pk-tag-lime">Prove the next release</span>
+          <h2 className="pk-display">Your agent already runs.<br />Now make it explainable.</h2>
+          <p className="pk-lede" style={{ color: "#a9a3bb", marginInline: "auto" }}>
+            Start tracing in minutes, or walk through the complete reliability loop with our team.
+          </p>
+          <div className="pk-btns">
+            <Link href={start} className="pk-btn pk-btn-primary">{startLabel} <Arrow /></Link>
+            <Link href="/community" className="pk-btn pk-btn-outline">Book a demo <ArrowNE /></Link>
+          </div>
+          <div className="pk-final-note">No credit card · OpenTelemetry native · Self-host ready</div>
         </div>
       </section>
 
-      <footer className="lp-footer">
-        <div className="lp-foot-brand">
-          <div><span className="lp-logo">◇</span> Prove<b style={{ color: "var(--muted)", fontWeight: 600 }}>Kit</b></div>
-          <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>Drop-in agent tracing · evaluation · observability</div>
-        </div>
-        <div className="lp-foot-cols">
-          {FOOTER.map((col) => (
-            <div key={col.h} className="lp-foot-col">
-              <div className="lp-foot-h">{col.h}</div>
-              {col.links.map((l) => (
-                l.href.startsWith("/")
-                  ? <Link key={l.t} href={l.href}>{l.t}</Link>
-                  : <a key={l.t} href={l.href} target="_blank" rel="noreferrer">{l.t}</a>
-              ))}
+      {/* ─────────────────────────  Footer  ────────────────────────── */}
+      <footer className="pk-footer">
+        <div className="pk-shell">
+          <div className="pk-footer-top">
+            <div className="pk-footer-brand">
+              <span className="pk-wordmark"><Mark />PROVEKIT</span>
+              <p>Evidence for every AI decision.</p>
+              <span className="pk-status"><i className="pk-dot" />All core systems operational</span>
             </div>
-          ))}
+            <div>
+              <div className="pk-footer-legal">
+                <Link href="/privacy">Privacy</Link>
+                <Link href="/terms">Terms</Link>
+                <a href={REPO} target="_blank" rel="noreferrer">Status</a>
+              </div>
+            </div>
+          </div>
+          <div className="pk-footer-cols">
+            {FOOTER.map((col) => (
+              <div key={col.h} className="pk-footer-col">
+                <h4>{col.h}</h4>
+                {col.links.map((l) => (
+                  l.href.startsWith("/")
+                    ? <Link key={l.t} href={l.href}>{l.t}</Link>
+                    : <a key={l.t} href={l.href} target="_blank" rel="noreferrer">{l.t}</a>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="pk-footer-bottom">© 2026 ProveKit. Built for teams who verify.</div>
         </div>
       </footer>
-      <div className="lp-foot-legal">© {2026} ProveKit · Open source · MIT-style license</div>
-
-      <LandingStyles />
     </div>
   );
 }
 
-function TracePreview() {
-  // A styled mini "trace" — the product's signature nested flow, drawn in CSS.
+/* ══════════════════════════ Product mockups ══════════════════════════ */
+
+function FlowStudioMock() {
   return (
-    <div className="lp-preview" aria-hidden>
-      <div className="lp-preview-bar">
-        <span className="lp-dot r" /><span className="lp-dot y" /><span className="lp-dot g" />
-        <span className="lp-preview-title">research-agent · 289ms · 1,904 tokens · ~$0.006</span>
+    <div className="pk-stage pk-reveal" aria-hidden>
+      <div className="pk-stage-bar">
+        <span className="pk-stage-mark">///</span>
+        <span className="pk-crumb">Flows <span style={{ opacity: .45 }}>/</span> <b>Customer Support Agent</b></span>
+        <span className="pk-live"><i />Live</span>
+        <span className="pk-stage-actions">
+          <span className="pk-chip-btn"><Play />Test</span>
+          <span className="pk-chip-btn pk-solid">Publish</span>
+        </span>
       </div>
-      <div className="lp-flow">
-        {ROWS.map((r, i) => (
-          <div key={i} className={`lp-row ${r.fail ? "fail" : ""}`} style={{ paddingLeft: 12 + r.d * 20 }}>
-            <span className="lp-badge" data-t={r.type}>{r.type}</span>
-            <span className="lp-row-label">{r.label}</span>
-            <span className="lp-row-bar"><span className="lp-row-fill" style={{ width: r.w, background: `var(${BAR[r.type]})` }} /></span>
-            <span className="lp-row-ms">{r.ms}</span>
+      <div className="pk-stage-body">
+        <div className="pk-palette">
+          <div className="pk-palette-h">Building blocks</div>
+          {BLOCKS.map((b) => (
+            <div key={b.t} className="pk-block">
+              <span className="pk-block-ic" style={{ background: b.bg }}><Icon name={b.icon} /></span>
+              <span>
+                <span className="pk-block-t">{b.t}</span>
+                <span className="pk-block-s">{b.s}</span>
+              </span>
+              <span className="pk-block-add">+</span>
+            </div>
+          ))}
+        </div>
+        <div className="pk-canvas">
+          <svg className="pk-wires" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d="M22,58 C30,58 32,30 46,30" vectorEffect="non-scaling-stroke" />
+            <path d="M22,58 C32,58 34,80 46,80" vectorEffect="non-scaling-stroke" />
+            <path d="M62,30 C74,30 74,58 84,58" vectorEffect="non-scaling-stroke" />
+            <path d="M62,80 C74,80 74,58 84,58" vectorEffect="non-scaling-stroke" />
+          </svg>
+          <div className="pk-node" style={{ left: "2%", top: "48%" }}>
+            <span className="pk-node-ic" style={{ background: "#2f9a63" }}><Icon name="bolt" /></span>
+            <span><span className="pk-node-t">New request</span><span className="pk-node-s">Webhook trigger</span></span>
+          </div>
+          <div className="pk-node" style={{ left: "40%", top: "18%" }}>
+            <span className="pk-node-ic" style={{ background: "var(--violet)" }}><Icon name="agent" /></span>
+            <span><span className="pk-node-t">Knowledge agent</span><span className="pk-node-s">GPT-4.1 · 0.8s</span></span>
+          </div>
+          <div className="pk-node" style={{ left: "40%", top: "70%" }}>
+            <span className="pk-node-ic" style={{ background: "#e0576f" }}><Icon name="branch" /></span>
+            <span><span className="pk-node-t">Route intent</span><span className="pk-node-s">3 conditions</span></span>
+          </div>
+          <div className="pk-node pk-outline" style={{ left: "76%", top: "48%" }}>
+            <span className="pk-node-ic" style={{ background: "var(--violet-dark)" }}><Icon name="shield" /></span>
+            <span><span className="pk-node-t">Quality gate</span><span className="pk-node-s">Score ≥ 0.85</span></span>
+          </div>
+          <div className="pk-metric" style={{ right: 16, top: 14 }}>
+            Latency <b>2.84s</b> <span className="pk-good">−18%</span>
+          </div>
+          <div className="pk-metric" style={{ left: 16, bottom: 14 }}>
+            Quality <b>0.94</b> <span className="pk-good">passed</span>
+          </div>
+          <div className="pk-toast" style={{ right: 24, bottom: 14 }}>
+            <span className="pk-toast-ic">✓</span>
+            <span>
+              <span className="pk-toast-t">Run completed</span>
+              <span className="pk-toast-s">2.84s · $0.0382 · score 0.94</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TraceMock() {
+  return (
+    <div className="pk-trace" aria-hidden>
+      <div className="pk-trace-top">
+        <span className="pk-trace-id"><i />tr_a91f3c2</span>
+        <span className="pk-badge-ok">● Success</span>
+        <span className="pk-trace-dur">1.84s</span>
+      </div>
+      <div className="pk-trace-tabs">
+        <button className="on">Waterfall</button><button>Flow graph</button>
+        <button>Events</button><button>Metadata</button>
+      </div>
+      <div className="pk-wf">
+        <div className="pk-wf-ruler"><span>0ms</span><span>500ms</span><span>1.0s</span><span>1.5s</span></div>
+        {SPANS.map((s) => (
+          <div key={s.name} className="pk-wf-row">
+            <span className="pk-wf-name"><i style={{ background: s.color }} />{s.name}</span>
+            <span className="pk-wf-track">
+              <span className="pk-wf-bar" style={{ left: `${s.start}%`, width: `${s.width}%` }} />
+            </span>
           </div>
         ))}
       </div>
+      <div className="pk-trace-foot">
+        <div><span>Selected span</span><b>llm · gpt-4.1</b></div>
+        <div><span>Tokens</span><b>2,842</b></div>
+        <div><span>Cost</span><b>$0.0284</b></div>
+        <div><span>Quality</span><b className="pk-good">0.94</b></div>
+      </div>
     </div>
   );
 }
 
-const TYPE_C: Record<string, string> = { agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)" };
-
-function FlowVisual() {
-  // A self-contained SVG agent-flow graph — the product's signature node view, with
-  // animated directional edges (the selected path in accent, a failed exit in red).
-  const W = 156, H = 42;
-  const N: Record<string, { x: number; y: number; t: string; l: string }> = {
-    a: { x: 12, y: 128, t: "agent", l: "orchestrator" },
-    b: { x: 250, y: 26, t: "llm", l: "plan · gpt-4o" },
-    c: { x: 250, y: 128, t: "tool", l: "retrieve" },
-    d: { x: 486, y: 128, t: "step", l: "doc · 0.95" },
-    e: { x: 250, y: 230, t: "llm", l: "synthesize" },
-    f: { x: 486, y: 230, t: "tool", l: "fetch ✗" },
-  };
-  const E: { s: string; t: string; k?: "hot" | "fail" }[] = [
-    { s: "a", t: "b" }, { s: "a", t: "c" }, { s: "c", t: "d" },
-    { s: "a", t: "e", k: "hot" }, { s: "e", t: "f", k: "fail" },
-  ];
-  const path = (s: string, t: string) => {
-    const A = N[s], B = N[t];
-    const sx = A.x + W, sy = A.y + H / 2, tx = B.x, ty = B.y + H / 2, mx = sx + (tx - sx) / 2;
-    return `M ${sx} ${sy} C ${mx} ${sy} ${mx} ${ty} ${tx} ${ty}`;
-  };
+function FlowCanvasMock() {
   return (
-    <div className="lp-flowbox">
-      <svg viewBox="0 0 654 300" className="lp-flowsvg" role="img" aria-label="Agent flow graph">
-        <defs>
-          {[["def", "var(--border-strong)"], ["hot", "var(--accent)"], ["fail", "var(--red)"]].map(([id, c]) => (
-            <marker key={id} id={`arw-${id}`} markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill={c} />
-            </marker>
-          ))}
-        </defs>
-        {E.map((e, i) => (
-          <path key={i} d={path(e.s, e.t)} fill="none" markerEnd={`url(#arw-${e.k || "def"})`}
-            className={`lp-edge ${e.k === "hot" ? "hot" : ""} ${e.k === "fail" ? "fail" : ""}`} />
-        ))}
-        {Object.entries(N).map(([id, n]) => (
-          <g key={id}>
-            <title>{`${n.t} · ${n.l}`}</title>
-            <rect x={n.x} y={n.y} width={W} height={H} rx={10} className={`lp-fnode ${id === "f" ? "fail" : ""}`}
-              style={{ stroke: id === "f" ? "var(--red)" : TYPE_C[n.t] }} />
-            <text x={n.x + 12} y={n.y + 26} className="lp-ftext">
-              <tspan className="lp-ftag" style={{ fill: id === "f" ? "var(--red)" : TYPE_C[n.t] }}>{n.t.toUpperCase()}</tspan>
-              <tspan dx="8" style={{ fill: id === "f" ? "var(--red)" : "var(--text)" }}>{n.l}</tspan>
-            </text>
-          </g>
-        ))}
+    <div className="pk-flowcanvas" aria-hidden>
+      <svg className="pk-wires" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path d="M20,24 C34,24 32,58 44,58" vectorEffect="non-scaling-stroke" />
+        <path d="M44,58 C34,58 40,24 54,24" vectorEffect="non-scaling-stroke" />
+        <path d="M54,24 C70,24 62,80 74,80" vectorEffect="non-scaling-stroke" />
       </svg>
+      <div className="pk-node" style={{ left: "4%", top: "16%" }}>
+        <span className="pk-node-ic" style={{ background: "#2f9a63" }}><Icon name="bolt" /></span>
+        <span><span className="pk-node-t">Webhook</span><span className="pk-node-s">trigger</span></span>
+      </div>
+      <div className="pk-node" style={{ left: "30%", top: "50%" }}>
+        <span className="pk-node-ic" style={{ background: "#e0576f" }}><Icon name="branch" /></span>
+        <span><span className="pk-node-t">Route intent</span><span className="pk-node-s">logic</span></span>
+      </div>
+      <div className="pk-node" style={{ left: "52%", top: "16%" }}>
+        <span className="pk-node-ic" style={{ background: "var(--violet-dark)" }}><Icon name="shield" /></span>
+        <span><span className="pk-node-t">Quality gate</span><span className="pk-node-s">score ≥ 0.85</span></span>
+      </div>
+      <div className="pk-node" style={{ left: "56%", top: "72%" }}>
+        <span className="pk-node-ic" style={{ background: "var(--violet)" }}><Icon name="output" /></span>
+        <span><span className="pk-node-t">Response</span><span className="pk-node-s">output</span></span>
+      </div>
     </div>
   );
 }
 
-const BAR: Record<string, string> = { agent: "--accent", llm: "--blue", tool: "--purple", step: "--muted" };
-const ROWS = [
-  { type: "agent", label: "research-orchestrator", d: 0, w: "96%", ms: "289ms", fail: false },
-  { type: "llm", label: "chat gpt-4o-mini", d: 1, w: "22%", ms: "13ms", fail: false },
-  { type: "agent", label: "sub-agent: pricing", d: 1, w: "60%", ms: "67ms", fail: false },
-  { type: "tool", label: "retrieve", d: 2, w: "18%", ms: "11ms", fail: false },
-  { type: "step", label: "doc #0 · relevance 0.95", d: 3, w: "8%", ms: "4ms", fail: false },
-  { type: "llm", label: "chat gpt-4o", d: 2, w: "30%", ms: "13ms", fail: false },
-  { type: "tool", label: "fetch-attempt-1", d: 2, w: "14%", ms: "7ms", fail: true },
-  { type: "tool", label: "fetch-attempt-2", d: 2, w: "12%", ms: "6ms", fail: false },
-  { type: "llm", label: "synthesize · claude-sonnet-5", d: 1, w: "40%", ms: "12ms", fail: false },
+function OrbitMock() {
+  // Eight integrations orbiting the ProveKit core — positioned on two rings.
+  const nodes = [
+    { t: "OpenAI", x: 50, y: 8 }, { t: "Anthropic", x: 79, y: 22 },
+    { t: "LangChain", x: 88, y: 52 }, { t: "LlamaIndex", x: 76, y: 82 },
+    { t: "CrewAI", x: 50, y: 93 }, { t: "AutoGen", x: 22, y: 82 },
+    { t: "MCP", x: 12, y: 52 }, { t: "Webhooks", x: 22, y: 22 },
+  ];
+  return (
+    <div className="pk-orbit pk-reveal" aria-hidden>
+      <span className="pk-orbit-ring" style={{ width: "42%", aspectRatio: "1" }} />
+      <span className="pk-orbit-ring" style={{ width: "68%", aspectRatio: "1" }} />
+      <div className="pk-orbit-core">
+        <div>
+          <span className="pk-mark">///</span>
+          <b>ProveKit</b>
+          <small>OTLP evidence layer</small>
+        </div>
+      </div>
+      {nodes.map((n) => (
+        <span key={n.t} className="pk-orbit-node" style={{ left: `${n.x}%`, top: `${n.y}%`, transform: "translate(-50%, -50%)" }}>
+          {n.t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ScoreRing({ value }: { value: number }) {
+  const r = 38, c = 2 * Math.PI * r;
+  return (
+    <div className="pk-ring">
+      <svg viewBox="0 0 88 88">
+        <circle className="pk-ring-bg" cx="44" cy="44" r={r} />
+        <circle className="pk-ring-fg" cx="44" cy="44" r={r} strokeDasharray={c} strokeDashoffset={c * (1 - value / 100)} />
+      </svg>
+      <b>{value}</b>
+    </div>
+  );
+}
+
+/* ══════════════════════════ Bits & icons ══════════════════════════ */
+
+const Mark = () => <span className="pk-mark">///</span>;
+const Arrow = () => <span className="pk-arrow" aria-hidden>→</span>;
+const ArrowNE = () => <span className="pk-arrow" aria-hidden>↗</span>;
+const Play = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <path d="M5 3.5v9l8-4.5-8-4.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+  </svg>
+);
+
+const PATHS: Record<string, string> = {
+  agent: "M8 2a2 2 0 0 1 2 2v1h2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a2 2 0 0 1 2-2ZM6 9h.01M10 9h.01",
+  model: "M8 2v3M8 11v3M2.5 8h3M10.5 8h3M4.2 4.2l2 2M9.8 9.8l2 2M11.8 4.2l-2 2M6.2 9.8l-2 2",
+  search: "M7.2 12a4.8 4.8 0 1 0 0-9.6 4.8 4.8 0 0 0 0 9.6ZM11 11l3 3",
+  branch: "M4.5 2v7a3 3 0 0 0 3 3h4M11.5 9.5 14 12l-2.5 2.5M4.5 2 2.5 4M4.5 2l2 2",
+  shield: "M8 2 3 4v4c0 3 2.2 5.4 5 6 2.8-.6 5-3 5-6V4L8 2Zm-2 6 1.5 1.5L10.5 6.5",
+  bolt: "M9 2 4 9h3l-1 5 5-7H8l1-5Z",
+  trace: "M2 8h2.5l1.5-4 2 8 2-6 1.5 2H14",
+  replay: "M13 8a5 5 0 1 1-1.6-3.7M13 2v3h-3",
+  spark: "M8 2l1.6 3.9L13.5 7.5 9.6 9.1 8 13l-1.6-3.9L2.5 7.5l3.9-1.6L8 2Z",
+  lock: "M4.5 7V5a3.5 3.5 0 1 1 7 0v2M3.5 7h9v6.5h-9V7Z",
+  audit: "M4 2h6l3 3v9H4V2Zm2 5h5M6 10h5",
+  data: "M2.5 4.5h11v3.5h-11V4.5Zm0 5h11V13h-11V9.5Z",
+  plug: "M6 2v4M10 2v4M4.5 6h7v2.5a3.5 3.5 0 0 1-7 0V6ZM8 12v2.5",
+  cloud: "M4.8 12.5a2.8 2.8 0 0 1-.3-5.6A4 4 0 0 1 12 7.4a2.6 2.6 0 0 1-.3 5.1H4.8Z",
+  flask: "M6.5 2v4L3 12.5A1.2 1.2 0 0 0 4 14.5h8a1.2 1.2 0 0 0 1-2L9.5 6V2M5.5 2h5",
+  gauge: "M2.5 11a5.5 5.5 0 1 1 11 0M8 11l3-3.2",
+  building: "M4 14V3h8v11M6.5 6h.01M9.5 6h.01M6.5 9h.01M9.5 9h.01M7 14v-2.5h2V14",
+  output: "M3 3.5h10v9H3v-9Zm2.5 3.5 2 2-2 2M9 11h2.5",
+  approve: "M8 2 3 4v4c0 3 2.2 5.4 5 6 2.8-.6 5-3 5-6V4L8 2Z",
+};
+
+function Icon({ name }: { name: string }) {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 16 16" fill="none" aria-hidden
+      style={{ display: "block", overflow: "visible" }}>
+      <path d={PATHS[name] || PATHS.spark} stroke="currentColor" strokeWidth="1.35"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Fades sections in as they enter the viewport, matching the reference site. */
+function useReveal() {
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current) return;
+    done.current = true;
+    const els = Array.from(document.querySelectorAll<HTMLElement>(".pk-reveal"));
+    if (!("IntersectionObserver" in window)) { els.forEach((e) => e.classList.add("pk-in")); return; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) { e.target.classList.add("pk-in"); io.unobserve(e.target); }
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.05 });
+    els.forEach((e, i) => { e.style.transitionDelay = `${Math.min(i % 4, 3) * 70}ms`; io.observe(e); });
+    return () => io.disconnect();
+  }, []);
+}
+
+/* ══════════════════════════════ Content ══════════════════════════════ */
+
+const PROOF = [
+  { value: "14", label: "nested spans" },
+  { value: "−57%", label: "replay cost" },
+  { value: "+4.8%", label: "quality uplift" },
+  { value: "94.2", label: "evaluation score" },
 ];
 
-const FEATURES = [
-  { ic: "◇", c: "var(--accent)", t: "Drop-in tracing", d: "One import auto-captures OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI, and outbound HTTP — no per-call code." },
-  { ic: "❖", c: "var(--blue)", t: "Flow graph & waterfall", d: "See the run as an animated node graph or a time-proportional waterfall — inputs, outputs, tokens, cost, and logs per span." },
-  { ic: "▶", c: "var(--accent)", t: "Interactive debugging", d: "Don't just read logs — edit any captured LLM call's prompt or variables and re-run it with real data, diff the output, or replay the whole trace live from a step." },
-  { ic: "✓", c: "var(--green)", t: "Evaluation & CI gates", d: "Build datasets from real traces, score with built-in, LLM-judge, or custom scorers, and fail your build on a regression with pk.evaluate()." },
-  { ic: "▲", c: "var(--amber)", t: "Dashboards & alerts", d: "Volume, error rate, latency p50/p95, tokens, and cost over time — with threshold alerts that email on a breach." },
-  { ic: "⌘", c: "var(--purple)", t: "Debug over MCP", d: "Point Claude Desktop or Cursor at your project key and let an agent query and reason over your traces — no extra client code." },
-  { ic: "⊞", c: "var(--accent)", t: "Multi-project & self-host", d: "Isolated projects with members and roles, per-project keys, PII redaction, retention — all on your own infra via Docker." },
+const STACK = ["OpenAI", "Anthropic", "LangChain", "LlamaIndex", "CrewAI", "AutoGen", "OpenTelemetry", "MCP"];
+
+const BLOCKS = [
+  { t: "AI Agent", s: "Reason & use tools", icon: "agent", bg: "var(--violet)" },
+  { t: "LLM Model", s: "OpenAI, Anthropic", icon: "model", bg: "#3977df" },
+  { t: "Knowledge", s: "Vector & web search", icon: "search", bg: "#d98324" },
+  { t: "Logic", s: "Branch & transform", icon: "branch", bg: "#e0576f" },
+  { t: "Approval", s: "Human in the loop", icon: "approve", bg: "#2f9a63" },
 ];
 
-const STEPS = [
-  { n: "1", t: "Create a project", d: "Sign in and grab a project key — one per app or environment." },
-  { n: "2", t: "Add the SDK", d: "pip install, drop the key in .env, add one import at your entrypoint." },
-  { n: "3", t: "Review the flow", d: "Every run streams to the portal — inspect, evaluate, and monitor it." },
+const CAPABILITIES = [
+  { eyebrow: "Visual builder", title: "Agent Flow Studio", icon: "agent", href: "/traces",
+    color: "var(--violet)", tint: "var(--violet-soft)", glow: "rgba(116,88,255,.16)",
+    body: "Compose agents, models, tools, branches, approvals, and outputs on a production-ready canvas." },
+  { eyebrow: "Observability", title: "Nested traces", icon: "trace", href: "/traces",
+    color: "#3977df", tint: "#e6eeff", glow: "rgba(77,143,255,.16)",
+    body: "Inspect model calls, tools, retrievals, sub-agents, tokens, latency, and cost in one evidence graph." },
+  { eyebrow: "Debugging", title: "Deterministic replay", icon: "replay", href: "/traces",
+    color: "#e0576f", tint: "#ffeaee", glow: "rgba(255,117,102,.16)",
+    body: "Change inputs or prompts while reusing recorded tool responses for a reliable structural comparison." },
+  { eyebrow: "Quality", title: "Evaluations", icon: "spark", href: "/datasets",
+    color: "#2c9d7d", tint: "#e2f5ee", glow: "rgba(44,157,125,.16)",
+    body: "Score datasets and production runs with LLM judges, RAG, trajectory, cost, and custom evaluators." },
+  { eyebrow: "Control", title: "Prompt registry", icon: "audit", href: "/prompts",
+    color: "#7658ee", tint: "#ece8ff", glow: "rgba(118,88,238,.16)",
+    body: "Version, test, publish, compare, and roll back prompts with experiment provenance attached." },
+  { eyebrow: "Regression", title: "Datasets & experiments", icon: "flask", href: "/datasets",
+    color: "#be7925", tint: "#fff2e0", glow: "rgba(255,186,81,.18)",
+    body: "Turn production failures into versioned test cases and compare every release against a trusted baseline." },
+];
+
+const LOOP = [
+  { num: "01", eyebrow: "Trace", title: "Capture the whole story", icon: "trace", href: "/traces",
+    body: "Every model call, tool execution, and sub-agent step—mapped into one complete, searchable trace." },
+  { num: "02", eyebrow: "Replay", title: "Reproduce, don’t guess", icon: "replay", href: "/traces",
+    body: "Edit prompts, replay recorded responses, and see structural diffs without inventing tool outputs." },
+  { num: "03", eyebrow: "Evaluate", title: "Prove the improvement", icon: "shield", href: "/datasets",
+    body: "Run deterministic datasets and online scorers. Compare quality, latency, tokens, and cost." },
+];
+
+const SPANS = [
+  { name: "agent.run", start: 0, width: 100, color: "var(--violet)" },
+  { name: "intent.classify", start: 6, width: 18, color: "#6d6780" },
+  { name: "llm · gpt-4.1", start: 12, width: 40, color: "#3977df" },
+  { name: "tool · search_docs", start: 18, width: 32, color: "#d98324" },
+  { name: "vector.query", start: 24, width: 12, color: "#d98324" },
+  { name: "llm · gpt-4.1", start: 26, width: 36, color: "#3977df" },
+  { name: "response.validate", start: 26, width: 16, color: "#6d6780" },
+];
+
+const SCORES = [
+  { label: "Correctness", value: 96 },
+  { label: "Groundedness", value: 98 },
+  { label: "Trajectory", value: 91 },
+  { label: "Cost efficiency", value: 88 },
+];
+
+const SECURITY = [
+  { title: "SSO + SCIM", icon: "lock", body: "OIDC, PKCE, automated deprovisioning" },
+  { title: "PII protection", icon: "shield", body: "Mask sensitive values before storage" },
+  { title: "Immutable audit", icon: "audit", body: "Evidence for every privileged action" },
+  { title: "Data control", icon: "data", body: "Regional retention and self-hosting" },
+];
+
+const LEDGER = [
+  { title: "SSO + SCIM", icon: "lock", body: "Lifecycle-controlled access" },
+  { title: "PII masking", icon: "shield", body: "Protect payloads before storage" },
+  { title: "Audit evidence", icon: "audit", body: "Trace every privileged action" },
+  { title: "Self-hosted Helm", icon: "data", body: "Your cloud, region, or cluster" },
+];
+
+const TEAMS = [
+  { title: "AI engineering", icon: "model", href: "/traces",
+    body: "Debug agent behavior across models, tools, retrieval, and orchestration." },
+  { title: "Evaluation teams", icon: "flask", href: "/datasets",
+    body: "Turn edge cases into datasets and every release into a measured experiment." },
+  { title: "AI operations", icon: "gauge", href: "/dashboard",
+    body: "Monitor reliability, cost, quality, alerts, fleet health, and retention." },
+  { title: "Enterprise leaders", icon: "building", href: "/settings",
+    body: "Govern identity, sensitive data, access, residency, and deployment." },
 ];
 
 const FAQ = [
-  { q: "Which frameworks does it support?", a: "OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI and more are auto-captured; anything OpenTelemetry-instrumented nests too. Custom steps take one line." },
-  { q: "Do I have to send my data anywhere?", a: "No. ProveKit is self-hostable — run it on your own infra with Docker, bring your own model keys, and your traces never leave your environment." },
-  { q: "Is it really just one line?", a: "Yes for capture: import provekit.auto turns on tracing for the libraries you already use. Add @pk.trace to group a run, and pk.span()/pk.score() where you want more detail." },
-  { q: "How does the CI gate work?", a: "pk.evaluate() runs a target over a dataset, scores each output, and returns a summary — assert on mean_score to fail the build on a regression." },
-  { q: "What does it cost?", a: "The project is open source and free to run. You only pay for your own infra and model usage." },
-  { q: "Is there vendor lock-in?", a: "No. It's OpenTelemetry-native and open source — one SDK, standard formats, and you own the deployment." },
-];
-
-type Cell = "yes" | "no" | "partial" | string;
-const sym = (v: Cell) => (v === "yes" ? "✓" : v === "no" ? "—" : v === "partial" ? "◐" : v);
-const cls = (v: Cell) => (v === "yes" ? "yes" : v === "no" ? "no" : "");
-
-const COMPARE: { f: string; logs: Cell; saas: Cell; pk: Cell }[] = [
-  { f: "Nested flow graph", logs: "no", saas: "yes", pk: "yes" },
-  { f: "One-line setup", logs: "no", saas: "partial", pk: "yes" },
-  { f: "Evaluation + CI gate", logs: "no", saas: "yes", pk: "yes" },
-  { f: "Dashboards + alerts", logs: "partial", saas: "yes", pk: "yes" },
-  { f: "Self-host, your data", logs: "yes", saas: "no", pk: "yes" },
-  { f: "Open source", logs: "yes", saas: "no", pk: "yes" },
-  { f: "Debug over MCP", logs: "no", saas: "no", pk: "yes" },
-];
-
-const QUOTES = [
-  { t: "It took one import to see the whole agent run — the failed tool call was obvious in seconds.", by: "AI engineer, early user" },
-  { t: "Finally an eval gate we can actually put in CI. A bad prompt change goes red before it ships.", by: "Platform team lead" },
-  { t: "Self-hosted, our keys, our data. That's the part that got it approved.", by: "Staff engineer" },
+  { q: "Do I need to replace my existing observability stack?",
+    a: "No. ProveKit accepts OpenTelemetry data and complements your existing logs and infrastructure monitoring with agent-specific replay and evaluation." },
+  { q: "Can replay call live tools?",
+    a: "Yes. Use recorded-response mode for deterministic comparison or explicitly choose live tool re-execution when validating real integrations." },
+  { q: "Which models and frameworks are supported?",
+    a: "ProveKit works with OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI, AutoGen, custom agents, OpenTelemetry collectors, webhooks, and MCP." },
+  { q: "Can we keep trace data inside our infrastructure?",
+    a: "Yes. Enterprise teams can use self-hosted Helm deployment, regional retention, PII masking, SSO, SCIM, RBAC, and audited support access." },
 ];
 
 const FOOTER = [
-  { h: "Product", links: [{ t: "Features", href: "/#features" }, { t: "Agent flow", href: "/#flow" }, { t: "Dashboard", href: "/dashboard" }, { t: "Pricing", href: "/#faq" }] },
-  { h: "Resources", links: [{ t: "Blog", href: "/blog" }, { t: "Docs", href: "https://github.com/MobirizerServices/ProveKit/tree/main/docs" }, { t: "Changelog", href: "https://github.com/MobirizerServices/ProveKit/blob/main/CHANGELOG.md" }] },
-  { h: "Community", links: [{ t: "Community", href: "/community" }, { t: "GitHub", href: "https://github.com/MobirizerServices/ProveKit" }, { t: "Discussions", href: "https://github.com/MobirizerServices/ProveKit/discussions" }] },
-  { h: "Legal", links: [{ t: "Privacy", href: "/privacy" }, { t: "Terms", href: "/terms" }, { t: "Security", href: "https://github.com/MobirizerServices/ProveKit/blob/main/SECURITY.md" }] },
+  { h: "Product", links: [
+    { t: "Live sandbox", href: "/traces" }, { t: "Tracing", href: "/traces" },
+    { t: "Replay", href: "/traces" }, { t: "Evaluations", href: "/datasets" },
+    { t: "Prompts", href: "/prompts" }, { t: "Monitoring", href: "/dashboard" },
+  ] },
+  { h: "Developers", links: [
+    { t: "Documentation", href: DOCS }, { t: "Integrations", href: `${DOCS}/integrations.md` },
+    { t: "OpenTelemetry", href: `${DOCS}/opentelemetry.md` }, { t: "SDKs & APIs", href: `${REPO}/tree/main/clients` },
+    { t: "Changelog", href: `${REPO}/blob/main/CHANGELOG.md` },
+  ] },
+  { h: "Company", links: [
+    { t: "Enterprise", href: "/settings" }, { t: "Trust center", href: "/#trust" },
+    { t: "Security", href: `${REPO}/blob/main/SECURITY.md` }, { t: "Pricing", href: "/#pricing" },
+    { t: "About", href: "/blog" }, { t: "Contact", href: "/community" },
+  ] },
 ];
-
-function LandingStyles() {
-  return (
-    <style jsx global>{`
-      .lp { max-width: 1120px; margin: 0 auto; padding: 0 22px 60px; }
-      .lp a { color: inherit; text-decoration: none; }
-      .lp-nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 2px; position: sticky; top: 0; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(8px); z-index: 30; }
-      .lp-brand { font-weight: 600; font-size: 15px; } .lp-brand b { color: var(--muted); font-weight: 600; }
-      .lp-logo { color: var(--accent); }
-      .lp-navlinks { display: flex; align-items: center; gap: 22px; font-size: 13.5px; color: var(--muted); }
-      .lp-navlinks a:hover { color: var(--text); }
-      .lp-signin { padding: 7px 14px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text) !important; }
-      .lp-signin:hover { background: var(--panel-2); }
-      .lp-navdesktop { display: contents; }
-      .lp-burger { display: none; background: transparent; border: none; color: var(--text); font-size: 18px; cursor: pointer; padding: 4px 8px; }
-      .lp-mobilemenu { display: none; }
-      @media (max-width: 820px) {
-        .lp-navdesktop { display: none; }
-        .lp-burger { display: block; }
-        .lp-mobilemenu { display: flex; flex-direction: column; gap: 4px; padding: 10px 22px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 60px; background: var(--bg); z-index: 29; }
-        .lp-mobilemenu a { padding: 9px 6px; color: var(--muted); font-size: 15px; }
-        .lp-mobilemenu a:hover { color: var(--text); }
-      }
-
-      .lp-hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; padding: 54px 0 40px; position: relative; }
-      .lp-hero::before { content: ""; position: absolute; inset: -80px -200px auto; height: 360px; z-index: -1;
-        background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 16%, transparent), transparent),
-                    radial-gradient(closest-side, color-mix(in srgb, var(--blue) 12%, transparent), transparent);
-        background-position: 20% 0, 80% 20%; background-size: 60% 100%, 55% 90%; background-repeat: no-repeat; filter: blur(10px); }
-      .lp-pill { display: inline-block; font-size: 12px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 5px 12px; margin-bottom: 18px; }
-      .lp-hero h1 { font-size: 46px; line-height: 1.07; letter-spacing: -1.5px; margin: 0; }
-      .lp-hero-copy p { font-size: 16.5px; color: var(--muted); line-height: 1.55; margin: 18px 0 26px; max-width: 520px; }
-      .lp-hero-copy b { color: var(--text); }
-      .lp-cta { display: flex; gap: 12px; flex-wrap: wrap; }
-      .lp-btn, .lp-btn-primary { padding: 12px 22px !important; font-size: 15px !important; }
-      .lp-btn-primary { background: var(--accent); color: #08120b; font-weight: 600; }
-      .lp-btn-primary:hover { filter: brightness(1.06); }
-      .lp-trust { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 26px; font-size: 12.5px; color: var(--faint); }
-      .lp-whofor { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
-      .lp-fnode { cursor: default; }
-
-      .lp-preview { border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: var(--sh-2); }
-      .lp-preview-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-2); }
-      .lp-dot { width: 9px; height: 9px; border-radius: 999px; } .lp-dot.r { background: #ff5f57; } .lp-dot.y { background: #febc2e; } .lp-dot.g { background: #28c840; }
-      .lp-preview-title { font-size: 11.5px; color: var(--muted); margin-left: 8px; font-family: var(--font-mono); }
-      .lp-flow { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
-      .lp-row { display: flex; align-items: center; gap: 9px; font-size: 12px; }
-      .lp-row.fail .lp-row-label { color: var(--red); }
-      .lp-badge { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 1px 5px; border-radius: 4px; border: 1px solid; }
-      .lp-badge[data-t=agent] { color: var(--accent); border-color: var(--accent); }
-      .lp-badge[data-t=llm] { color: var(--blue); border-color: var(--blue); }
-      .lp-badge[data-t=tool] { color: var(--purple); border-color: var(--purple); }
-      .lp-badge[data-t=step] { color: var(--muted); border-color: var(--border-strong); }
-      .lp-row-label { flex: 0 0 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .lp-row-bar { flex: 1; height: 8px; background: var(--bg-2); border-radius: 4px; overflow: hidden; }
-      .lp-row-fill { display: block; height: 100%; border-radius: 4px; opacity: .85; }
-      .lp-row.fail .lp-row-fill { background: var(--red) !important; }
-      .lp-row-ms { flex: 0 0 42px; text-align: right; color: var(--muted); font-size: 10.5px; }
-
-      .lp-code-band { display: grid; grid-template-columns: 1fr 1.1fr; gap: 34px; align-items: center; padding: 44px 0; border-top: 1px solid var(--border); }
-      .lp-code-band h2 { font-size: 26px; letter-spacing: -0.6px; margin: 0 0 12px; }
-      .lp-code-copy p { color: var(--muted); font-size: 15px; line-height: 1.55; }
-      .lp-check { list-style: none; padding: 0; margin: 16px 0 0; }
-      .lp-check li { position: relative; padding-left: 22px; margin: 9px 0; font-size: 14px; color: var(--text); }
-      .lp-check li::before { content: "✓"; position: absolute; left: 0; color: var(--green); font-weight: 700; }
-      .lp-code { margin: 0; padding: 18px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border-strong); font-size: 12.5px; line-height: 1.6; font-family: var(--font-mono); overflow-x: auto; white-space: pre; box-shadow: var(--sh-1); }
-
-      .lp-flowsec { padding: 50px 0; border-top: 1px solid var(--border); }
-      .lp-flowbox { margin: 30px auto 0; max-width: 720px; border: 1px solid var(--border-strong); border-radius: 16px; background:
-        radial-gradient(120% 100% at 50% 0, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%), var(--panel);
-        padding: 18px; box-shadow: var(--sh-2); }
-      .lp-flowsvg { width: 100%; height: auto; display: block; }
-      .lp-fnode { fill: var(--panel-2); stroke-width: 1.4; }
-      .lp-fnode.fail { fill: color-mix(in srgb, var(--red) 8%, var(--panel-2)); }
-      .lp-ftext { font-family: var(--font-mono); font-size: 12.5px; }
-      .lp-ftag { font-size: 9px; font-weight: 700; letter-spacing: .4px; }
-      .lp-edge { stroke: var(--border-strong); stroke-width: 1.6; stroke-dasharray: 6 5; animation: rf-flow .6s linear infinite; }
-      .lp-edge.hot { stroke: var(--accent); stroke-width: 2.2; }
-      .lp-edge.fail { stroke: var(--red); stroke-width: 2; }
-      @keyframes rf-flow { to { stroke-dashoffset: -11; } }
-      @media (prefers-reduced-motion: reduce) { .lp-edge { animation: none; } }
-
-      .lp-demo { padding: 50px 0; border-top: 1px solid var(--border); text-align: center; }
-      .lp-demo-frame { max-width: 860px; margin: 30px auto 0; border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden; box-shadow: var(--sh-2); background: var(--panel); }
-      .lp-demo-bar { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-2); }
-      .lp-demo-img { display: block; width: 100%; height: auto; }
-
-      .lp-compare { padding: 50px 0; border-top: 1px solid var(--border); }
-      .lp-table-wrap { overflow-x: auto; max-width: 820px; margin: 30px auto 0; }
-      .lp-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-      .lp-table th, .lp-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
-      .lp-table th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
-      .lp-table td:first-child { color: var(--muted); }
-      .lp-table .yes { color: var(--green); font-weight: 600; }
-      .lp-table .no { color: var(--faint); }
-
-      .lp-quotes { padding: 50px 0; border-top: 1px solid var(--border); }
-      .lp-quote-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 30px; }
-      .lp-quote { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
-      .lp-quote-text { font-size: 14.5px; line-height: 1.55; }
-      .lp-quote-by { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
-
-      .lp-features, .lp-how { padding: 50px 0; border-top: 1px solid var(--border); }
-      .lp-h2 { font-size: 30px; letter-spacing: -0.8px; text-align: center; margin: 0; }
-      .lp-sub { text-align: center; color: var(--muted); font-size: 15px; margin: 12px 0 34px; }
-      .lp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-      .lp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; transition: border-color .15s, transform .15s; }
-      .lp-card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
-      .lp-card-ic { font-size: 22px; }
-      .lp-card-t { font-weight: 600; font-size: 15.5px; margin: 12px 0 6px; }
-      .lp-card-d { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
-
-      .lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 820px; margin: 34px auto 0; }
-      .lp-step-n { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 14px; }
-      .lp-step-t { font-weight: 600; font-size: 15.5px; margin: 12px 0 5px; }
-      .lp-step-d { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
-
-      .lp-logos { padding: 30px 0 6px; text-align: center; }
-      .lp-logos-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--faint); margin-bottom: 16px; }
-      .lp-logos-row { display: flex; flex-wrap: wrap; gap: 10px 12px; justify-content: center; }
-      .lp-logo-chip { font-size: 14px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 7px 16px; }
-
-      .lp-faq { padding: 50px 0; border-top: 1px solid var(--border); }
-      .lp-faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; max-width: 900px; margin: 30px auto 0; }
-      .lp-faq-q { font-weight: 600; font-size: 15px; margin-bottom: 5px; }
-      .lp-faq-a { color: var(--muted); font-size: 14px; line-height: 1.55; }
-
-      .lp-final { text-align: center; padding: 60px 0 40px; border-top: 1px solid var(--border); }
-      .lp-final h2 { font-size: 32px; letter-spacing: -0.8px; margin: 0 0 10px; }
-      .lp-final p { color: var(--muted); font-size: 15.5px; margin: 0 0 26px; }
-      .lp-footer { display: flex; justify-content: space-between; gap: 40px; padding: 34px 0 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
-      .lp-foot-brand { font-weight: 600; font-size: 15px; }
-      .lp-foot-cols { display: flex; gap: 48px; flex-wrap: wrap; }
-      .lp-foot-col { display: flex; flex-direction: column; gap: 9px; }
-      .lp-foot-h { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--faint); margin-bottom: 3px; }
-      .lp-foot-col a { font-size: 13.5px; color: var(--muted); }
-      .lp-foot-col a:hover { color: var(--text); }
-      .lp-foot-legal { padding: 16px 0 10px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--faint); text-align: center; }
-
-      @media (max-width: 820px) {
-        .lp-hero, .lp-code-band { grid-template-columns: 1fr; }
-        .lp-grid, .lp-steps, .lp-faq-grid, .lp-quote-grid { grid-template-columns: 1fr; }
-        .lp-hero h1 { font-size: 36px; }
-        .lp-navlinks .lp-hidemobile { display: none; }
-        .lp-footer { gap: 24px; }
-      }
-    `}</style>
-  );
-}

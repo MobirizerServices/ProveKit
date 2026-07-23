@@ -44,7 +44,7 @@ export default function TopNav() {
       {down && <div className="down-banner" role="status">⚠ Can’t reach the ProveKit backend. Retrying…</div>}
       <div className="topbar">
         <Link href="/traces" className="brand" style={{ textDecoration: "none" }}>
-          <span className="logo">◇</span>Prove<b>Kit</b>
+          <span className="logo">///</span>ProveKit
         </Link>
         {projects.length > 0 && (
           <div className="proj-switch" onMouseLeave={() => setProjOpen(false)}>

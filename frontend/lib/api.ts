@@ -132,6 +132,7 @@ export interface Experiment {
   id: number; name: string; dataset_id: number | null; created_at: string;
   result_count: number; mean_score: number | null; scorer_means: Record<string, number>;
   scorer_stats?: Record<string, ScorerStats>;
+  dataset_version?: number; dataset_fingerprint?: string; config?: Record<string, any>;
 }
 // Whether a difference between two runs is real or noise.
 export interface ScorerComparison {
@@ -143,6 +144,17 @@ export interface ExperimentComparison {
   a: { id: number; name: string; dataset_id: number | null; created_at: string };
   b: { id: number; name: string; dataset_id: number | null; created_at: string };
   alpha: number; warning: string; scorers: Record<string, ScorerComparison>;
+}
+// Per-item movement between two runs, aggregated per scorer — what got better/worse row by row.
+export interface TriageScorer {
+  improved_count: number; regressed_count: number; unchanged: number;
+  pass_to_fail: number; fail_to_pass: number;
+}
+export interface ExperimentTriage {
+  a: { id: number; name: string }; b: { id: number; name: string };
+  comparable: boolean; warning?: string;
+  pairing: { paired: number; drifted: number; only_in_a: number; only_in_b: number };
+  scorers: Record<string, TriageScorer>;
 }
 
 export interface Evaluator { name: string; category: string; description: string }
@@ -307,6 +319,7 @@ export const api = {
   experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
   experiment: (id: number) => j<Experiment>(`/api/experiments/${id}`),
   compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),
+  triageExperiments: (a: number, b: number) => j<ExperimentTriage>(`/api/experiments/${a}/triage/${b}`),
   deleteExperiment: (id: number) => j(`/api/experiments/${id}`, { method: "DELETE" }),
 
   // ---- evaluators (scorer catalog) + automations ----

@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from provekit import doctor
 from provekit.database import SessionLocal
 from provekit.main import app
-from provekit.models import ApiKey, Run, User, Workspace, WorkspaceMember
+from provekit.models import ApiKey, Flow, Run, User, Workspace, WorkspaceMember
 from provekit.services import seed
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
@@ -44,6 +44,7 @@ def user(db):
     yield u
     for ws in db.query(Workspace).filter(Workspace.owner_user_id == u.id).all():
         db.query(Run).filter(Run.workspace_id == ws.id).delete(synchronize_session=False)
+        db.query(Flow).filter(Flow.workspace_id == ws.id).delete(synchronize_session=False)
         db.query(WorkspaceMember).filter(
             WorkspaceMember.workspace_id == ws.id).delete(synchronize_session=False)
         db.delete(ws)
@@ -329,3 +330,21 @@ def test_portal_and_backend_agree_on_the_sample_project_name():
     """The empty state's "open the sample" shortcut matches on this exact string."""
     src = (FRONTEND / "components" / "EmptyState.tsx").read_text()
     assert f'SAMPLE_PROJECT_NAME = {json.dumps(seed.SAMPLE_PROJECT_NAME)}' in src
+
+
+def test_the_sample_project_seeds_the_flow_the_landing_page_shows(db, user, seeding_on):
+    """A fresh Studio opening on a blank canvas contradicts the hero, which shows a
+    'Customer Support Agent' flow. The sample project seeds exactly that — as a draft, since a
+    seeded flow is something to open and run, not something claiming to be published."""
+    ws = seed.ensure_sample_project(db, user)
+    flows = db.query(Flow).filter(Flow.workspace_id == ws.id).all()
+    assert len(flows) == 1
+    f = flows[0]
+    assert f.name == "Customer Support Agent"
+    assert f.published_version == 0, "seeded as a draft, not live"
+    types = {n["type"] for n in f.graph["nodes"]}
+    assert {"trigger", "agent", "logic", "output"} <= types
+    # walkable: exactly one trigger, and every edge lands on a real node
+    ids = {n["id"] for n in f.graph["nodes"]}
+    assert sum(n["type"] == "trigger" for n in f.graph["nodes"]) == 1
+    assert all(e["source"] in ids and e["target"] in ids for e in f.graph["edges"])

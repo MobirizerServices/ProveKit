@@ -25,7 +25,7 @@ import os
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Run, User, Workspace, WorkspaceMember
+from ..models import Flow, Run, User, Workspace, WorkspaceMember
 from . import otel
 from . import search as search_svc
 
@@ -189,6 +189,33 @@ def _has_room(db: Session, user: User) -> bool:
     return owned + 1 < cap
 
 
+def sample_flow_graph() -> dict:
+    """The graph the landing hero shows — so a fresh Studio opens on the flow the marketing
+    page advertises rather than a blank canvas. Left as a draft (never published): a seeded
+    flow is something to open and run, not something claiming to be live in production."""
+    return {
+        "nodes": [
+            {"id": "n1", "type": "trigger", "label": "New request", "position": {"x": 60, "y": 200}},
+            {"id": "n2", "type": "agent", "label": "Knowledge agent", "position": {"x": 340, "y": 90},
+             "config": {"model": "gpt-4o-mini",
+                        "prompt": "You are a support agent. Answer the customer:\n{{input}}"}},
+            {"id": "n3", "type": "logic", "label": "Route intent", "position": {"x": 340, "y": 320},
+             "config": {"conditions": [{"op": "contains", "value": "refund", "label": "refund"}]}},
+            {"id": "n4", "type": "approval", "label": "Refund approval", "position": {"x": 620, "y": 320},
+             "config": {}},
+            {"id": "n5", "type": "output", "label": "Send response", "position": {"x": 900, "y": 200},
+             "config": {}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "n1", "target": "n2"},
+            {"id": "e2", "source": "n2", "target": "n3"},
+            {"id": "e3", "source": "n3", "target": "n4", "label": "refund"},
+            {"id": "e4", "source": "n3", "target": "n5", "label": "else"},
+            {"id": "e5", "source": "n4", "target": "n5"},
+        ],
+    }
+
+
 def create_sample_project(db: Session, user: User) -> Workspace:
     """Create the sample project and fill it. Assumes the caller checked it doesn't exist."""
     # The user's real default must exist first: get_or_create_default_workspace returns the
@@ -204,6 +231,9 @@ def create_sample_project(db: Session, user: User) -> Workspace:
     db.add(WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner"))
     for kw in sample_rows():
         db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw), **kw))
+    db.add(Flow(workspace_id=ws.id, name="Customer Support Agent",
+                description="Sample flow — open it in the Studio, then ▷ Test with Mock.",
+                graph=sample_flow_graph()))
     db.commit()
     return ws
 

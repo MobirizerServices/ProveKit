@@ -319,3 +319,39 @@ def test_a_failed_trace_write_does_not_fail_the_run(monkeypatch):
     run = c.post(f"/api/flows/{f['id']}/run", json={"input": "hi", "provider": "mock"}).json()
     assert run["status"] == "completed"
     assert run["trace_id"] == "", "no trace, and the run says so rather than pretending"
+
+
+def test_deleting_a_project_removes_its_flows_versions_and_runs():
+    """Project deletion enumerates tenant models by hand (SQLite won't cascade). A flow left
+    behind would point at a workspace that no longer exists — the sample project promises to be
+    disposable, and an orphaned flow breaks that."""
+    import uuid
+
+    from provekit.database import SessionLocal
+    from provekit.models import Flow, FlowRun, FlowVersion, User
+
+    email = f"flow-del-{uuid.uuid4().hex[:8]}@example.com"
+    c = _client()
+    assert c.post("/api/auth/register",
+                  json={"email": email, "password": "hunter2hunter2"}).status_code == 200
+    f = _make(c)
+    c.post(f"/api/flows/{f['id']}/publish", json={})
+    c.post(f"/api/flows/{f['id']}/run", json={"input": "hi", "provider": "mock"})
+
+    s = SessionLocal()
+    try:
+        ws_id = s.query(Flow).filter(Flow.id == f["id"]).one().workspace_id
+        assert s.query(FlowVersion).filter(FlowVersion.workspace_id == ws_id).count() == 1
+        assert s.query(FlowRun).filter(FlowRun.workspace_id == ws_id).count() == 1
+    finally:
+        s.close()
+
+    assert c.delete(f"/api/projects/{ws_id}").status_code == 200
+
+    s = SessionLocal()
+    try:
+        assert s.query(Flow).filter(Flow.workspace_id == ws_id).count() == 0
+        assert s.query(FlowVersion).filter(FlowVersion.workspace_id == ws_id).count() == 0
+        assert s.query(FlowRun).filter(FlowRun.workspace_id == ws_id).count() == 0
+    finally:
+        s.close()

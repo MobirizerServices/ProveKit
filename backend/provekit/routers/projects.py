@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import (Alert, ApiKey, Dataset, DatasetItem, Experiment, ExperimentResult,
-                      Feedback, Run, User, Workspace, WorkspaceMember, iso_utc)
+                      Feedback, Flow, FlowRun, FlowVersion, Run, User, Workspace,
+                      WorkspaceMember, iso_utc)
 from ..services import audit, errors, limits, roles
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
@@ -118,7 +119,7 @@ def delete_project(pid: int, request: Request, user: User = Depends(get_current_
     name, span_count = ws.name, db.query(Run).filter(Run.workspace_id == ws.id).count()
     # Remove all tenant-scoped data before the project row (SQLite won't cascade for us).
     for model in (ExperimentResult, Experiment, DatasetItem, Dataset, Feedback, Alert, Run, ApiKey,
-                  WorkspaceMember):
+                  FlowRun, FlowVersion, Flow, WorkspaceMember):
         db.query(model).filter(model.workspace_id == ws.id).delete(synchronize_session=False)
     db.delete(ws)
     db.commit()

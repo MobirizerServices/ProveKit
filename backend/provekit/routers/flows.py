@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Flow, FlowRun, FlowVersion, ProviderConnection, Workspace, _now, iso_utc
-from ..services import errors, limits
+from ..services import errors, flow_trace, limits
 from ..services.llm_client import LLMError, complete
 from ..services.sealing import unseal
 from ..services.workspace import current_workspace
@@ -379,4 +379,13 @@ async def run_flow(flow_id: int, data: _RunIn, db: Session = Depends(get_db),
     run.steps = steps
     run.duration_ms = round((time.monotonic() - started) * 1000)
     db.commit(); db.refresh(run)
+
+    # Land the execution in the trace store too, so a flow run is visible to search, the
+    # waterfall, datasets and sharing rather than only to this canvas. Best-effort: the run
+    # itself already succeeded, and failing to write its trace must not change that verdict.
+    run.trace_id = flow_trace.record(
+        db, ws, flow_name=f.name, version=run.version, run_input=run.input,
+        run_output=run.output, error=run.error, steps=steps, duration_ms=run.duration_ms)
+    if run.trace_id:
+        db.commit(); db.refresh(run)
     return _run_row(run)

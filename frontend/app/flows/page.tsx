@@ -324,7 +324,10 @@ export default function FlowsPage() {
                           <span className="fr-top">v{r.version} · {r.duration_ms}ms</span>
                           <span className="fr-sub">{r.input || <em>no input</em>}</span>
                         </span>
-                        <span className="fr-time">{new Date(r.created_at).toLocaleTimeString()}</span>
+                        <span className="fr-time">
+                          {r.trace_id && <span className="fr-traced" title="Captured as a trace">◇ </span>}
+                          {new Date(r.created_at).toLocaleTimeString()}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -357,7 +360,18 @@ export default function FlowsPage() {
 
             {lastRun && panel === "runs" && (
               <div className="fr-out">
-                <div className="ni-run-h">OUTPUT</div>
+                <div className="fr-out-head">
+                  <span className="ni-run-h">OUTPUT</span>
+                  {lastRun.trace_id ? (
+                    <a className="btn btn-sm btn-ghost" href={`/traces?trace=${lastRun.trace_id}`}>
+                      View trace ↗
+                    </a>
+                  ) : (
+                    <span className="muted" style={{ fontSize: 11 }} title="The run executed; writing its trace did not.">
+                      no trace
+                    </span>
+                  )}
+                </div>
                 <div className="fr-out-body">{lastRun.error || lastRun.output || <span className="muted">empty</span>}</div>
               </div>
             )}

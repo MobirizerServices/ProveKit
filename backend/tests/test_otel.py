@@ -143,12 +143,15 @@ def test_indexed_messages_absent_falls_back_to_input_value():
 
 def test_ingest_endpoint_persists_and_shows_in_history():
     with TestClient(app) as client:
-        before = len(client.get("/api/runs?limit=100").json())
+        before = {r["id"] for r in client.get("/api/runs?limit=100").json()}
         span = _span({"gen_ai.provider.name": "openai", "gen_ai.request.model": "gpt-4o", "gen_ai.completion": "ok"})
         resp = client.post("/v1/traces", json=_otlp(span))
         assert resp.status_code == 200 and "partialSuccess" in resp.json()
         runs = client.get("/api/runs?limit=100").json()
-        assert len(runs) == before + 1
+        # Identity, not a count. `limit` saturates once the suite has written 100 runs, and a
+        # `before + 1` assertion then compares 100 to 101 — it fails for whichever feature
+        # happens to tip the shared workspace over the cap, not for the change that broke it.
+        assert runs[0]["id"] not in before, "the ingested span sits at the top of history"
         assert runs[0]["type"] == "llm"
 
 

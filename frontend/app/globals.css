@@ -1512,3 +1512,5 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 .rf-wrap .react-flow__edge-textbg { fill: var(--panel-2); }
 .rf-wrap .react-flow__edge-text { fill: var(--text-dim); font-size: 10px; font-family: var(--mono); }
 .rf-wrap .react-flow__handle { background: var(--panel); border: 2px solid var(--nc, var(--accent)); }
+.fr-out-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.fr-traced { color: var(--accent-2); }

@@ -7,6 +7,9 @@ import { api, getProjectId, Me, Project, setProjectId } from "@/lib/api";
 
 const LINKS = [
   { href: "/traces", label: "Traces" },
+  { href: "/flows", label: "Flows" },
+  { href: "/replay", label: "Replay" },
+  { href: "/experiments", label: "Experiments" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/datasets", label: "Datasets" },
   { href: "/prompts", label: "Prompts" },

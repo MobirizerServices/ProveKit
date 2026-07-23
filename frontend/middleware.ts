@@ -20,6 +20,9 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     "/traces/:path*",
+    "/flows/:path*",
+    "/replay/:path*",
+    "/experiments/:path*",
     "/dashboard/:path*",
     "/datasets/:path*",
     "/admin/:path*",

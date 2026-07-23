@@ -271,7 +271,7 @@ export default function Landing() {
                   <small>No input-dependent tool spans changed.</small>
                 </div>
               </div>
-              <Link href="/traces" className="pk-link">Open replay workspace <ArrowNE /></Link>
+              <Link href="/replay" className="pk-link">Open replay workspace <ArrowNE /></Link>
             </article>
 
             <article className="pk-story pk-reveal">
@@ -298,7 +298,7 @@ export default function Landing() {
                   <b>{s.value}</b>
                 </div>
               ))}
-              <Link href="/datasets" className="pk-link">View experiment results <ArrowNE /></Link>
+              <Link href="/experiments" className="pk-link">View experiment results <ArrowNE /></Link>
             </article>
           </div>
         </div>
@@ -321,7 +321,7 @@ export default function Landing() {
               ))}
             </div>
             <div className="pk-btns">
-              <Link href="/traces" className="pk-btn pk-btn-primary">Open Agent Flow Studio <Arrow /></Link>
+              <Link href="/flows" className="pk-btn pk-btn-primary">Open Agent Flow Studio <Arrow /></Link>
             </div>
           </div>
         </div>
@@ -811,16 +811,16 @@ const BLOCKS = [
 ];
 
 const CAPABILITIES = [
-  { eyebrow: "Visual builder", title: "Agent Flow Studio", icon: "agent", href: "/traces",
+  { eyebrow: "Visual builder", title: "Agent Flow Studio", icon: "agent", href: "/flows",
     color: "var(--violet)", tint: "var(--violet-soft)", glow: "rgba(116,88,255,.16)",
     body: "Compose agents, models, tools, branches, approvals, and outputs on a production-ready canvas." },
   { eyebrow: "Observability", title: "Nested traces", icon: "trace", href: "/traces",
     color: "#3977df", tint: "#e6eeff", glow: "rgba(77,143,255,.16)",
     body: "Inspect model calls, tools, retrievals, sub-agents, tokens, latency, and cost in one evidence graph." },
-  { eyebrow: "Debugging", title: "Deterministic replay", icon: "replay", href: "/traces",
+  { eyebrow: "Debugging", title: "Deterministic replay", icon: "replay", href: "/replay",
     color: "#e0576f", tint: "#ffeaee", glow: "rgba(255,117,102,.16)",
     body: "Change inputs or prompts while reusing recorded tool responses for a reliable structural comparison." },
-  { eyebrow: "Quality", title: "Evaluations", icon: "spark", href: "/datasets",
+  { eyebrow: "Quality", title: "Evaluations", icon: "spark", href: "/experiments",
     color: "#2c9d7d", tint: "#e2f5ee", glow: "rgba(44,157,125,.16)",
     body: "Score datasets and production runs with LLM judges, RAG, trajectory, cost, and custom evaluators." },
   { eyebrow: "Control", title: "Prompt registry", icon: "audit", href: "/prompts",
@@ -834,9 +834,9 @@ const CAPABILITIES = [
 const LOOP = [
   { num: "01", eyebrow: "Trace", title: "Capture the whole story", icon: "trace", href: "/traces",
     body: "Every model call, tool execution, and sub-agent step—mapped into one complete, searchable trace." },
-  { num: "02", eyebrow: "Replay", title: "Reproduce, don’t guess", icon: "replay", href: "/traces",
+  { num: "02", eyebrow: "Replay", title: "Reproduce, don’t guess", icon: "replay", href: "/replay",
     body: "Edit prompts, replay recorded responses, and see structural diffs without inventing tool outputs." },
-  { num: "03", eyebrow: "Evaluate", title: "Prove the improvement", icon: "shield", href: "/datasets",
+  { num: "03", eyebrow: "Evaluate", title: "Prove the improvement", icon: "shield", href: "/experiments",
     body: "Run deterministic datasets and online scorers. Compare quality, latency, tokens, and cost." },
 ];
 
@@ -874,7 +874,7 @@ const LEDGER = [
 const TEAMS = [
   { title: "AI engineering", icon: "model", href: "/traces",
     body: "Debug agent behavior across models, tools, retrieval, and orchestration." },
-  { title: "Evaluation teams", icon: "flask", href: "/datasets",
+  { title: "Evaluation teams", icon: "flask", href: "/experiments",
     body: "Turn edge cases into datasets and every release into a measured experiment." },
   { title: "AI operations", icon: "gauge", href: "/dashboard",
     body: "Monitor reliability, cost, quality, alerts, fleet health, and retention." },
@@ -896,7 +896,7 @@ const FAQ = [
 const FOOTER = [
   { h: "Product", links: [
     { t: "Live sandbox", href: "/traces" }, { t: "Tracing", href: "/traces" },
-    { t: "Replay", href: "/traces" }, { t: "Evaluations", href: "/datasets" },
+    { t: "Replay", href: "/replay" }, { t: "Evaluations", href: "/experiments" },
     { t: "Prompts", href: "/prompts" }, { t: "Monitoring", href: "/dashboard" },
   ] },
   { h: "Developers", links: [

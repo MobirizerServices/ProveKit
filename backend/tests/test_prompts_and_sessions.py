@@ -142,3 +142,25 @@ def test_expected_points_may_be_covered_across_turns():
              {"input": "b", "output": "and shipping is free"}]
     assert session_expected_covered(turns, "40|free") == 1.0
     assert session_expected_covered(turns, "40|overnight") == 0.5
+
+
+def test_listing_prompts_exposes_label_and_traffic():
+    """The registry UI needs to show which version production fetches and what share of
+    traffic each takes — a version history without them can't be acted on."""
+    from fastapi.testclient import TestClient
+
+    from provekit.main import app
+
+    c = TestClient(app, base_url="https://testserver")
+    body = {"name": "registry-shape", "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": "hi"}], "params": {}}
+    c.post("/api/prompts", json=body)
+    c.post("/api/prompts", json=body)
+    c.post("/api/prompts/registry-shape/label?version=2", json={"label": "production"})
+    c.post("/api/prompts/registry-shape/split", json={"weights": {"1": 30, "2": 70}})
+
+    rows = [p for p in c.get("/api/prompts").json() if p["name"] == "registry-shape"]
+    by_version = {p["version"]: p for p in rows}
+    assert by_version[2]["label"] == "production"
+    assert by_version[1]["label"] == ""
+    assert (by_version[1]["traffic"], by_version[2]["traffic"]) == (30.0, 70.0)

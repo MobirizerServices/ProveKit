@@ -593,8 +593,12 @@ class _PromptIn(BaseModel):
 
 
 def _prompt_row(p: Prompt) -> dict:
+    # label/traffic are what the registry is *for* — which version production fetches, and
+    # what share of live traffic each version takes. Omitting them left the portal showing a
+    # version history with no way to see, or move, the pointer.
     return {"id": p.id, "name": p.name, "version": p.version, "model": p.model,
-            "messages": p.messages, "params": p.params, "created_at": iso_utc(p.created_at)}
+            "messages": p.messages, "params": p.params, "label": p.label or "",
+            "traffic": float(p.traffic or 0), "created_at": iso_utc(p.created_at)}
 
 
 @router.get("/prompts")

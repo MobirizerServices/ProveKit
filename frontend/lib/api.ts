@@ -105,7 +105,11 @@ export interface ReplayIn extends PlaygroundIn { origin_trace_id: string; fork_s
 export interface SavedPrompt {
   id: number; name: string; version: number; model: string;
   messages: PlaygroundMessage[]; params: Record<string, any>; created_at: string;
+  // Which version production fetches, and its share of a live A/B. "" / 0 when neither.
+  label?: string; traffic?: number;
 }
+export const PROMPT_LABELS = ["production", "staging", "canary"] as const;
+export type PromptLabel = (typeof PROMPT_LABELS)[number];
 export interface ExperimentSummary {
   id: number; name: string; dataset_id: number | null; created_at: string;
   result_count: number; scorer_means: Record<string, number>; mean_score: number | null;
@@ -139,6 +143,36 @@ export interface ExperimentComparison {
   a: { id: number; name: string; dataset_id: number | null; created_at: string };
   b: { id: number; name: string; dataset_id: number | null; created_at: string };
   alpha: number; warning: string; scorers: Record<string, ScorerComparison>;
+}
+
+// ---- Agent Flow Studio ----
+export type FlowNodeType = "trigger" | "agent" | "model" | "knowledge" | "logic" | "approval" | "output";
+export interface FlowNode {
+  id: string; type: FlowNodeType; label: string;
+  position: { x: number; y: number };
+  config?: { model?: string; system?: string; prompt?: string; params?: Record<string, any>;
+             conditions?: { op: string; value: string; label: string }[] };
+}
+export interface FlowEdge { id: string; source: string; target: string; label?: string }
+export interface FlowGraph { nodes: FlowNode[]; edges: FlowEdge[] }
+export interface Flow {
+  id: number; name: string; description: string; graph: FlowGraph;
+  version: number; published_version: number; run_count: number;
+  created_at: string; updated_at: string;
+}
+export interface FlowStep {
+  node_id: string; label: string; type: FlowNodeType;
+  status: "ok" | "skipped" | "failed"; duration_ms: number;
+  output: string; note: string; error: string;
+}
+export interface FlowRun {
+  id: number; flow_id: number; version: number;
+  status: "running" | "completed" | "failed";
+  input: string; output: string; error: string; steps: FlowStep[];
+  duration_ms: number; trace_id: string; created_at: string;
+}
+export interface FlowVersionSnapshot {
+  id: number; flow_id: number; version: number; graph: FlowGraph; note: string; created_at: string;
 }
 
 // The active project id (persisted client-side). Sent as X-Project-Id so every request is
@@ -235,6 +269,17 @@ export const api = {
   savePrompt: (p: { name: string; model?: string; messages?: PlaygroundMessage[]; params?: Record<string, any> }) =>
     j<SavedPrompt>("/api/prompts", { method: "POST", body: JSON.stringify(p) }),
   deletePrompt: (id: number) => j(`/api/prompts/${id}`, { method: "DELETE" }),
+  // Move a label onto a version — labels are unique per name, so this is publish *and*
+  // rollback. Passing label:"" clears it.
+  labelPrompt: (name: string, version: number, label: string) =>
+    j<{ name: string; version: number; label: string }>(
+      `/api/prompts/${encodeURIComponent(name)}/label?version=${version}`,
+      { method: "POST", body: JSON.stringify({ label }) }),
+  // Live A/B: weights are version -> share of traffic.
+  splitPrompt: (name: string, weights: Record<number, number>) =>
+    j<{ name: string; weights: Record<string, number> }>(
+      `/api/prompts/${encodeURIComponent(name)}/split`,
+      { method: "POST", body: JSON.stringify({ weights }) }),
   playgroundExperiment: (p: PlaygroundExperimentIn) => j<ExperimentSummary>("/api/playground/experiment", { method: "POST", body: JSON.stringify(p) }),
   notes: (traceId: string) => j<SpanNote[]>(`/api/traces/${traceId}/notes`),
   addNote: (traceId: string, n: { span_id?: string; body: string }) => j<SpanNote>(`/api/traces/${traceId}/notes`, { method: "POST", body: JSON.stringify(n) }),
@@ -248,7 +293,26 @@ export const api = {
   addDatasetItemFromTrace: (id: number, trace_id: string) => j<DatasetItem>(`/api/datasets/${id}/items/from-trace`, { method: "POST", body: JSON.stringify({ trace_id }) }),
   // experiments
   experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
+  experiment: (id: number) => j<Experiment>(`/api/experiments/${id}`),
   compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),
+  deleteExperiment: (id: number) => j(`/api/experiments/${id}`, { method: "DELETE" }),
+
+  // ---- Agent Flow Studio ----
+  flows: () => j<Flow[]>("/api/flows"),
+  flow: (id: number) => j<Flow>(`/api/flows/${id}`),
+  createFlow: (name: string, description = "", graph?: FlowGraph) =>
+    j<Flow>("/api/flows", { method: "POST", body: JSON.stringify({ name, description, graph: graph || { nodes: [], edges: [] } }) }),
+  updateFlow: (id: number, patch: { name?: string; description?: string; graph?: FlowGraph }) =>
+    j<Flow>(`/api/flows/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteFlow: (id: number) => j(`/api/flows/${id}`, { method: "DELETE" }),
+  publishFlow: (id: number, note = "") =>
+    j<{ flow: Flow; version: FlowVersionSnapshot }>(`/api/flows/${id}/publish`, { method: "POST", body: JSON.stringify({ note }) }),
+  flowVersions: (id: number) => j<FlowVersionSnapshot[]>(`/api/flows/${id}/versions`),
+  restoreFlowVersion: (id: number, version: number) =>
+    j<Flow>(`/api/flows/${id}/restore/${version}`, { method: "POST" }),
+  flowRuns: (id: number, limit = 20) => j<FlowRun[]>(`/api/flows/${id}/runs?limit=${limit}`),
+  runFlow: (id: number, body: { input?: string; version?: number; connection_id?: number | null; provider?: string }) =>
+    j<FlowRun>(`/api/flows/${id}/run`, { method: "POST", body: JSON.stringify(body) }),
   // projects (workspaces)
   projects: () => j<Project[]>("/api/projects"),
   usage: () => j<Usage>("/api/projects/usage"),

@@ -517,3 +517,69 @@ class Feedback(Base):
     comment: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(16), default="human")  # human | sdk | eval
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class Flow(Base):
+    """A visual agent workflow — the node/edge graph built on the Flow Studio canvas.
+
+    Stored as a whole document rather than normalised node/edge tables: the canvas always
+    reads and writes the entire graph, nothing queries an individual node, and keeping it in
+    one row makes a version snapshot a plain copy rather than a cascading clone.
+
+    `published` is a moving pointer in the same spirit as Prompt.label — the draft is what the
+    canvas edits, the published version is what a run would execute. Without the split, saving
+    a half-built graph would change what production does.
+    """
+    __tablename__ = "flows"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(160), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    # {"nodes": [...], "edges": [...]} — the canvas document.
+    graph: Mapped[dict] = mapped_column(JSON, default=dict)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    # Version currently marked live. 0 = never published, so the flow is draft-only.
+    published_version: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class FlowVersion(Base):
+    """An immutable snapshot of a flow's graph, written on every publish.
+
+    Kept separate from Flow so "restore version 3" is a read of a frozen document rather than
+    a reconstruction from a diff — and so a publish can be rolled back without having kept the
+    editor open.
+    """
+    __tablename__ = "flow_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    flow_id: Mapped[int] = mapped_column(Integer, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    graph: Mapped[dict] = mapped_column(JSON, default=dict)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class FlowRun(Base):
+    """One test execution of a flow from the canvas.
+
+    Records the per-node outcome so the canvas can replay the run visually — which node ran,
+    in what order, how long each took, and where it stopped. `trace_id` links to the captured
+    trace when the run produced one, so a flow execution lands in the same evidence store as
+    everything else rather than in a parallel log.
+    """
+    __tablename__ = "flow_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    flow_id: Mapped[int] = mapped_column(Integer, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(16), default="running")  # running|completed|failed
+    input: Mapped[str] = mapped_column(Text, default="")
+    output: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    # [{node_id, label, type, status, duration_ms, output, error}] in execution order.
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    trace_id: Mapped[str] = mapped_column(String(32), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

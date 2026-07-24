@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, API_BASE, Feedback, getProjectId, TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import { useVirtualRows } from "@/lib/useVirtualRows";
+import { orphanIds } from "@/lib/spantree";
 import TraceGraph, { heatColor } from "@/components/TraceGraph";
 import Playground from "@/components/Playground";
 import StepThrough, { readStepHash } from "@/components/StepThrough";
@@ -106,6 +107,9 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
   const [view, setView] = useState<"flow" | "waterfall">("flow");
   const ids = new Set(spans.map((s) => s.span_id));
   const root = spans.find((s) => !s.parent_span_id || !ids.has(s.parent_span_id));
+  // Spans naming a parent that never arrived. Not an error state — a process that died before
+  // emitting a parent still produced real children, and they are the evidence of what ran.
+  const detached = useMemo(() => [...orphanIds(spans)], [spans]);
   const [picked, setPicked] = useState<string | null>(root?.span_id ?? null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [pgSpan, setPgSpan] = useState<TraceSpan | null>(null);
@@ -217,6 +221,19 @@ export default function TraceDetail({ spans, traceId, readOnly = false }: { span
           <span>✨</span>
           <span style={{ flex: 1 }}><b>New — debug with real data:</b> click an <b>LLM</b> node, then <b>▶ Edit &amp; re-run</b> to edit its prompt/variables and re-run it, or <b>⑂ Replay flow</b> to fork the whole trace.</span>
           <button onClick={dismissTip} className="btn btn-sm btn-ghost" style={{ flexShrink: 0 }}>Got it</button>
+        </div>
+      )}
+
+      {/* Detached spans (#3). The tree views re-root these so nothing vanishes; said once here
+          so the reader knows the shape they're looking at is a fragment, not the whole run. */}
+      {detached.length > 0 && (
+        <div style={detachedNotice}>
+          <span style={orphanBadge}>detached</span>
+          <span style={{ flex: 1 }}>
+            {detached.length === 1 ? "One span references" : `${detached.length} spans reference`}{" "}
+            a parent that never arrived — shown at the top level rather than dropped. The run
+            above is a fragment of the real tree; the missing spans were never stored.
+          </span>
         </div>
       )}
 
@@ -568,6 +585,10 @@ const rowDomId = (spanId: string) => `pk-span-${spanId}`;
 function Tree({ spans, focusSpan }: { spans: TraceSpan[]; focusSpan?: string | null }) {
   const [open, setOpen] = useState<string | null>(spans[0]?.span_id ?? null);
   const [heat, setHeat] = useState(false);
+  // Spans whose parent never arrived. They are drawn at the top level (see the `__root__`
+  // fallback below) so the flow can't silently omit work that ran — the badge is what stops
+  // that re-parenting from reading as "this was a root".
+  const orphans = useMemo(() => orphanIds(spans), [spans]);
   // Roving-tabindex cursor. Virtualization unmounts off-screen rows, so Tab alone can no longer
   // reach every span — the arrow keys drive the list and only the cursor row is tabbable.
   const [cursor, setCursor] = useState(0);
@@ -732,6 +753,12 @@ function Tree({ spans, focusSpan }: { spans: TraceSpan[]; focusSpan?: string | n
           <span style={{ paddingLeft: depth * 16, display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, flex: "0 0 42%" }}>
             <span style={badge(s.type)}>{s.type}</span>
             <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
+            {orphans.has(s.span_id) && (
+              <span style={orphanBadge}
+                title={`Parent span ${s.parent_span_id} is not in this trace — it never arrived, so this span is shown at the top level.`}>
+                detached
+              </span>
+            )}
           </span>
           <span title={`start +${fmtDur(off)} · ${s.duration_ms}ms · ${pct}% of trace`}
             style={{ position: "relative", flex: 1, height: 16, background: "var(--bg-2)", backgroundImage: gridBg, borderRadius: 4 }}>
@@ -932,3 +959,19 @@ function badge(type: string): React.CSSProperties {
     color: TYPE_COLOR[type] || "var(--muted)", border: `1px solid ${TYPE_COLOR[type] || "var(--border-strong)"}`,
   };
 }
+
+// Amber, not red: a detached span is incomplete evidence, not a failed run. Using the failure
+// colour would make a healthy-but-truncated trace read as an error.
+const detachedNotice: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 10, marginBottom: 10, padding: "8px 12px",
+  borderRadius: 8, fontSize: 12.5, lineHeight: 1.55, color: "var(--text-dim)",
+  background: "color-mix(in srgb, var(--amber) 9%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--amber) 45%, transparent)",
+};
+
+const orphanBadge: React.CSSProperties = {
+  fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4,
+  padding: "1px 5px", borderRadius: 5, flexShrink: 0, cursor: "help",
+  color: "var(--amber)", border: "1px solid var(--amber)",
+  background: "color-mix(in srgb, var(--amber) 12%, transparent)",
+};

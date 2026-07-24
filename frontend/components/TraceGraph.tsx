@@ -6,6 +6,7 @@ import "@xyflow/react/dist/style.css";
 import { useCallback, useMemo, useState } from "react";
 import { TraceSpan } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
+import { orphanIds } from "@/lib/spantree";
 
 const TYPE_COLOR: Record<string, string> = {
   agent: "var(--accent)", llm: "var(--blue)", tool: "var(--purple)", step: "var(--muted)",
@@ -37,6 +38,8 @@ function tokens(s: TraceSpan): string | null {
 interface NodeData {
   span: TraceSpan; active: boolean; childCount?: number; collapsed?: boolean;
   onToggle?: (id: string) => void; dim?: boolean; slow?: boolean; heat?: number | null;
+  // Parent never arrived: the node is drawn at the top level, and says so (#3).
+  orphan?: boolean;
 }
 
 function SpanNode({ data }: { data: NodeData }) {
@@ -65,6 +68,14 @@ function SpanNode({ data }: { data: NodeData }) {
           fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
           padding: "1px 5px", borderRadius: 4, color: typeColor, border: `1px solid ${typeColor}`, flexShrink: 0,
         }}>{s.type}</span>
+        {data.orphan && (
+          <span title={`Parent span ${s.parent_span_id} never arrived — this span is shown at the top level.`}
+            style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3,
+              padding: "1px 4px", borderRadius: 4, color: "var(--amber)", border: "1px solid var(--amber)",
+              background: "color-mix(in srgb, var(--amber) 12%, transparent)", flexShrink: 0, cursor: "help" }}>
+            detached
+          </span>
+        )}
         <span style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
           {s.label}
         </span>
@@ -177,6 +188,7 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
       pos[s.span_id] = n ? { x: n.x - NODE_W / 2, y: n.y - NODE_H / 2 } : { x: 0, y: 0 };
     });
 
+    const orphans = orphanIds(spans);
     const parentOf: Record<string, string | null> = {};
     for (const s of spans) parentOf[s.span_id] = s.parent_span_id && ids.has(s.parent_span_id) ? s.parent_span_id : null;
     const onPath = new Set<string>();
@@ -189,6 +201,7 @@ export default function TraceGraph({ spans, selected, onSelect, fill }: {
         return {
           id: s.span_id, type: "span", position: pos[s.span_id] || { x: 0, y: 0 },
           data: { span: s, active: selected === s.span_id, childCount: descCount[s.span_id] || 0,
+            orphan: orphans.has(s.span_id),
             collapsed: collapsed.has(s.span_id), onToggle: toggle,
             slow: (s.duration_ms || 0) >= slowThreshold && (s.duration_ms || 0) > 0,
             heat: heat ? (s.duration_ms || 0) / maxDur : null,

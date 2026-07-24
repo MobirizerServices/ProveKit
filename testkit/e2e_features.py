@@ -431,6 +431,38 @@ def t_openapi():
     return f"{len(paths)} documented paths (#90)"
 
 
+def t_orphan_spans_are_kept():
+    """#3 — a child whose parent never arrives must still be stored and served.
+
+    The tree views re-root such a span and badge it `detached`; that is only possible if the
+    API keeps it. A span silently dropped here would make the flow omit work that really ran.
+    """
+    trace = ("or" + uuid.uuid4().hex)[:32]
+    missing = "dead" + uuid.uuid4().hex[:12]          # never sent, never will be
+    child = "chld" + uuid.uuid4().hex[:12]
+    now = int(time.time() * 1e9)
+    payload = {"resourceSpans": [{"scopeSpans": [{"spans": [{
+        "name": "orphan-child", "traceId": trace, "spanId": child, "parentSpanId": missing,
+        "startTimeUnixNano": str(now - 400_000_000), "endTimeUnixNano": str(now),
+        "status": {"code": 1},
+        "attributes": [{"key": "gen_ai.request.model", "value": {"stringValue": "gpt-4o"}}]}]}]}]}
+    assert c.post("/v1/traces", json=payload, headers=KH).status_code == 200
+    spans = c.get(f"/api/traces/{trace}").json()
+    assert isinstance(spans, list) and len(spans) == 1, f"orphan not served: {spans}"
+    got = spans[0]
+    assert got["span_id"] == child, got
+    # The dangling pointer is preserved rather than rewritten — the client needs it to say
+    # *which* parent is missing, and rewriting it would hide that the tree is a fragment.
+    assert got["parent_span_id"] == missing, f"parent pointer lost: {got['parent_span_id']!r}"
+    ids = {s["span_id"] for s in spans}
+    assert missing not in ids, "the missing parent must not be invented"
+    # And the trace is listed at all, despite having no root span (#4).
+    listed = c.get("/api/traces", params={"limit": 200}).json()
+    assert any(t["trace_id"] == trace for t in listed), "rootless trace vanished from the list"
+    return f"orphan kept, parent {missing[:10]}… still named, trace listed"
+
+
+
 for name, fn in [
     ("ingest: OTLP JSON round-trip (#2)", t_ingest),
     ("ingest: retry does not duplicate (#1)", t_dedupe),
@@ -467,6 +499,7 @@ for name, fn in [
     ("auth: SSO config (#77)", t_sso_config_when_unset),
     ("auth: SCIM requires a token (#78)", t_scim_requires_auth),
     ("api: OpenAPI spec (#90)", t_openapi),
+    ("trust: orphan spans kept (#3)", t_orphan_spans_are_kept),
 ]:
     check(name, fn)
 

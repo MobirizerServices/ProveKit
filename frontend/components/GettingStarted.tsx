@@ -39,15 +39,47 @@ export default function GettingStarted({ traceCount }: { traceCount: number | nu
   const [keys, setKeys] = useState<ApiKey[] | null>(null);
   const [scored, setScored] = useState<boolean | null>(null);
 
+  // Depend on *whether* any trace exists, not on how many.
+  //
+  // Overview polls metrics every 10 seconds, so `traceCount` changes on every poll of any
+  // project actually receiving traffic. Keying the effect to the number meant refetching this
+  // panel's three endpoints every 10 seconds, forever, on exactly the busiest projects — and
+  // the panel does not even render for them. A boolean flips at most once.
+  const seenATrace = traceCount == null ? null : traceCount > 0;
+
+  // Fetched narrowly, and in the order that lets us stop early.
+  //
+  // Overview previously made two requests; a naive version of this panel made three more, on
+  // every load, for every account — including the overwhelming majority for whom it renders
+  // nothing at all. An onboarding checklist that taxes people who finished onboarding is a bad
+  // trade, and it is a permanent one.
+  //
+  // So: an experiment existing settles the last step on its own, and a trace that arrived
+  // settles the first (a run cannot arrive without a working key). An established project
+  // therefore costs one request and then renders null. Only a project that still has something
+  // left to do pays for the rest.
   useEffect(() => {
     let live = true;
-    api.apiKeys().then((k) => live && setKeys(k)).catch(() => live && setKeys([]));
-    Promise.all([api.datasets().catch(() => [] as Dataset[]),
-                 api.experiments().catch(() => [] as Experiment[])])
-      .then(([d, e]) => live && setScored((d?.length ?? 0) > 0 || (e?.length ?? 0) > 0))
-      .catch(() => live && setScored(false));
+    if (seenATrace == null) return;
+
+    (async () => {
+      const exps = await api.experiments().catch(() => [] as Experiment[]);
+      if (!live) return;
+      if ((exps?.length ?? 0) > 0) {
+        setScored(true);
+        if (seenATrace) { setKeys([]); return; }             // all three done — stop here
+      } else {
+        const ds = await api.datasets().catch(() => [] as Dataset[]);
+        if (!live) return;
+        setScored((ds?.length ?? 0) > 0);
+      }
+      // Only needed to show the key count, and only on a panel that will actually render.
+      const k = await api.apiKeys().catch(() => [] as ApiKey[]);
+      if (live) setKeys(k);
+    })();
+
     return () => { live = false; };
-  }, []);
+  }, [seenATrace]);
 
   // Still loading, or nothing to say yet — render nothing rather than a flash of wrong ticks.
   if (keys == null || scored == null || traceCount == null) return null;

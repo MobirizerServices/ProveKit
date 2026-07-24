@@ -39,14 +39,20 @@ def test_every_sdk_call_to_the_portal_is_wrapped():
 
     from provekit import eval as pk_eval
 
+    # Every way httpx can be asked to make a request, not just the two we happen to use today.
+    # The first version of this guard matched `httpx.get|post` only, which would have waved
+    # through a future `httpx.request(...)` or `httpx.Client()` — and the bug it exists to catch
+    # is invisible to us by construction, since the junk traces land in someone else's portal.
+    CALLS = r"get|post|put|patch|delete|head|options|request|stream|Client|AsyncClient"
     for mod in (pk_trace, pk_eval):
         src = inspect.getsource(mod)
-        for m in re.finditer(r'^(\s*)(?:r = )?httpx\.(get|post)\(', src, re.M):
+        for m in re.finditer(rf'^(\s*)(?:\w+ = )?(?:await )?httpx\.({CALLS})\b', src, re.M):
             line_no = src[:m.start()].count("\n") + 1
-            before = src[:m.start()].rsplit("\n", 3)[-3:]
+            # Six lines of lookback, not three: a wrapped call can carry a comment above it.
+            before = src[:m.start()].rsplit("\n", 6)[-6:]
             assert any("_no_self_trace()" in b for b in before), (
                 f"{mod.__name__}:{line_no} calls httpx.{m.group(2)} outside _no_self_trace() — "
-                "it will appear as a junk trace in the customer's own portal")
+                "it will appear as a junk trace in the customer's own portal, never in ours")
 
 
 # ---------------------------------------------------------------- dataset id as a string

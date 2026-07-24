@@ -1,8 +1,8 @@
 {
-  "$comment": "First-load JS ceilings in kB (1000 bytes), gzipped — the same number `next build` prints in its First Load JS column. Enforced by `npm run perf:budget`; regenerate from a fresh build with `npm run perf:budget -- --update`. Raising a number is fine when the growth is deliberate, but do it in the PR that causes it so a reviewer sees the cost.",
+  "$comment": "First-load JS ceilings in kB (1000 bytes), gzipped \u2014 the same number `next build` prints in its First Load JS column. Enforced by `npm run perf:budget`; regenerate from a fresh build with `npm run perf:budget -- --update`. Raising a number is fine when the growth is deliberate, but do it in the PR that causes it so a reviewer sees the cost.",
   "sharedKb": 113,
   "defaultRouteKb": 130,
-  "$defaultRouteKbComment": "Applied to routes with no entry below, so a new page cannot land unbudgeted. Set from the current non-outlier ceiling; /traces and /shared/[token] are heavier because they load the flow graph.",
+  "$defaultRouteKbComment": "Applied to routes with no entry below, so a new page cannot land unbudgeted. Set from the current non-outlier ceiling; /traces, /shared/[token], /replay and /flows are heavier because they load the React Flow graph.",
   "routes": {
     "/": 131,
     "/_not-found": 113,
@@ -13,10 +13,12 @@
     "/community": 120,
     "/dashboard": 130,
     "/datasets": 126,
+    "/flows": 182,
     "/forgot": 116,
     "/login": 120,
     "/privacy": 121,
     "/prompts": 122,
+    "/replay": 220,
     "/reset": 116,
     "/settings": 124,
     "/shared/[token]": 210,

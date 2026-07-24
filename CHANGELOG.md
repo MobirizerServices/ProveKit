@@ -2,6 +2,55 @@
 
 All notable changes to ProveKit. This project is pre-1.0; expect breaking changes.
 
+## 0.7.1 — Stop tracing ourselves
+
+Found by exercising every module against a running instance with real data,
+which is the only way either of these was ever going to show up: both
+symptoms appear in *your* portal, never in our tests.
+
+### Fixed
+
+- **The SDK traced its own calls to the portal.** `provekit[http]` instruments httpx, and the
+  SDK talks to the portal over httpx — so exporting a batch, fetching a prompt and posting a
+  score were each captured as spans, exported, and captured again. They arrive parentless, so
+  they landed in your trace list as top-level runs named `GET` and `POST` carrying no model, no
+  tokens and no input. In the first real run of the bundled demo agent, **19 of 24 traces were
+  this noise** — 79% of what a new account saw on its first visit.
+
+  Not just clutter: those rows are counted, so they dragged error rate and p95 toward the
+  latency of ProveKit's own API, and pushed real runs off the first page of a list people scan
+  by eye. All four call sites now suppress instrumentation around themselves; the same demo now
+  produces 0 junk traces out of 3. Best-effort by design — the helper only exists once an
+  instrumentation package is installed, and tracing must never be the thing that breaks your
+  process, so a missing import degrades to "no suppression" rather than raising. A drift-guard
+  test fails if a new httpx call is added outside the wrapper.
+
+- **`pk.evaluate("2", …)` reported `dataset '2' not found`.** The id is a number everywhere it
+  is displayed, and the two places it is most often read from — an environment variable and a
+  CLI argument — hand it back as text, at which point it fell through to the name lookup. True,
+  and completely misleading: the dataset is right there and the type was the problem. Numeric
+  strings now resolve, and an unknown *name* lists what the project actually has, since "not
+  found" on its own leaves you guessing whether the name, the project or the key is wrong.
+
+### Portal
+
+- **The sidebar's three groups are labelled** — Observe / Improve / Configure. They already
+  existed with only a divider between them, so a new account saw thirteen flat items, nine of
+  them empty on day one.
+
+- **Empty pages say what the section is for, why it is empty, and give one action.** Thirteen
+  had been hand-rolled, most of them pointing you at Python when the page already had a working
+  button. Overview gains a first-run checklist derived from live state — no stored "onboarding
+  done" flag, so it cannot claim a step you have since undone.
+
+- **Plain language throughout.** kappa, calibration, scorer, ingest, retention and decorator
+  appeared across the portal without ever being introduced. The terms stay — they are what
+  every other tool calls them — with their meaning next to them, once. "P95 latency" now reads
+  "9 out of 10 runs were faster than this"; "False pass" is "It passed, you said no".
+
+- The Overview banner claimed **PRODUCTION WORKSPACE** on every project, including a brand-new
+  empty one. It now shows the window you are looking at.
+
 ## 0.7.0 — Evaluation you can gate on, and a console that shows the whole run
 
 The hundred-point wave: 85 of the 100 tracked items in

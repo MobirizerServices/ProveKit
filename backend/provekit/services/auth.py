@@ -99,14 +99,16 @@ def read_token(token: str, purpose: str = "session") -> tuple[int, int] | None:
 def new_account_setup(db: Session, user: User) -> None:
     """Everything a freshly created account gets before its first page load.
 
-    Today that is one thing — a clearly-labelled sample project, so the portal is legible
-    before there is an integration (services/seed.py). Kept here, next to the account-creation
-    paths, and deliberately silent on failure: nothing in this function is worth failing a
-    signup for. Imported lazily because services.seed reaches services.workspace, which
-    imports this module.
+    Currently nothing: a fresh workspace starts empty, so the only data a new account ever
+    sees is what its own agent reports. The clearly-labelled sample project this used to
+    install lives on in services/seed.py (`ensure_sample_project`) and can still be created
+    explicitly — from a tool, a test, or a future "load sample data" action — but it is no
+    longer seeded automatically at signup.
+
+    Kept as the account-creation hook (three call sites depend on it) and deliberately silent:
+    nothing done here is worth failing a signup for.
     """
-    from .seed import ensure_sample_project
-    ensure_sample_project(db, user)
+    return None
 
 
 def _local_user(db: Session) -> User:

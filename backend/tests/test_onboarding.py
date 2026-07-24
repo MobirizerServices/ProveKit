@@ -206,9 +206,13 @@ print(json.dumps({"projects": projects, "traces": traces}))
 """
 
 
-def test_a_brand_new_local_install_has_traces_on_its_first_page_load():
-    """The point of #32, checked the only way that means anything: a fresh database, the real
-    app, and the same requests the portal makes on first load.
+def test_a_brand_new_local_install_starts_empty():
+    """A fresh account gets no fabricated data. Checked the only way that means anything: a
+    fresh database, the real app, and the same requests the portal makes on first load.
+
+    The subprocess sets SEED_EXAMPLES=true on purpose — the point is that account creation no
+    longer installs the sample project *regardless* of that flag, so a new account sees only
+    its own empty default project. Nothing on screen was produced by anyone but the user.
 
     Runs in a subprocess because the suite's database already has a local user — and "what
     happens to an account that has never existed before" cannot be asked of one that has.
@@ -222,13 +226,9 @@ def test_a_brand_new_local_install_has_traces_on_its_first_page_load():
     out = json.loads(proc.stdout.strip().splitlines()[-1])
 
     names = [p["name"] for p in out["projects"]]
-    assert seed.SAMPLE_PROJECT_NAME in names
-    # The user's own project is still the default; the sample is beside it, not in front of it.
+    assert seed.SAMPLE_PROJECT_NAME not in names, "fresh workspaces must not get the sample project"
     assert [p["name"] for p in out["projects"] if p["is_default"]] == ["My project"]
-
-    assert out["traces"], "a fresh install must have traces to click"
-    assert all(t["trace_id"].startswith(seed.SAMPLE_TRACE_PREFIX) for t in out["traces"])
-    assert all(t["label"].startswith(seed.SAMPLE_LABEL) for t in out["traces"])
+    assert out["traces"] == [], "a fresh install must start with no fabricated traces"
 
 
 # ---------------------------------------------------------------- #31 diagnostic signals

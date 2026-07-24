@@ -114,7 +114,7 @@ export default function Landing() {
       {/* ─────────────────────── Proof strip ────────────────────────── */}
       <section className="pk-proof pk-tone-paper">
         <div className="pk-shell pk-proof-in">
-          <span className="pk-proof-label">Guided demo evidence</span>
+          <span className="pk-proof-label">Measured, and reproducible</span>
           <div className="pk-proof-items">
             {PROOF.map((p) => (
               <div key={p.label} className="pk-proof-item"><b>{p.value}</b><span>{p.label}</span></div>
@@ -176,9 +176,12 @@ export default function Landing() {
               </p>
             </div>
             <div className="pk-tour-stats">
-              <div className="pk-tour-stat"><span>Trace depth</span><b>14 spans</b></div>
-              <div className="pk-tour-stat"><span>Replay saving</span><b>−57% cost</b></div>
-              <div className="pk-tour-stat"><span>Quality</span><b>94.2 score</b></div>
+              {/* From the bundled demo, not invented: 70 spans, 6 levels, and 3 tool calls
+                  that fail and retry — which is the case worth showing, since a run that
+                  succeeds despite a failure inside it is the one people misread. */}
+              <div className="pk-tour-stat"><span>Trace depth</span><b>70 spans</b></div>
+              <div className="pk-tour-stat"><span>Nesting</span><b>6 levels</b></div>
+              <div className="pk-tour-stat"><span>Retried tool calls</span><b>3</b></div>
             </div>
             <Link href="/traces" className="pk-btn pk-btn-light">Open live sandbox <Arrow /></Link>
           </div>
@@ -284,7 +287,7 @@ export default function Landing() {
               <div className="pk-score-head">
                 <div>
                   <span style={{ fontFamily: "var(--mono)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: "#6d6780" }}>
-                    Overall score
+                    Overall score <span style={{ opacity: .62 }}>· sample</span>
                   </span>
                   <div className="pk-score-big">94.2</div>
                   <div className="pk-score-delta">+4.8%</div>
@@ -642,8 +645,11 @@ function TraceMock() {
       </div>
       <div className="pk-wf">
         <div className="pk-wf-ruler"><span>0ms</span><span>500ms</span><span>1.0s</span><span>1.5s</span></div>
-        {SPANS.map((s) => (
-          <div key={s.name} className="pk-wf-row">
+        {/* Keyed by index, not by name: a real waterfall has the same model called twice, and
+            this mock does too — two `llm · gpt-4.1` rows, which React reported as duplicate keys
+            on every render of the home page. Names are not unique in a trace and never will be. */}
+        {SPANS.map((s, i) => (
+          <div key={`${i}-${s.name}`} className="pk-wf-row">
             <span className="pk-wf-name"><i style={{ background: s.color }} />{s.name}</span>
             <span className="pk-wf-track">
               <span className="pk-wf-bar" style={{ left: `${s.start}%`, width: `${s.width}%` }} />
@@ -793,11 +799,26 @@ function useReveal() {
 
 /* ══════════════════════════════ Content ══════════════════════════════ */
 
+// Every number here is one we have actually measured, and each is checkable by the reader.
+//
+// What used to sit here: "−57% replay cost", "+4.8% quality uplift", "94.2 evaluation score",
+// under the heading "Guided demo evidence". None of them came from anywhere — they were
+// constants in this file. For a product whose entire promise is "prove they work", unmeasured
+// figures presented as evidence is the one claim that undermines all the others, and it is not
+// a marketing choice we get to make.
+//
+//   70 spans   — the bundled examples/langgraph_complex_demo.py, run against a real instance:
+//                one decorator, 70 spans, 6 levels deep. Anyone can reproduce it in a minute.
+//   37         — provekit.trace.catalogue(), served at GET /api/coverage, derived from the
+//                runtime rather than typed here, so it cannot drift from what ships.
+//   10.3k/sec  — the soak in docs/PERFORMANCE.md, with its conditions stated there (SQLite,
+//                one worker, a laptop) rather than quoted as a headline.
+//   1,514      — the suite, and the number CI gates on.
 const PROOF = [
-  { value: "14", label: "nested spans" },
-  { value: "−57%", label: "replay cost" },
-  { value: "+4.8%", label: "quality uplift" },
-  { value: "94.2", label: "evaluation score" },
+  { value: "70", label: "spans from one decorator" },
+  { value: "37", label: "libraries auto-traced" },
+  { value: "10.3k", label: "spans/sec ingest" },
+  { value: "1,514", label: "tests" },
 ];
 
 const STACK = ["OpenAI", "Anthropic", "LangChain", "LlamaIndex", "CrewAI", "AutoGen", "OpenTelemetry", "MCP"];

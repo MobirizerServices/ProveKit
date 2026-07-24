@@ -6,20 +6,20 @@ key-authed door is the one that matters here — an export nobody can fetch with
 session cannot be driven by cron, Airflow or a warehouse loader, which is where a bulk export
 is actually consumed.
 
-Scheduling itself is not here. It needs somewhere to persist a schedule, a cursor and a
-destination credential, and that is a table; docs/EXPORT.md sets out exactly what it would take
-and what running it from your own scheduler looks like meanwhile. A half-scheduler that forgets
-its schedule on restart would leave a warehouse quietly going stale, which is worse than not
-claiming the feature.
+Scheduling is here now, as its own table (models.ExportSchedule) so the cursor survives a
+restart — see services/export_schedule.py for why each of the obvious shortcuts fails quietly.
+Driving it from your own scheduler still works and is documented in docs/EXPORT.md.
 """
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Workspace
-from ..services import audit
+from ..models import ExportSchedule, Workspace
+from ..services import audit, errors, netguard
 from ..services import export as export_svc
+from ..services import export_schedule
 from ..services.auth import get_current_user
 from ..services.workspace import current_workspace, workspace_from_key
 
@@ -112,3 +112,60 @@ def estimate_by_key(request: Request, since: str | None = None, until: str | Non
     ws = workspace_from_key(db, request, authorization)
     s, u = _window(since, until)
     return export_svc.count(db, ws.id, s, u, after_id)
+
+
+# ---- scheduled export (#93) ----
+class _ScheduleIn(BaseModel):
+    name: str = ""
+    cadence: str = "daily"
+    destination_url: str
+    enabled: bool = True
+
+
+@router.get("/schedules")
+def list_schedules(db: Session = Depends(get_db), ws: Workspace = Depends(current_workspace)):
+    rows = (db.query(ExportSchedule).filter(ExportSchedule.workspace_id == ws.id)
+            .order_by(ExportSchedule.id.desc()).all())
+    return [export_schedule.row(s) for s in rows]
+
+
+@router.post("/schedules")
+def create_schedule(data: _ScheduleIn, db: Session = Depends(get_db),
+                    ws: Workspace = Depends(current_workspace)):
+    if data.cadence not in export_schedule.CADENCES:
+        raise HTTPException(422, f"cadence must be one of: "
+                                 f"{', '.join(sorted(export_schedule.CADENCES))}")
+    url = (data.destination_url or "").strip()
+    try:
+        netguard.guard_url(url)
+    except Exception as exc:
+        raise HTTPException(422, errors.bad_webhook(str(exc))) from None
+    s = ExportSchedule(workspace_id=ws.id, name=(data.name or "export")[:120],
+                       cadence=data.cadence, destination_url=url[:500], enabled=data.enabled)
+    db.add(s); db.commit(); db.refresh(s)
+    return export_schedule.row(s)
+
+
+def _own(db: Session, ws: Workspace, sid: int) -> ExportSchedule:
+    s = db.get(ExportSchedule, sid)
+    if not s or s.workspace_id != ws.id:
+        raise HTTPException(404, errors.not_in_project("export schedule",
+                                                       "GET /api/export/schedules"))
+    return s
+
+
+@router.post("/schedules/{sid}/run")
+def run_schedule(sid: int, db: Session = Depends(get_db),
+                 ws: Workspace = Depends(current_workspace)):
+    """Run one now — so a destination can be proven before waiting a cadence to find out."""
+    s = _own(db, ws, sid)
+    result = export_schedule.run(db, s)
+    return {**result, "schedule": export_schedule.row(s)}
+
+
+@router.delete("/schedules/{sid}")
+def delete_schedule(sid: int, db: Session = Depends(get_db),
+                    ws: Workspace = Depends(current_workspace)):
+    s = _own(db, ws, sid)
+    db.delete(s); db.commit()
+    return {"ok": True}

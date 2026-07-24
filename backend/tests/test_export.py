@@ -335,6 +335,8 @@ def test_the_router_declares_the_paths_the_docs_promise():
     paths = ({r.path for r in export_router.router.routes}
              | {r.path for r in export_router.key_router.routes})
     assert paths == {"/api/export/traces.ndjson", "/api/export/estimate",
+                     "/api/export/schedules", "/api/export/schedules/{sid}",
+                     "/api/export/schedules/{sid}/run",
                      "/v1/export/traces.ndjson", "/v1/export/estimate"}
 
 

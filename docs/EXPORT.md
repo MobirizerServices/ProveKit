@@ -17,7 +17,8 @@ payloads costs**.
 |---|---|
 | On-demand streaming export (`services/export.py`, `routers/export.py`) | written and unit-tested |
 | Routes reachable over HTTP | **pending wiring** — see below |
-| Scheduled export to S3 / a warehouse | **not shipped.** [What it would take](#scheduled-export--what-it-would-actually-take) |
+| Scheduled export to an HTTP destination | **shipped.** [Endpoints](#scheduled-export) |
+| Scheduled export to S3 / GCS | **not shipped.** [What's left](#scheduled-export--whats-still-missing) |
 
 ### Wiring
 
@@ -239,44 +240,59 @@ data.
 
 ---
 
-## Scheduled export — what it would actually take
+## Scheduled export
 
-Not shipped, and not faked. A scheduler needs to remember its schedule, and there is nowhere in
-the current schema to put one — that is the whole reason this half is missing rather than an
-oversight. `audit_logs` is append-only and describes the past; `SavedView` holds trace-list
-filter params for humans, keyed by a unique name per project, and would be corrupted by the UI
-that owns it. Storing a schedule in either would make it invisible to the surface that manages
-that table and would break the first time either table's meaning changed.
+Shipped for HTTP destinations. A schedule is a row (`export_schedules`), so the cursor survives a
+restart — which is the whole reason this needed a table rather than a config entry.
 
-Concretely, in the order it would have to be built:
+```bash
+# create one (session-authed, from the portal or curl with a cookie)
+curl -X POST $PROVEKIT_ENDPOINT/api/export/schedules \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"warehouse","cadence":"daily","destination_url":"https://warehouse.example/ingest"}'
 
-1. **A table + migration.** `export_schedules`: `workspace_id`, `name`, `enabled`, cadence
-   (cron expression or interval seconds), `destination_kind` (`s3` | `gcs` | `http`), destination
-   config, sealed credential, `resolve`, `format`, `last_cursor_id`, `last_run_at`, `last_status`,
-   `last_error`, and a `claimed_until` for the lock in (3).
-2. **A destination writer.** S3 multipart via boto3, or a presigned PUT to avoid the SDK
-   dependency entirely — routed through `services/netguard.py` like every other outbound call in
-   this codebase. Credentials sealed with `services/sealing.py` (Fernet under `SECRET_KEY`),
-   exactly like provider keys, and never returned to the browser.
-3. **A runner, and a lock.** The lifespan already runs a periodic task — the spool drainer — and
-   this is the same shape. It differs in one way that matters: the drainer is safe under N uvicorn
-   workers because replaying a batch is idempotent, and a scheduled export is not. Two workers
-   firing the same schedule writes the same window to two objects and double-counts it downstream.
-   That needs a claim — a conditional `UPDATE … WHERE claimed_until < now()` on the row. A Redis
-   lock would be simpler, but Redis is optional here and this cannot be the thing that makes it
-   mandatory.
-4. **Cursor ordering.** Export `(last_cursor_id, now]`, upload, and persist the new cursor *only
-   after the destination acknowledges*. The other order loses a window whenever an upload fails.
-5. **Failure surfacing.** `last_status` / `last_error` on the row, shown in project settings, plus
-   `services/notify.py` on a repeated failure. This is the part that is easy to skip and most
-   important: a scheduled export that stops silently is worse than no scheduled export, because
-   the warehouse keeps answering questions with stale data and nobody is told it went quiet.
-6. **Object layout.** `s3://bucket/prefix/project=<id>/dt=YYYY-MM-DD/part-<cursor>.ndjson.gz` —
-   Hive-style partitioning so Athena and BigQuery external tables can prune, and gzip because
-   NDJSON of resolved payloads compresses extremely well.
-7. **Auditing.** `audit_logs` already fits: the actor is the system, `detail` carries the schedule
-   id and the object key. The one piece that needs no new storage.
+curl $PROVEKIT_ENDPOINT/api/export/schedules          # list, with last run + last error
+curl -X POST $PROVEKIT_ENDPOINT/api/export/schedules/1/run   # run now, to prove a destination
+curl -X DELETE $PROVEKIT_ENDPOINT/api/export/schedules/1
+```
 
-Roughly the same order of work again as the on-demand export — a table, a writer, a runner with a
-distributed-safety story, and a settings surface. Until then, (3) through (6) are things your own
-scheduler already does, and the recipe above is the honest version of the feature.
+Each run POSTs NDJSON (`Content-Type: application/x-ndjson`) for everything above the stored
+cursor, up to `MAX_ROWS` per delivery so a schedule that fell behind catches up over several runs
+instead of building one request the destination can't accept. Cadence is `hourly | daily |
+weekly`; a schedule that has never run is due immediately.
+
+Four properties are worth knowing, because each is a way this feature fails quietly if built the
+obvious way:
+
+* **The cursor advances only after the destination accepts the batch.** A failed POST re-sends
+  the same window next time rather than leaving a permanent hole nobody is told about.
+* **Failures are recorded on the row** (`last_status`, `last_error`) and shown by the list
+  endpoint. A scheduled export that stops silently is worse than none, because the warehouse
+  keeps answering questions with stale data.
+* **A schedule is claimed before it runs** — a conditional `UPDATE … WHERE claimed_until < now()`
+  with a 10-minute lease. Replaying an ingest batch is idempotent so the spool drainer is safe
+  under N workers; a scheduled export is not, and two workers firing the same schedule would
+  double-count the window downstream. The lock is in the database on purpose: Redis is optional
+  in this deployment and this must not be the feature that makes it mandatory.
+* **The destination goes through `services/netguard.py`**, the same SSRF guard as alert webhooks
+  and replay callbacks, so a schedule can't be aimed at cloud metadata or an internal service.
+
+## Scheduled export — what's still missing
+
+Named rather than implied:
+
+* **S3 / GCS destinations.** Only HTTP POST is implemented. S3 needs multipart via boto3 (or a
+  presigned PUT to avoid the SDK dependency) plus a sealed credential on the row —
+  `services/sealing.py` is the mechanism, exactly as provider keys use it.
+* **Object layout and compression.** `s3://bucket/prefix/project=<id>/dt=YYYY-MM-DD/part-<cursor>.ndjson.gz`
+  — Hive-style partitioning so Athena and BigQuery external tables can prune, and gzip because
+  NDJSON of resolved payloads compresses extremely well. Not meaningful until there is an object
+  destination to lay out.
+* **Notification on repeated failure.** `last_error` is visible if you look; `services/notify.py`
+  would tell you without looking.
+* **Cron expressions.** Three fixed cadences today, not arbitrary schedules.
+
+## Scheduling it yourself
+
+The key-authed door still exists and is unchanged, so driving exports from a scheduler you
+already run works exactly as before — see [Incremental loads](#incremental-loads) above.

@@ -516,6 +516,40 @@ class Digest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class ExportSchedule(Base):
+    """A recurring bulk export to a destination the customer controls (#93).
+
+    The reason this is a table and not a config entry is the **cursor**. An export that
+    re-sent everything each run would grow without bound; one that tracked "since last time" in
+    memory would forget on restart and leave a warehouse quietly going stale — the failure this
+    feature exists to prevent, and worse than not shipping it.
+
+    So the cursor is persisted and advanced *only after a delivery is accepted*. A failed run
+    re-sends the same window next time rather than skipping it, and the failure is recorded on
+    the row instead of being swallowed by a background loop nobody watches.
+    """
+    __tablename__ = "export_schedules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    name: Mapped[str] = mapped_column(String(120), default="")
+    cadence: Mapped[str] = mapped_column(String(16), default="daily")     # hourly | daily | weekly
+    #: Where the NDJSON is POSTed. Guarded by netguard, like every other outbound URL.
+    destination_url: Mapped[str] = mapped_column(String(500), default="")
+    #: Highest run id already delivered. Advanced only on success.
+    cursor: Mapped[int] = mapped_column(Integer, default=0)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_status: Mapped[str] = mapped_column(String(16), default="")      # ok | failed
+    last_error: Mapped[str] = mapped_column(String(300), default="")
+    last_rows: Mapped[int] = mapped_column(Integer, default=0)
+    #: Lease held by the worker currently running this schedule. Replaying an ingest batch is
+    #: idempotent, so the spool drainer is safe under N workers; a scheduled export is not —
+    #: two workers firing the same schedule deliver the same window twice and double-count it
+    #: downstream. Claimed with a conditional UPDATE, which needs no Redis (optional here).
+    claimed_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class AutomationRule(Base):
     """Route matching production traces somewhere useful.
 

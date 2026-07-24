@@ -75,7 +75,8 @@ async def lifespan(app: FastAPI):
     tasks = [asyncio.create_task(_drain_spool_forever()),
              asyncio.create_task(_roll_up_forever()),
              asyncio.create_task(_send_digests_forever()),
-             asyncio.create_task(_run_automation_forever())]
+             asyncio.create_task(_run_automation_forever()),
+             asyncio.create_task(_run_export_schedules_forever())]
     try:
         yield
     finally:
@@ -177,6 +178,31 @@ async def _drain_spool_forever() -> None:
         except Exception:
             logging.getLogger("provekit").exception("spool drain pass failed")
         await asyncio.sleep(interval)
+
+
+async def _run_export_schedules_forever() -> None:
+    """Advance due bulk-export schedules (#93).
+
+    Same shape as the digest sender: a slow interval, each pass in a threadpool because the work
+    is blocking DB + HTTP, and one failing destination recorded on its own row rather than
+    stopping the pass for everyone else.
+    """
+    from .database import SessionLocal
+    from .services import export_schedule
+    while True:
+        try:
+            def _pass():
+                db = SessionLocal()
+                try:
+                    return export_schedule.run_due(db)
+                finally:
+                    db.close()
+            await run_in_threadpool(_pass)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger("provekit").exception("export schedule pass failed")
+        await asyncio.sleep(300)
 
 
 app = FastAPI(title="ProveKit", version="0.1.0", lifespan=lifespan)

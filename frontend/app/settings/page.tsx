@@ -1,14 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, getProjectId, Member, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import PageHero from "@/components/PageHero";
 import ModelConnections from "@/components/ModelConnections";
 import ActivityFeed from "@/components/ActivityFeed";
+
+type SectionKey = "general" | "privacy" | "members" | "connections" | "keys" | "usage" | "audit";
+const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
+  { key: "general", label: "General", hint: "Name & retention" },
+  { key: "privacy", label: "Data & privacy", hint: "PII masking, replay, delete" },
+  { key: "members", label: "Members & roles", hint: "Who can access" },
+  { key: "connections", label: "Model connections", hint: "Providers & keys" },
+  { key: "keys", label: "Project keys", hint: "Ingest & API keys" },
+  { key: "usage", label: "Usage & billing", hint: "Quotas this period" },
+  { key: "audit", label: "Audit log", hint: "Recent changes" },
+];
 
 export default function SettingsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [sel, setSel] = useState<number | null>(null);
+  const [section, setSection] = useState<SectionKey>("general");
   const [members, setMembers] = useState<Member[]>([]);
   const [newProj, setNewProj] = useState("");
   const [rename, setRename] = useState("");
@@ -45,7 +59,7 @@ export default function SettingsPage() {
     if (!newProj.trim()) return;
     const p = await api.createProject(newProj.trim());
     setNewProj(""); load(); setSel(p.id);
-    setProjectId(p.id); // switch to the new project immediately
+    setProjectId(p.id);
   });
   const doRename = () => wrap(async () => { if (sel) { await api.renameProject(sel, rename.trim()); load(); } });
   const saveSettings = () => wrap(async () => { if (sel) { await api.updateProject(sel, { retention, redact_pii: redact, replay_url: replayUrl.trim() }); load(); } });
@@ -61,139 +75,178 @@ export default function SettingsPage() {
 
   return (
     <ConsoleShell>
-      <main style={{ maxWidth: 900, margin: "0 auto", padding: "24px 20px 80px" }}>
-        <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Projects</h1>
-        <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
-          Each project is an isolated workspace with its own keys, traces, datasets, and members.
-        </p>
+      <div className="cs-page" style={{ maxWidth: 1080 }}>
+        <PageHero eyebrow="Workspace" title="Settings"
+          sub="Every project is an isolated workspace with its own keys, traces, datasets, and members. Owners control retention, privacy, and access."
+          status={current ? `${current.name} · ${current.role}${current.is_default ? " · default" : ""}` : undefined} />
 
-        {err && <div style={errBox}>{err}</div>}
+        {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
 
-        <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input value={newProj} onChange={(e) => setNewProj(e.target.value)} placeholder="New project name…"
-                onKeyDown={(e) => e.key === "Enter" && create()} style={input} />
-              <button className="btn btn-sm" onClick={create}>Add</button>
-            </div>
-            <div style={{ ...panel, padding: 0, overflow: "hidden" }}>
+        <div className="set2">
+          {/* LEFT — project picker + settings nav */}
+          <aside className="set2-nav">
+            <div className="set2-projects">
+              <div className="set2-nav-head">Projects</div>
               {projects.map((p) => (
-                <button key={p.id} onClick={() => setSel(p.id)} style={row(sel === p.id)}>
-                  <div style={{ fontWeight: 500, fontSize: 13 }}>{p.name}</div>
-                  <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-                    {p.role}{p.is_default ? " · default" : ""} · {p.member_count} member{p.member_count === 1 ? "" : "s"}
-                  </div>
+                <button key={p.id} className={`set2-proj ${sel === p.id ? "on" : ""}`} onClick={() => setSel(p.id)}>
+                  <span className="set2-proj-name">{p.name}</span>
+                  <span className="set2-proj-meta">{p.role}{p.is_default ? " · default" : ""} · {p.member_count} member{p.member_count === 1 ? "" : "s"}</span>
                 </button>
               ))}
+              <div className="set2-add">
+                <input value={newProj} onChange={(e) => setNewProj(e.target.value)} placeholder="New project…"
+                  onKeyDown={(e) => e.key === "Enter" && create()} />
+                <button className="btn btn-sm" onClick={create}>Add</button>
+              </div>
             </div>
-          </div>
+            <div className="set2-nav-head" style={{ marginTop: 6 }}>Settings</div>
+            {SECTIONS.map((s) => (
+              <button key={s.key} className={`set2-item ${section === s.key ? "on" : ""}`} onClick={() => setSection(s.key)}>
+                <span className="set2-item-label">{s.label}</span>
+                <span className="set2-item-hint">{s.hint}</span>
+              </button>
+            ))}
+          </aside>
 
-          <div style={{ ...panel }}>
-            {!current ? (
-              <div className="muted" style={{ fontSize: 13 }}>Select a project.</div>
-            ) : (
+          {/* RIGHT — the selected section */}
+          <section className="set2-panel">
+            {!current ? <div className="muted" style={{ fontSize: 13 }}>Select a project.</div> : (
               <>
-                <div style={label}>Name</div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                  <input value={rename} onChange={(e) => setRename(e.target.value)} disabled={!isOwner} style={{ ...input, flex: 1 }} />
-                  <button className="btn btn-sm" onClick={doRename} disabled={!isOwner}>Rename</button>
-                </div>
+                {section === "general" && (
+                  <>
+                    <h2 className="set2-h">General</h2>
+                    <div className="set2-field">
+                      <label>Project name</label>
+                      <div className="set2-row">
+                        <input value={rename} onChange={(e) => setRename(e.target.value)} disabled={!isOwner} />
+                        <button className="btn btn-sm" onClick={doRename} disabled={!isOwner}>Rename</button>
+                      </div>
+                    </div>
+                    <div className="set2-field">
+                      <label>Trace retention (spans; 0 = plan default)</label>
+                      <div className="set2-row">
+                        <input type="number" min={0} value={retention} disabled={!isOwner}
+                          onChange={(e) => setRetention(Number(e.target.value))} style={{ maxWidth: 200 }} />
+                        <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
+                      </div>
+                      <p className="set2-help">Older spans are pruned once a project exceeds this many. Leave at 0 to use the plan default.</p>
+                    </div>
+                  </>
+                )}
 
-                {/* A quota you can't see is indistinguishable from a bug — a throttled
-                    project just looks broken. Only rendered when limits actually exist. */}
-                {usage && (usage.spans.limit || usage.projects.limit) && (
-                  <div style={{ marginBottom: 18 }}>
-                    <div style={label}>Usage · {usage.period}</div>
-                    <Meter label="Spans this month" line={usage.spans} />
-                    <Meter label="Projects" line={usage.projects} />
-                    {usage.approximate && (
-                      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                        Approximate: counters are per-process without Redis configured.
+                {section === "privacy" && (
+                  <>
+                    <h2 className="set2-h">Data & privacy</h2>
+                    <div className="set2-toggle-row">
+                      <div>
+                        <div className="set2-toggle-label">Mask PII on ingest</div>
+                        <p className="set2-help" style={{ margin: 0 }}>Emails, keys, and card-shaped strings are redacted before a span is stored.</p>
+                      </div>
+                      <button className={`au2-toggle ${redact ? "on" : ""}`} disabled={!isOwner}
+                        onClick={() => { setRedact(!redact); }}><span className="au2-toggle-knob" /></button>
+                    </div>
+                    <div className="set2-row" style={{ marginBottom: 22 }}>
+                      <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save privacy settings</button>
+                    </div>
+
+                    <div className="set2-field">
+                      <label>Replay webhook (optional)</label>
+                      <p className="set2-help">For exact trace replay: ProveKit POSTs a fork override here and your agent returns OTLP. Leave blank to use reconstructed replay only.</p>
+                      <div className="set2-row">
+                        <input value={replayUrl} onChange={(e) => setReplayUrl(e.target.value)} disabled={!isOwner}
+                          placeholder="https://your-agent.example/replay" />
+                        <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
+                      </div>
+                    </div>
+
+                    {isOwner && (
+                      <div className="set2-danger">
+                        <div className="set2-danger-head">Danger zone</div>
+                        <div className="set2-danger-row">
+                          <span>Delete this project and all of its traces, datasets, and keys. This cannot be undone.</span>
+                          <button className="btn btn-sm" onClick={doDelete}
+                            style={{ borderColor: "var(--red)", color: "var(--red)" }}>Delete project</button>
+                        </div>
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
 
-                <div style={label}>Data settings</div>
-                <div style={{ display: "flex", gap: 16, alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap" }}>
-                  <div>
-                    <div className="muted" style={{ fontSize: 11.5, marginBottom: 4 }}>Retention (spans; 0 = default)</div>
-                    <input type="number" min={0} value={retention} disabled={!isOwner}
-                      onChange={(e) => setRetention(Number(e.target.value))} style={{ ...input, width: 160 }} />
-                  </div>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: isOwner ? "pointer" : "default" }}>
-                    <input type="checkbox" checked={redact} disabled={!isOwner} onChange={(e) => setRedact(e.target.checked)} />
-                    Mask PII on ingest
-                  </label>
-                  <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
-                </div>
-
-                <div style={label}>Replay webhook (optional)</div>
-                <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>
-                  For exact trace replay: ProveKit POSTs a fork override here and your agent returns
-                  OTLP. Leave blank to use reconstructed replay only.
-                </p>
-                <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
-                  <input value={replayUrl} onChange={(e) => setReplayUrl(e.target.value)} disabled={!isOwner}
-                    placeholder="https://your-agent.example/replay" style={{ ...input, flex: 1 }} />
-                  <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
-                </div>
-
-                <div style={label}>Members</div>
-                {isOwner && (
-                  <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                    <input value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="teammate@company.com"
-                      onKeyDown={(e) => e.key === "Enter" && addMember()} style={{ ...input, flex: 1 }} />
-                    <button className="btn btn-sm" onClick={addMember}>Invite</button>
-                  </div>
-                )}
-                <div style={{ ...panel, padding: 0, overflow: "hidden", marginBottom: 22 }}>
-                  {members.map((m) => (
-                    <div key={m.user_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", borderBottom: "1px solid var(--border)" }}>
-                      <div>
-                        <span style={{ fontSize: 13 }}>{m.name || m.email}</span>
-                        <span className="muted" style={{ fontSize: 11.5, marginLeft: 8 }}>{m.email} · {m.role}</span>
-                      </div>
-                      {isOwner && <button className="btn btn-sm btn-ghost" onClick={() => removeMember(m.user_id)}>Remove</button>}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ marginBottom: 22 }}>
-                  <ModelConnections />
-                </div>
-
-                {/* Lives next to the settings it explains: the row above says retention is
-                    5000, this says who set it to that and when. Every member can read it —
-                    it is not an owner-only view. */}
-                <div style={{ marginBottom: 22 }}>
-                  <ActivityFeed projectId={sel} />
-                </div>
-
-                {isOwner && (
+                {section === "members" && (
                   <>
-                    <div style={{ ...label, color: "var(--red)" }}>Danger zone</div>
-                    <button className="btn btn-sm" onClick={doDelete}
-                      style={{ borderColor: "var(--red)", color: "var(--red)" }}>Delete project</button>
+                    <h2 className="set2-h">Members & roles</h2>
+                    {isOwner && (
+                      <div className="set2-row" style={{ marginBottom: 14 }}>
+                        <input value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="teammate@company.com"
+                          onKeyDown={(e) => e.key === "Enter" && addMember()} />
+                        <button className="btn btn-sm" onClick={addMember}>Invite</button>
+                      </div>
+                    )}
+                    <div className="set2-members">
+                      {members.map((m) => (
+                        <div key={m.user_id} className="set2-member">
+                          <div>
+                            <span className="set2-member-name">{m.name || m.email}</span>
+                            <span className="set2-member-meta">{m.email} · {m.role}</span>
+                          </div>
+                          {isOwner && m.role !== "owner" && <button className="btn btn-sm btn-ghost" onClick={() => removeMember(m.user_id)}>Remove</button>}
+                        </div>
+                      ))}
+                      {members.length === 0 && <div className="muted" style={{ fontSize: 13, padding: "8px 2px" }}>No members yet.</div>}
+                    </div>
+                  </>
+                )}
+
+                {section === "connections" && (
+                  <>
+                    <h2 className="set2-h">Model connections</h2>
+                    <ModelConnections />
+                  </>
+                )}
+
+                {section === "keys" && (
+                  <>
+                    <h2 className="set2-h">Project keys</h2>
+                    <p className="set2-help">Ingest keys and API keys live on their own page, where you can create and revoke them.</p>
+                    <Link className="btn btn-sm" href="/api-keys">Manage project keys →</Link>
+                  </>
+                )}
+
+                {section === "usage" && (
+                  <>
+                    <h2 className="set2-h">Usage & billing</h2>
+                    {usage && (usage.spans.limit || usage.projects.limit) ? (
+                      <>
+                        <div className="set2-help" style={{ marginBottom: 12 }}>Period: {usage.period}</div>
+                        <Meter label="Spans this month" line={usage.spans} />
+                        <Meter label="Projects" line={usage.projects} />
+                        {usage.approximate && <p className="set2-help">Approximate: counters are per-process without Redis configured.</p>}
+                      </>
+                    ) : <p className="muted" style={{ fontSize: 13 }}>No quotas configured — this workspace is on an unlimited plan.</p>}
+                  </>
+                )}
+
+                {section === "audit" && (
+                  <>
+                    <h2 className="set2-h">Audit log</h2>
+                    <ActivityFeed projectId={sel!} />
                   </>
                 )}
               </>
             )}
-          </div>
+          </section>
         </div>
-      </main>
+      </div>
     </ConsoleShell>
   );
 }
 
-const panel: React.CSSProperties = { background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 };
 function Meter({ label: text, line }: { label: string; line: QuotaLine }) {
-  if (line.limit == null) return null;          // unlimited — nothing meaningful to meter
+  if (line.limit == null) return null;
   const pct = Math.min(100, line.pct ?? 0);
-  // Amber before the wall, not at it: the useful moment to know is while you can still act.
-  const color = pct >= 100 ? "var(--err)" : pct >= 80 ? "var(--amber)" : "var(--green)";
+  const color = pct >= 100 ? "var(--red)" : pct >= 80 ? "var(--amber)" : "var(--green)";
   return (
-    <div style={{ marginBottom: 8 }}>
+    <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 3 }}>
         <span>{text}</span>
         <span className="muted">{line.used.toLocaleString()} / {line.limit.toLocaleString()}</span>
@@ -203,13 +256,4 @@ function Meter({ label: text, line }: { label: string; line: QuotaLine }) {
       </div>
     </div>
   );
-}
-
-const label: React.CSSProperties = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted)", marginBottom: 6 };
-const input: React.CSSProperties = { background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 11px", fontSize: 13 };
-const errBox: React.CSSProperties = { background: "color-mix(in srgb, var(--red) 12%, transparent)", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 16 };
-function row(active: boolean): React.CSSProperties {
-  return { display: "block", width: "100%", textAlign: "left", padding: "10px 13px",
-    background: active ? "var(--accent-soft)" : "transparent", color: "var(--text)",
-    border: "none", borderBottom: "1px solid var(--border)", cursor: "pointer" };
 }

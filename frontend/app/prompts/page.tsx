@@ -103,7 +103,7 @@ export default function PromptsPage() {
                       <div className="reg-item-sub">
                         {vs.length} version{vs.length === 1 ? "" : "s"}
                         {prod ? <> · <span className="reg-dot prod" />prod v{prod.version}</> : null}
-                        {serving > 1 ? <> · <span className="reg-dot split" />A/B</> : null}
+                        {serving > 1 ? <> · <span className="reg-dot ab" />A/B</> : null}
                       </div>
                     </button>
                   );
@@ -134,6 +134,23 @@ export default function PromptsPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Real fact strip — production pointer, version count, model, live A/B.
+                        The reference shows quality/p95/cost here; those aren't captured per prompt,
+                        so we surface what is actually known instead of inventing scores. */}
+                    {(() => {
+                      const prod = versions.find((v) => v.label === "production");
+                      const live = prod || versions[0];
+                      const serving = versions.filter((v) => (v.traffic || 0) > 0).length;
+                      return (
+                        <div className="reg-stats">
+                          <div className="reg-stat"><span>Live version</span><b>{prod ? `production · v${prod.version}` : `v${live.version} (newest)`}</b></div>
+                          <div className="reg-stat"><span>Versions</span><b>{versions.length}</b></div>
+                          <div className="reg-stat"><span>Model</span><b className="mono">{live.model || "—"}</b></div>
+                          <div className="reg-stat"><span>Serving</span><b>{serving > 1 ? `A/B · ${serving} variants` : serving === 1 ? "single variant" : "not serving"}</b></div>
+                        </div>
+                      );
+                    })()}
 
                     {Object.keys(liveSplit).length > 1 && splitDraft === null && (
                       <div className="reg-split-bar" title="Live traffic split">
@@ -189,9 +206,9 @@ export default function PromptsPage() {
                           </div>
                           <div className="reg-ver-body">
                             {(v.messages || []).map((m, i) => (
-                              <div key={i} className="reg-msg">
+                              <div key={i} className={`reg-msg ${m.role === "system" ? "is-system" : ""}`}>
                                 <span className="reg-role">{m.role}</span>
-                                <div>{m.content}</div>
+                                <div className={m.role === "system" ? "reg-code mono" : undefined}>{m.content}</div>
                               </div>
                             ))}
                           </div>

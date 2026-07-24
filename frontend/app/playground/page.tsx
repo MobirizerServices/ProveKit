@@ -1,81 +1,102 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, PlaygroundMessage, PlaygroundResult, ProviderConnection } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, PlaygroundMessage, PlaygroundResult, ProviderConnection, SavedPrompt } from "@/lib/api";
 import { estimateCost, fmtCost } from "@/lib/cost";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
 
 /**
  * Standalone playground — compose messages and run a model without wiring an SDK. Uses the same
- * /api/playground/run the trace inspector's inline editor does; the difference is only that you
- * start from a blank prompt rather than a captured span.
+ * /api/playground/run the trace inspector's inline editor does. Two modes: Prompt (single run)
+ * and Compare (the same messages against two model configs side by side, so a swap is a diff you
+ * can read rather than a guess).
  */
+type Variant = { connId: string; model: string; temp: string };
+const DEFAULT_VARIANT: Variant = { connId: "mock", model: "gpt-4o-mini", temp: "" };
+
 export default function PlaygroundPage() {
   const [conns, setConns] = useState<ProviderConnection[]>([]);
-  const [connId, setConnId] = useState("mock");
-  const [model, setModel] = useState("gpt-4o-mini");
-  const [temp, setTemp] = useState("");
+  const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
+  const [mode, setMode] = useState<"prompt" | "compare">("prompt");
+  const [a, setA] = useState<Variant>({ ...DEFAULT_VARIANT });
+  const [b, setB] = useState<Variant>({ ...DEFAULT_VARIANT, model: "gpt-4o" });
   const [msgs, setMsgs] = useState<PlaygroundMessage[]>([
     { role: "system", content: "You are a helpful assistant." },
     { role: "user", content: "" },
   ]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [result, setResult] = useState<PlaygroundResult | null>(null);
+  const [resA, setResA] = useState<PlaygroundResult | null>(null);
+  const [resB, setResB] = useState<PlaygroundResult | null>(null);
 
   useEffect(() => { api.connections().then(setConns).catch(() => {}); }, []);
+  useEffect(() => { api.prompts().then(setPrompts).catch(() => {}); }, []);
+
+  // Latest version of each named saved prompt — the useful thing to load into the composer.
+  const promptOptions = useMemo(() => {
+    const m = new Map<string, SavedPrompt>();
+    for (const p of prompts) { const e = m.get(p.name); if (!e || p.version > e.version) m.set(p.name, p); }
+    return [...m.values()];
+  }, [prompts]);
 
   const setMsg = (i: number, patch: Partial<PlaygroundMessage>) =>
     setMsgs((ms) => ms.map((m, j) => (j === i ? { ...m, ...patch } : m)));
   const addMsg = () => setMsgs((ms) => [...ms, { role: ms[ms.length - 1]?.role === "user" ? "assistant" : "user", content: "" }]);
   const rmMsg = (i: number) => setMsgs((ms) => ms.filter((_, j) => j !== i));
 
+  const loadPrompt = (name: string) => {
+    const p = promptOptions.find((x) => x.name === name);
+    if (!p) return;
+    setMsgs(p.messages?.length ? p.messages : msgs);
+    setA((v) => ({ ...v, model: p.model || v.model, temp: p.params?.temperature != null ? String(p.params.temperature) : v.temp }));
+  };
+
+  const runOne = (v: Variant) => api.playgroundRun({
+    model: v.model,
+    messages: msgs.filter((m) => m.content.trim()),
+    params: v.temp.trim() !== "" && !Number.isNaN(Number(v.temp)) ? { temperature: Number(v.temp) } : {},
+    ...(v.connId === "mock" ? { provider: "mock" } : { connection_id: Number(v.connId) }),
+  });
+
   const run = async () => {
-    setBusy(true); setErr(""); setResult(null);
+    setBusy(true); setErr(""); setResA(null); setResB(null);
     try {
-      const t = temp.trim();
-      const r = await api.playgroundRun({
-        model,
-        messages: msgs.filter((m) => m.content.trim()),
-        params: t !== "" && !Number.isNaN(Number(t)) ? { temperature: Number(t) } : {},
-        ...(connId === "mock" ? { provider: "mock" } : { connection_id: Number(connId) }),
-      });
-      setResult(r);
+      if (mode === "prompt") { setResA(await runOne(a)); }
+      else { const [ra, rb] = await Promise.all([runOne(a), runOne(b)]); setResA(ra); setResB(rb); }
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
 
   return (
     <ConsoleShell>
-      <div className="cs-page" style={{ maxWidth: 1180 }}>
+      <div className="cs-page" style={{ maxWidth: 1220 }}>
         <PageHero eyebrow="Debugging" title="Playground"
-          sub="Run a model against an ad-hoc prompt. Use Mock to try it without a key, or pick a connection from Settings → Model connections." />
+          sub="Run a model against an ad-hoc prompt. Use Mock to try it without a key, load a saved prompt, or switch to Compare to run two models against the same messages." />
 
-        <div className="rp-bar" style={{ marginBottom: 16 }}>
-          <label><span>Connection</span>
-            <select value={connId} onChange={(e) => setConnId(e.target.value)}>
-              <option value="mock">Mock (no key)</option>
-              {conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
-            </select>
-          </label>
-          <label><span>Model</span>
-            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-4o-mini"
-              style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border-2)", borderRadius: "var(--r-sm)", padding: "8px 10px", fontSize: 12.5, width: 160 }} />
-          </label>
-          <label><span>Temperature</span>
-            <input type="number" min={0} max={2} step={0.1} value={temp} placeholder="—"
-              onChange={(e) => setTemp(e.target.value)}
-              style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border-2)", borderRadius: "var(--r-sm)", padding: "8px 10px", fontSize: 12.5, width: 90 }} />
-          </label>
-          <button className="btn btn-run" disabled={busy} onClick={run}>{busy ? "Running…" : "Run"}</button>
+        <div className="pgx-tabs">
+          <button className={`pgx-tab ${mode === "prompt" ? "on" : ""}`} onClick={() => setMode("prompt")}>Prompt</button>
+          <button className={`pgx-tab ${mode === "compare" ? "on" : ""}`} onClick={() => setMode("compare")}>Compare</button>
+          <div className="pgx-tabs-right">
+            {promptOptions.length > 0 && (
+              <label className="pgx-load"><span>Load prompt</span>
+                <select defaultValue="" onChange={(e) => { loadPrompt(e.target.value); e.target.value = ""; }}>
+                  <option value="" disabled>Saved prompt…</option>
+                  {promptOptions.map((p) => <option key={p.name} value={p.name}>{p.name} (v{p.version})</option>)}
+                </select>
+              </label>
+            )}
+            <button className="btn btn-run" disabled={busy} onClick={run}>{busy ? "Running…" : mode === "compare" ? "Run both" : "Run"}</button>
+          </div>
         </div>
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
 
         <div className="rp-grid">
+          {/* LEFT — shared composer */}
           <div className="rp-edit">
-            <div className="rp-panel-h">Messages</div>
+            <VariantBar v={a} set={setA} conns={conns} tag={mode === "compare" ? "A" : undefined} />
+            <div className="rp-panel-h" style={{ marginTop: 12 }}>Messages</div>
             <div className="pg-msgs">
               {msgs.map((m, i) => (
                 <div key={i} className="pg-msg">
@@ -96,24 +117,63 @@ export default function PlaygroundPage() {
             <button className="btn btn-sm btn-ghost" onClick={addMsg} style={{ marginTop: 8 }}>+ Add message</button>
           </div>
 
+          {/* RIGHT — output(s) */}
           <div className="rp-result">
-            <div className="rp-panel-h">Output</div>
-            {!result ? (
-              <div className="rp-empty"><span className="muted">Run to see the model&apos;s response.</span></div>
+            {mode === "compare" && <VariantBar v={b} set={setB} conns={conns} tag="B" />}
+            <div className="rp-panel-h" style={{ marginTop: mode === "compare" ? 12 : 0 }}>Model output</div>
+            {mode === "prompt" ? (
+              <OutputPanel result={resA} model={a.model} />
             ) : (
-              <>
-                <div className="pg-out">{result.output || <span className="muted">empty</span>}</div>
-                <div className="pg-meta">
-                  <span className="meta-pill">{result.model || model}</span>
-                  <span className="meta-pill">{(result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0)} tokens</span>
-                  {result.latency_ms != null && <span className="meta-pill">{result.latency_ms}ms</span>}
-                  <span className="meta-pill">{fmtCost(estimateCost(result.model || model, result.usage?.input_tokens, result.usage?.output_tokens)) || "—"}</span>
-                </div>
-              </>
+              <div className="pgx-compare">
+                <div><div className="pgx-col-tag">A · {a.model}</div><OutputPanel result={resA} model={a.model} compact /></div>
+                <div><div className="pgx-col-tag">B · {b.model}</div><OutputPanel result={resB} model={b.model} compact /></div>
+              </div>
             )}
           </div>
         </div>
       </div>
     </ConsoleShell>
+  );
+}
+
+function VariantBar({ v, set, conns, tag }: { v: Variant; set: (u: Variant) => void; conns: ProviderConnection[]; tag?: string }) {
+  return (
+    <div className="pgx-varbar">
+      {tag && <span className="pgx-tag">{tag}</span>}
+      <label><span>Connection</span>
+        <select value={v.connId} onChange={(e) => set({ ...v, connId: e.target.value })}>
+          <option value="mock">Mock (no key)</option>
+          {conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
+        </select>
+      </label>
+      <label><span>Model</span>
+        <input value={v.model} onChange={(e) => set({ ...v, model: e.target.value })} placeholder="gpt-4o-mini" style={{ width: 150 }} />
+      </label>
+      <label><span>Temp</span>
+        <input type="number" min={0} max={2} step={0.1} value={v.temp} placeholder="—" onChange={(e) => set({ ...v, temp: e.target.value })} style={{ width: 74 }} />
+      </label>
+    </div>
+  );
+}
+
+function OutputPanel({ result, model, compact }: { result: PlaygroundResult | null; model: string; compact?: boolean }) {
+  if (!result) {
+    return (
+      <div className="rp-empty pgx-empty">
+        <div className="pgx-run-glyph">▶</div>
+        <span className="muted">{compact ? "Not run yet." : "Run a traced prompt to see the model's response."}</span>
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="pg-out">{result.output || <span className="muted">empty</span>}</div>
+      <div className="pg-meta">
+        <span className="meta-pill">{result.model || model}</span>
+        <span className="meta-pill">{(result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0)} tokens</span>
+        {result.latency_ms != null && <span className="meta-pill">{result.latency_ms}ms</span>}
+        <span className="meta-pill">{fmtCost(estimateCost(result.model || model, result.usage?.input_tokens, result.usage?.output_tokens)) || "—"}</span>
+      </div>
+    </>
   );
 }

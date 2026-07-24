@@ -67,6 +67,36 @@ def create_rule(data: _RuleIn, db: Session = Depends(get_db),
     return _row(r)
 
 
+class _RulePatch(BaseModel):
+    name: str | None = None
+    enabled: bool | None = None
+    target_dataset_id: int | None = None
+    scorers: list[str] | None = None
+
+
+@router.patch("/{rule_id}")
+def update_rule(rule_id: int, data: _RulePatch, db: Session = Depends(get_db),
+                ws: Workspace = Depends(current_workspace)):
+    """Edit a rule in place — pausing/activating is the common case (the enable toggle)."""
+    r = db.get(AutomationRule, rule_id)
+    if not r or r.workspace_id != ws.id:
+        raise HTTPException(404, "Rule not found")
+    if data.name is not None:
+        r.name = data.name[:160]
+    if data.enabled is not None:
+        r.enabled = data.enabled
+    if data.target_dataset_id is not None:
+        ds = db.get(Dataset, data.target_dataset_id)
+        if not ds or ds.workspace_id != ws.id:
+            raise HTTPException(404, "Target dataset not found in this project")
+        r.target_dataset_id = data.target_dataset_id
+    if data.scorers is not None:
+        r.scorers = data.scorers
+    db.commit()
+    db.refresh(r)
+    return _row(r)
+
+
 @router.post("/{rule_id}/run")
 def run_now(rule_id: int, db: Session = Depends(get_db),
             ws: Workspace = Depends(current_workspace)):

@@ -161,10 +161,21 @@ export interface ExperimentTriage {
 }
 
 export interface Evaluator { name: string; category: string; description: string }
+// Judge-vs-human calibration over stored feedback — real agreement/kappa, or a caution when
+// too few traces carry both a human label and a judge score to say anything honest.
+export interface Calibration {
+  n: number; pass_at: number; judge_name: string; human_name: string; min_n: number; sufficient: boolean;
+  confusion: { both_pass: number; human_pass_judge_fail: number; human_fail_judge_pass: number; both_fail: number };
+  coverage: { human_labelled: number; judge_scored: number; both: number; human_only: number; judge_only: number; unusable_rows: number };
+  agreement: number | null; kappa: number | null; false_pass_rate: number | null; false_fail_rate: number | null;
+  verdict: string; caution: string; disagreement_count: number; truncated: boolean;
+}
 export interface Automation {
   id: number; name: string; match: Record<string, any>; action: string;
   target_dataset_id: number | null; scorers: string[]; sample: number; enabled: boolean;
   created_at: string;
+  // Persisted execution counters — real history, not per-session ephemera.
+  matched?: number; acted?: number; last_run_id?: number | null; last_status?: string | null;
 }
 export interface AutomationIn {
   name?: string; match?: Record<string, any>; action?: string;
@@ -320,6 +331,7 @@ export const api = {
   addDatasetItemFromTrace: (id: number, trace_id: string) => j<DatasetItem>(`/api/datasets/${id}/items/from-trace`, { method: "POST", body: JSON.stringify({ trace_id }) }),
   // experiments
   experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
+  judgeCalibration: () => j<Calibration>("/api/experiments/judge-calibration"),
   experiment: (id: number) => j<Experiment>(`/api/experiments/${id}`),
   compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),
   triageExperiments: (a: number, b: number) => j<ExperimentTriage>(`/api/experiments/${a}/triage/${b}`),
@@ -329,6 +341,8 @@ export const api = {
   evaluators: () => j<Evaluator[]>("/api/evaluators"),
   automations: () => j<Automation[]>("/api/automation"),
   createAutomation: (a: AutomationIn) => j<Automation>("/api/automation", { method: "POST", body: JSON.stringify(a) }),
+  updateAutomation: (id: number, patch: { name?: string; enabled?: boolean; target_dataset_id?: number | null; scorers?: string[] }) =>
+    j<Automation>(`/api/automation/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteAutomation: (id: number) => j(`/api/automation/${id}`, { method: "DELETE" }),
   runAutomation: (id: number) => j<{ considered: number; matched: number; acted: number }>(`/api/automation/${id}/run`, { method: "POST" }),
 

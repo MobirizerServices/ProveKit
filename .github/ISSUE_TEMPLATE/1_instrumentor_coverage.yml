@@ -69,7 +69,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      placeholder: provekit 0.6.0, openinference-instrumentation-smolagents 0.1.x, Python 3.12
+      placeholder: provekit 0.7.0, openinference-instrumentation-smolagents 0.1.x, Python 3.12
 
   - type: checkboxes
     id: ack

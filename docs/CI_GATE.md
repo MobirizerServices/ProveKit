@@ -47,7 +47,7 @@ Runnable templates live in [`examples/ci/`](../examples/ci/), including a target
 point the action at before you have a real agent wired up.
 
 The action lives in this repository at `.github/actions/provekit-eval`, so `uses:` names the
-path. Pin it to a tag (`@v0.6.0`) rather than `@main` once you depend on it.
+path. Pin it to a tag (`@v0.7.0`) rather than `@main` once you depend on it.
 
 ## What it does
 

@@ -49,7 +49,7 @@ body:
     attributes:
       label: Environment
       placeholder: |
-        provekit: 0.6.0        install: pip / docker compose / source
+        provekit: 0.7.0        install: pip / docker compose / source
         python:   3.12         database: sqlite / postgres
         browser:  Firefox 141  (if it is a portal bug)
 

@@ -33,6 +33,20 @@ from . import scorers as _scorers
 _TIMEOUT = 60
 
 
+def _installed_version() -> str:
+    """The version of the installed `provekit` distribution.
+
+    Running from a source checkout without an install has no distribution to read, and that is
+    a normal state for a contributor — so it degrades to a label that is obviously not a
+    release rather than inventing a number that would then get pasted into a bug report.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+    try:
+        return version("provekit")
+    except PackageNotFoundError:
+        return "unknown (running from a source checkout, not an installed package)"
+
+
 class CliError(Exception):
     """Anything the operator can fix: bad config, a 4xx, an unreachable portal. Caught in
     main() and printed as one line, because a traceback tells a shell user nothing."""
@@ -532,6 +546,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="provekit",
         description="Read and drive your ProveKit portal from a shell or CI job.")
+    # Read from the installed distribution rather than a constant here: a hardcoded string is a
+    # second copy of pyproject's version, and the copy is what gets forgotten at release time.
+    # The bug templates ask reporters for their version, so it has to be printable.
+    parser.add_argument("--version", action="version", version=f"provekit {_installed_version()}")
     groups = parser.add_subparsers(dest="group", required=True)
 
     traces = groups.add_parser("traces", help="list and inspect captured runs")

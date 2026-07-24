@@ -549,3 +549,47 @@ def test_incomparable_can_be_overridden_explicitly(monkeypatch, env):
                     extra=["--allow-incomparable"])
     assert code == 1        # now it judges, and the regression is real
 
+
+
+# ---------------------------------------------------------------- --version
+
+def test_version_is_printable_and_comes_from_the_package(capsys):
+    """The bug templates ask reporters for their version, so it has to be printable at all.
+
+    It is read from the installed distribution rather than a constant in the CLI, because a
+    constant is a second copy of pyproject's version and the copy is what gets forgotten at
+    release time — leaving every bug report for a month stamped with the previous release.
+    """
+    with pytest.raises(SystemExit) as e:
+        cli.main(["--version"])
+    assert e.value.code == 0
+    out = capsys.readouterr().out
+    assert out.startswith("provekit ")
+    assert cli._installed_version() in out
+
+
+def test_the_version_is_read_from_package_metadata_not_a_constant(monkeypatch):
+    """The property that keeps the number honest: it is *derived*, so bumping pyproject moves
+    it and no second copy can be left behind at release time.
+
+    Deliberately not asserting `_installed_version() == pyproject's version`: an editable
+    install records its version at install time, so that comparison fails for every contributor
+    after a bump until they reinstall — a fact about their venv, not a defect in the tree. The
+    build artifact is where that equality is actually checked, and it is, at release.
+    """
+    import importlib.metadata as md
+    monkeypatch.setattr(md, "version", lambda name: "9.9.9" if name == "provekit" else "0")
+    assert cli._installed_version() == "9.9.9"
+
+
+def test_a_source_checkout_says_so_instead_of_inventing_a_number(monkeypatch):
+    """Running from a clone with nothing installed is a normal contributor state. It must not
+    report a plausible-looking version, because that is what gets pasted into a bug report and
+    sends someone hunting through the wrong release."""
+    import importlib.metadata as md
+
+    def _missing(name):
+        raise md.PackageNotFoundError(name)
+
+    monkeypatch.setattr(md, "version", _missing)
+    assert "unknown" in cli._installed_version()

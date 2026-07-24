@@ -66,6 +66,13 @@ to read the changelog before upgrading.
   even while the client's own API isn't. Names prefixed with `_` (e.g. `_reset`) are internal
   test hooks, not API.
 - **The MCP debug server** (`provekit-mcp`) — its tool names and argument shapes.
+- **The `provekit` CLI** (0.7.0) — its subcommands, flags, `--json` shapes, **and its exit
+  codes**, which are the part CI actually branches on: `0` pass, `1` the thing you asked about
+  failed, `2` usage error, `3` refused to judge (see [CI_GATE.md](CI_GATE.md)). Experimental
+  because it is one release old and its shape is unproven — but exit codes are called out
+  explicitly, because a script that treats a changed code as success fails silently and green,
+  which is the worst way for a gate to break. A new code may be added in a minor release; an
+  existing one will not be given a new meaning without a CHANGELOG note.
 
 A surface graduates from experimental to stable by being listed above, announced in the
 CHANGELOG, and having its docs updated. Nothing graduates silently.
@@ -131,7 +138,7 @@ Before anything is removed from the **stable** tier:
 
 > **At least 180 days, and at least two minor releases — whichever ends later.**
 
-The calendar floor is the one that does the work. This repo has gone `0.1.0 → 0.6.0` in a
+The calendar floor is the one that does the work. This repo has gone `0.1.0 → 0.7.0` in a
 matter of weeks; a window counted only in releases could expire before you'd noticed it
 opened. Two releases is the floor that stops a slow month from making the window meaningless,
 not the actual promise.
@@ -157,14 +164,15 @@ Suppose we want to remove the session-cookie fallback on `POST /v1/traces`. It's
 key-authed routes fall back to the browser session for local single-user use
 (`services/workspace.workspace_from_key`), which is convenient in dev and a wart on a surface
 whose whole point is machine-to-machine auth. Removing it is a breaking change for anyone who
-ingests from a logged-in browser context. It would ship like this:
+ingests from a logged-in browser context. It would ship like this — the releases below are
+**illustrative and not scheduled**; no such deprecation is announced today:
 
 | When | Release | What happens |
 |---|---|---|
-| Day 0 | `0.7.0` | **Announced.** CHANGELOG gains a *Deprecated* entry: cookie auth on `/v1/traces` is going away on 2027-01-18, use a project key. Ingest requests that authenticated by cookie come back with `Deprecation: Wed, 22 Jul 2026 00:00:00 GMT` and `Sunset: Mon, 18 Jan 2027 00:00:00 GMT`, and are logged server-side. **Behavior is unchanged — every existing client still works.** This doc and [TRACING.md](TRACING.md) are updated in the same commit. |
-| Day ~45 | `0.8.0` | Still works, still warned. The *Deprecated* entry is repeated. |
-| Day ~120 | `0.9.0` | Still works, still warned. Two minor releases have now passed, but the 180 days haven't — the window is not over. |
-| Day 180+ | `0.10.0` | **Removed.** Cookie auth on `/v1/traces` returns `401`. CHANGELOG gains a *Removed* entry with the one-line migration: create a project key in the portal under **Project keys**, set `PROVEKIT_API_KEY`, done. |
+| Day 0 | `0.9.0` | **Announced.** CHANGELOG gains a *Deprecated* entry: cookie auth on `/v1/traces` is going away on 2027-01-18, use a project key. Ingest requests that authenticated by cookie come back with `Deprecation: Wed, 22 Jul 2026 00:00:00 GMT` and `Sunset: Mon, 18 Jan 2027 00:00:00 GMT`, and are logged server-side. **Behavior is unchanged — every existing client still works.** This doc and [TRACING.md](TRACING.md) are updated in the same commit. |
+| Day ~45 | `0.10.0` | Still works, still warned. The *Deprecated* entry is repeated. |
+| Day ~120 | `0.11.0` | Still works, still warned. Two minor releases have now passed, but the 180 days haven't — the window is not over. |
+| Day 180+ | `0.12.0` | **Removed.** Cookie auth on `/v1/traces` returns `401`. CHANGELOG gains a *Removed* entry with the one-line migration: create a project key in the portal under **Project keys**, set `PROVEKIT_API_KEY`, done. |
 
 The shape to notice: the announcement release changes nothing, the removal release is the only
 one that can break you, and there are at least 180 days and one obvious upgrade path between

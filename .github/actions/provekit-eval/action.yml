@@ -71,7 +71,7 @@ inputs:
   provekit-version:
     description: >-
       pip spec for the SDK. `provekit[trace]` installs the auto-instrumentors, so any LLM
-      call your target makes is captured; pin it (e.g. `provekit[trace]==0.6.0`) for a
+      call your target makes is captured; pin it (e.g. `provekit[trace]==0.7.0`) for a
       reproducible gate.
     required: false
     default: provekit[trace]

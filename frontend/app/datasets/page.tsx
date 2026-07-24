@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Dataset, DatasetDetail, DatasetHistory, DatasetSnapshot, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
 import RegressionTriage from "@/components/RegressionTriage";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
+import Empty from "@/components/Empty";
 
 const SPLIT_ORDER = ["train", "validation", "val", "test", "holdout"];
 const SPLIT_HUE: Record<string, string> = { train: "var(--accent)", validation: "var(--blue)", val: "var(--blue)", test: "var(--green)", holdout: "var(--amber)" };
@@ -18,6 +19,7 @@ export default function DatasetsPage() {
   const [cmpPick, setCmpPick] = useState<number[]>([]);
   const [cmp, setCmp] = useState<ExperimentComparison | null>(null);
   const [newName, setNewName] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
   // Version history (#45) — what the set actually held at each version, not just that it moved.
   const [history, setHistory] = useState<DatasetHistory | null>(null);
   const [snap, setSnap] = useState<DatasetSnapshot | null>(null);
@@ -69,7 +71,7 @@ export default function DatasetsPage() {
           <aside className="dset-reg">
             <div className="dset-reg-head">Dataset registry<span className="au2-count">{list.length}</span></div>
             <div className="set2-add" style={{ padding: "8px 10px" }}>
-              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New dataset…"
+              <input ref={nameRef} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New dataset…"
                 onKeyDown={(e) => e.key === "Enter" && create()} />
               <button className="btn btn-sm" onClick={create}>Add</button>
             </div>
@@ -87,7 +89,16 @@ export default function DatasetsPage() {
 
           {/* RIGHT — detail */}
           <section className="dset-detail">
-            {sel == null ? <div className="muted au2-empty" style={{ padding: 40 }}>Select a dataset.</div>
+            {sel == null ? (
+              list.length === 0
+                ? <div style={{ padding: 20 }}><Empty
+                    what="A dataset is a fixed set of examples you score an agent against."
+                    why="Fixed is the point: the same examples every time is what makes two runs comparable, so a change can be shown to have helped rather than argued about."
+                    action={{ label: "Name one and press Add", onClick: () => nameRef.current?.focus() }}
+                    note="Or seed one from real traffic: open a trace → Add to dataset."
+                  /></div>
+                : <div className="muted au2-empty" style={{ padding: 40 }}>Select a dataset.</div>
+            )
               : !detail ? <div style={{ padding: 8 }}><Skeleton w="35%" h={18} /><Skeleton w="100%" h={120} mt={16} r={10} /><Skeleton w="80%" mt={12} /><SkeletonStyles /></div>
               : (
                 <>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Dataset, Experiment } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
+import Empty from "@/components/Empty";
 
 /**
  * Evaluations — the cross-dataset overview of every scored run. Four headline numbers, a quality
@@ -59,11 +60,12 @@ export default function EvaluationsPage() {
 
         {rows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           : scored.length === 0 ? (
-            <div className="pr-card">
-              <span className="muted">No evaluation results yet. Run{" "}
-                <code className="mono">pk.evaluate(dataset, target)</code> against a dataset, or score an
-                edited prompt from a trace. Results land here and in Experiments.</span>
-            </div>
+            <Empty
+              what="Evaluations are the scores your experiments produced, over time."
+              why="Experiments compare two runs. This page is the longer view: is quality drifting, which runs need a look, and which scorers are actually covering your evals."
+              action={{ label: "See your experiments", href: "/experiments" }}
+              note="Nothing scores automatically — a result lands here when an experiment runs."
+            />
           ) : (
             <>
               <div className="evl-stats">

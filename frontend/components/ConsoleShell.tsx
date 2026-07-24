@@ -14,24 +14,38 @@ import { api, getProjectId, Me, Project, setProjectId } from "@/lib/api";
  * routes that back them; nothing here links somewhere that doesn't exist.
  */
 type NavItem = { href: string; label: string; icon: string; badge?: string };
-type NavGroup = { items: NavItem[] };
+type NavGroup = { title: string; items: NavItem[] };
 
+/**
+ * Grouped, and the groups say what they are.
+ *
+ * These three groups already existed; only a divider line was drawn between them, so what a
+ * new account actually saw was thirteen flat items — nine of which are empty on day one. A
+ * flat list of thirteen reads as "thirteen things I am behind on". The same thirteen under
+ * three headings read as one question each: what did my agent do, is it any good, how is it
+ * configured. Nothing moved; the structure is just no longer invisible.
+ *
+ * The headings are verbs, not nouns, because the grouping people need is by *what they came
+ * to do* — Evaluations and Evaluators sit next to each other and sound like synonyms, and the
+ * heading is what tells you both are things you reach for only once you're trying to improve
+ * something rather than trying to see it.
+ */
 const NAV: NavGroup[] = [
-  { items: [
+  { title: "Observe", items: [
     { href: "/dashboard", label: "Overview", icon: "gauge" },
-    { href: "/flows", label: "Agent Flows", icon: "flow" },
     { href: "/traces", label: "Traces", icon: "trace" },
     { href: "/sessions", label: "Sessions", icon: "chat" },
+    { href: "/flows", label: "Agent Flows", icon: "flow" },
     { href: "/playground", label: "Playground", icon: "play" },
   ] },
-  { items: [
+  { title: "Improve", items: [
     { href: "/datasets", label: "Datasets", icon: "data" },
     { href: "/experiments", label: "Experiments", icon: "flask" },
     { href: "/evaluations", label: "Evaluations", icon: "shield" },
     { href: "/evaluators", label: "Evaluators", icon: "spark" },
     { href: "/review", label: "Review queue", icon: "chat" },
   ] },
-  { items: [
+  { title: "Configure", items: [
     { href: "/prompts", label: "Prompts", icon: "cmd" },
     { href: "/automations", label: "Automations", icon: "bolt" },
     { href: "/api-keys", label: "Project keys", icon: "key" },
@@ -108,6 +122,7 @@ export default function ConsoleShell({ children }: { children: React.ReactNode }
         <nav className="cs-nav">
           {NAV.map((group, gi) => (
             <div key={gi} className="cs-nav-group">
+              <h2 className="cs-nav-title">{group.title}</h2>
               {group.items.map((it) => (
                 <Link key={it.href} href={it.href} className={`cs-link ${on(it.href) ? "on" : ""}`}
                   onClick={() => setMobileOpen(false)}>

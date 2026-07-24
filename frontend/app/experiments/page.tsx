@@ -6,6 +6,7 @@ import {
 } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
+import Empty from "@/components/Empty";
 
 /**
  * Experiments — a baseline-vs-candidate scorecard, matching the reference console.
@@ -83,10 +84,12 @@ export default function ExperimentsPage() {
         {rows == null ? (
           <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
         ) : list.length === 0 ? (
-          <div className="pr-card">
-            <span className="muted">No experiments yet. Run <code className="mono">pk.evaluate()</code>{" "}
-              against a dataset, or score an edited prompt from a trace.</span>
-          </div>
+          <Empty
+            what="An experiment is one scored run of your agent over a dataset."
+            why="Two of them side by side is how you tell whether a prompt or model change actually helped, instead of guessing from a handful of examples."
+            action={{ label: "Create a dataset first", href: "/datasets" }}
+            note="Once a dataset exists, pk.evaluate(dataset, target) records an experiment here."
+          />
         ) : (
           <div className="xp2">
             {/* ── candidate list ── */}

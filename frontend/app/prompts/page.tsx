@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, PROMPT_LABELS, SavedPrompt } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
+import Empty from "@/components/Empty";
 import { DiffText } from "@/components/DiffText";
 
 /**
@@ -82,12 +83,12 @@ export default function PromptsPage() {
           {rows == null ? (
             <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           ) : names.length === 0 ? (
-            <div className="pr-card">
-              <div className="muted" style={{ fontSize: 13 }}>
-                No saved prompts yet. Open a trace → click an <b>LLM</b> node → <b>▶ Edit &amp; re-run</b> →
-                edit the prompt → <b>💾 Save version</b>.
-              </div>
-            </div>
+            <Empty
+              what="Saved prompts are versioned here, and fetched by your code at runtime."
+              why="That is what lets you change a prompt without a deploy, and A/B two versions against live traffic. Prompts are saved from a real run rather than typed here, so the version you ship is one you have already seen work."
+              action={{ label: "Open a trace to save one", href: "/traces" }}
+              note="In a trace: click an LLM node → ▶ Edit & re-run → 💾 Save version."
+            />
           ) : (
             <div className="reg-grid">
               {/* ---------------- name list ---------------- */}

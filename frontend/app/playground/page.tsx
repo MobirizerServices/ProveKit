@@ -5,6 +5,7 @@ import { api, PlaygroundMessage, PlaygroundResult, ProviderConnection, SavedProm
 import { estimateCost, fmtCost } from "@/lib/cost";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
+import Empty from "@/components/Empty";
 
 /**
  * Standalone playground — compose messages and run a model without wiring an SDK. Uses the same
@@ -105,10 +106,11 @@ export default function PlaygroundPage() {
         </div>
 
         {conns.length === 0 && (
-          <div className="pr-card" style={{ marginBottom: 14 }}>
-            <span className="muted">No model connection yet. Runs go to your own provider with your
-              own key — add one in <a href="/settings" style={{ color: "var(--accent)" }}>Settings → Model connections</a> to use the playground.</span>
-          </div>
+          <div style={{ marginBottom: 14 }}><Empty
+            what="The playground needs a model connection before it can run anything."
+            why="Runs go to your own provider on your own key — ProveKit never proxies them and never holds a key of its own, so there is nothing to run against until you add one."
+            action={{ label: "Add a connection in Settings", href: "/settings" }}
+          /></div>
         )}
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}

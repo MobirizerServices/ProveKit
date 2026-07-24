@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, Automation, Dataset, Evaluator } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
+import Empty from "@/components/Empty";
 
 /**
  * Automations — standing rules that route production traces into a dataset and (optionally)
@@ -138,7 +139,16 @@ export default function AutomationsPage() {
                 </div>
               </>
             ) : !current ? (
-              <div className="muted au2-empty" style={{ padding: 40 }}>Select a rule, or create one to route traces into a dataset.</div>
+              rows && rows.length === 0 ? (
+                <div style={{ padding: 20 }}><Empty
+                  what="An automation watches live traffic and acts on the runs that match."
+                  why="It is how production feeds back into evaluation: promote every failed run into a dataset, or score a sample of real traffic, without anyone remembering to do it."
+                  action={{ label: "+ New rule", onClick: () => setCreating(true) }}
+                  note="A new rule only acts on traffic from the moment you create it — it will not sweep your history."
+                /></div>
+              ) : (
+                <div className="muted au2-empty" style={{ padding: 40 }}>Select a rule, or create one to route traces into a dataset.</div>
+              )
             ) : (
               <>
                 <div className="au2-detail-head">

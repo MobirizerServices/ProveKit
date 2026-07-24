@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, TraceSpan, TraceSummary } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
+import Empty from "@/components/Empty";
 
 /**
  * Sessions — multi-turn conversations, grouped from the session_id captured on traces. There's
@@ -86,11 +87,12 @@ export default function SessionsPage() {
 
         {traces == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           : sessions.length === 0 ? (
-            <div className="pr-card">
-              <span className="muted">No sessions yet. Pass a stable <code className="mono">session_id</code>{" "}
-                (or <code className="mono">gen_ai.conversation.id</code>) on the runs of one conversation
-                and they group here.</span>
-            </div>
+            <Empty
+              what="A session groups the separate runs of one conversation."
+              why="Your traces are here already — they just aren't linked to each other. Only your code knows which runs belong to the same conversation, so it has to say so."
+              code={'import provekit.trace as pk\n\n@pk.trace(name="reply", session_id=conversation_id)\ndef reply(msg): ...'}
+              action={{ label: "Look at your traces", href: "/traces" }}
+            />
           ) : (
             <>
               <div className="ses-stats">

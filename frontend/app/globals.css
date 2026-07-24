@@ -1558,8 +1558,16 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
   font-size: 12.5px; color: var(--accent-2); }
 
 .cs-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.cs-nav-group { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; }
-.cs-nav-group + .cs-nav-group { border-top: 1px solid var(--border); }
+/* Tightened when the headings landed. Three headings add ~70px, which pushed Settings below
+   the fold on a laptop — trading one navigation problem for another. The heading now carries
+   the grouping that the divider rule and the group padding were carrying between them, so
+   both shrink and the whole nav still fits without scrolling. */
+.cs-nav-group { display: flex; flex-direction: column; gap: 1px; padding: 1px 0 4px; }
+.cs-nav-title {
+  margin: 4px 0 3px; padding: 0 10px;
+  font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); opacity: .62;
+}
 .cs-link { text-decoration: none; display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: var(--r-md);
   font-size: 13.5px; font-weight: 500; color: var(--muted); }
 .cs-link:hover { color: var(--text); background: var(--panel-2); }
@@ -2396,3 +2404,28 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 @keyframes imp-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .imp-viewing { font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
   color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
+
+/* ── shared empty state (components/Empty.tsx) ───────────────────────────────────────────
+   One shape for every "nothing here yet" panel. It replaces thirteen hand-rolled variants
+   that each had their own class (.au2-empty, .rp-empty, `muted` + inline styles…) and their
+   own idea of how much to explain — which is why the product felt emptier than it is. */
+.pk-empty {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 20px; background: var(--panel);
+  display: grid; gap: 8px; max-width: 720px;
+}
+.pk-empty-what { margin: 0; font-size: 14.5px; font-weight: 600; color: var(--text); }
+.pk-empty-why  { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-dim); }
+.pk-empty-code {
+  margin: 4px 0 0; padding: 10px 12px; overflow-x: auto;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); font-size: 12px; line-height: 1.6; color: var(--text-dim);
+}
+.pk-empty-action {
+  justify-self: start; margin-top: 2px;
+  padding: 7px 13px; border-radius: 8px; border: 1px solid transparent;
+  background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+}
+.pk-empty-action:hover { filter: brightness(1.08); }
+.pk-empty-note { margin: 2px 0 0; font-size: 12px; color: var(--muted); }

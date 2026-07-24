@@ -5,6 +5,7 @@ import {
   api, Flow, FlowGraph, FlowNode, FlowNodeType, FlowRun, FlowVersionSnapshot, ProviderConnection,
 } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
+import Empty from "@/components/Empty";
 import FlowCanvas, { NODE_META, RunState } from "@/components/FlowCanvas";
 
 const TYPES: FlowNodeType[] = ["trigger", "agent", "model", "knowledge", "logic", "approval", "output"];
@@ -175,8 +176,11 @@ export default function FlowsPage() {
           </div>
           {flows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
             : flows.length === 0 ? (
-              <div className="pr-card"><span className="muted">No flows yet. Create one to compose
-                your first agent workflow.</span></div>
+              <Empty
+                what="A flow composes agents, models and logic on a canvas."
+                why="Nothing here yet. A test-run of a flow is captured as a normal trace, so you debug it with the same tools as the rest of your agent."
+                action={{ label: "+ New flow", onClick: create }}
+              />
             ) : (
               <div className="fg-grid">
                 {flows.map((f) => (

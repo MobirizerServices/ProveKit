@@ -102,7 +102,7 @@ export default function SettingsPage() {
   return (
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1080 }}>
-        <PageHero eyebrow="Workspace" title="Settings"
+        <PageHero eyebrow="Project" title="Settings"
           sub="Each project is kept separate — its own keys, runs, datasets and people. Owners decide how long data is kept, what is hidden, and who can see it."
           status={current ? `${current.name} · ${current.role}${current.is_default ? " · default" : ""}` : undefined} />
 

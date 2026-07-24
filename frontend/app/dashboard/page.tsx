@@ -177,9 +177,24 @@ function greeting(): string {
 function healthLine(m: Metrics | null): string {
   if (!m) return "Loading…";
   if (m.trace_count === 0) return "No runs yet. Connect your agent and they will show up here.";
+
   const errs = m.error_count || 0;
-  if (errs === 0) return "Nothing failed. All your runs finished successfully.";
-  return `${errs} run${errs === 1 ? "" : "s"} failed. Open Traces to see what went wrong.`;
+  if (errs > 0) return `${errs} run${errs === 1 ? "" : "s"} failed. Open Traces to see what went wrong.`;
+
+  // A run can finish successfully with failed steps inside it — a tool that errored and was
+  // retried is the ordinary case. `error_count` only counts whole runs, so saying "nothing
+  // failed" off that number put the banner in direct contradiction with the Failures panel
+  // further down the same page, which was listing six of them. A dashboard that argues with
+  // itself is worse than one that says less.
+  //
+  // It is also the more useful state to name: a retry that worked is invisible in every
+  // top-line number and is often the first sign of something degrading upstream.
+  const steps = (m.fail_by_type || []).reduce((n, f) => n + (f.count || 0), 0);
+  if (steps > 0) {
+    return `Every run finished, but ${steps} step${steps === 1 ? "" : "s"} failed and recovered. `
+      + "Worth a look before it stops recovering.";
+  }
+  return "Nothing failed. All your runs finished successfully.";
 }
 // A real "vs previous period": compare the recent half of the series to the older half.
 // One fetch, real data — no invented baseline.

@@ -146,7 +146,16 @@ export default function PromptsPage() {
                       const serving = versions.filter((v) => (v.traffic || 0) > 0).length;
                       return (
                         <div className="reg-stats">
-                          <div className="reg-stat"><span>Live version</span><b>{prod ? `production · v${prod.version}` : `v${live.version} (newest)`}</b></div>
+                          {/* With a split running, "live version" is only true for callers that
+                              ask for the label — everyone else is being assigned by weight, and
+                              half of them are on the other version. Saying "production · v2" flat
+                              while v1 serves 50% of traffic is the kind of half-truth someone
+                              rolls back the wrong prompt on. */}
+                          <div className="reg-stat"><span>Live version</span><b>{
+                            serving > 1
+                              ? (prod ? `by label: v${prod.version} · split otherwise` : "split — no label set")
+                              : prod ? `production · v${prod.version}` : `v${live.version} (newest)`
+                          }</b></div>
                           <div className="reg-stat"><span>Versions</span><b>{versions.length}</b></div>
                           <div className="reg-stat"><span>Model</span><b className="mono">{live.model || "—"}</b></div>
                           <div className="reg-stat"><span>Serving</span><b>{serving > 1 ? `A/B · ${serving} variants` : serving === 1 ? "single variant" : "not serving"}</b></div>

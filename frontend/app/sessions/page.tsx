@@ -136,8 +136,8 @@ export default function SessionsPage() {
                       <div className="ses-thread">
                         {current.turns.map((t, i) => {
                           const span = pickTurnSpan(transcript[t.trace_id] || []);
-                          const userText = span?.request?.input;
-                          const botText = span?.result?.text ?? outputText(span?.result?.output);
+                          const userText = turnText(span?.request?.input);
+                          const botText = turnText(span?.result?.text) ?? turnText(span?.result?.output);
                           return (
                             <div key={t.trace_id} className="ses-turn-block">
                               <div className="ses-turn-rail"><span className="ses-turn-n">{i + 1}</span></div>
@@ -172,6 +172,48 @@ export default function SessionsPage() {
       </div>
     </ConsoleShell>
   );
+}
+
+/**
+ * The human-readable side of a captured turn.
+ *
+ * `@pk.trace` records a decorated function's arguments, so a one-argument agent arrives as
+ * `{"arg0": "How long will it take?"}` — and the transcript was printing that verbatim. On a
+ * page whose entire job is letting you read a conversation, showing the caller's argument
+ * packing instead of the message defeats the point.
+ *
+ * Unwrapped conservatively: a single-value object is almost always the message, and beyond
+ * that we prefer a field a human named (`message`, `question`, `input`, `text`, `query`,
+ * `prompt`) over guessing. Anything genuinely structured is left as JSON rather than having a
+ * field picked out of it arbitrarily — a wrong guess reads as the user's words and is worse
+ * than obvious JSON.
+ */
+const TURN_KEYS = ["message", "question", "input", "text", "query", "prompt", "content"];
+
+function turnText(raw: any): string | undefined {
+  if (raw == null) return undefined;
+  let v: any = raw;
+  if (typeof v === "string") {
+    const t = v.trim();
+    if (!(t.startsWith("{") || t.startsWith("["))) return v;      // already plain text
+    try { v = JSON.parse(t); } catch { return v; }                // not JSON after all
+  }
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    // a messages array — the last user turn is the one being asked
+    const last = [...v].reverse().find((m) => m && typeof m === "object" && "content" in m);
+    if (last && typeof last.content === "string") return last.content;
+    return JSON.stringify(v).slice(0, 800);
+  }
+  if (typeof v === "object") {
+    for (const k of TURN_KEYS) {
+      if (typeof v[k] === "string" && v[k].trim()) return v[k];
+    }
+    const vals = Object.values(v);
+    if (vals.length === 1 && typeof vals[0] === "string") return vals[0];   // {"arg0": "…"}
+    return JSON.stringify(v).slice(0, 800);
+  }
+  return String(v);
 }
 
 function outputText(out: any): string | undefined {

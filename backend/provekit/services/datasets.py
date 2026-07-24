@@ -21,10 +21,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 
 from sqlalchemy.orm import Session
 
 from ..models import Dataset, DatasetItem
+
+log = logging.getLogger("provekit.datasets")
 
 TRAIN = "train"
 TEST = "test"
@@ -49,18 +52,75 @@ def fingerprint(db: Session, dataset_id: int) -> str:
     return h.hexdigest()[:32]
 
 
+#: Snapshots retained per dataset (#45). A snapshot holds whole items, so keeping every version
+#: of a heavily-edited set would dwarf the set itself. The cap is reported by the API rather than
+#: applied silently — a truncated history that looks complete is worse than a short one.
+MAX_SNAPSHOTS = 50
+
+
 def bump(db: Session, dataset_id: int) -> int:
     """Record that a dataset's contents changed. Returns the new version.
 
     Called by every mutating path. Missing one is the failure mode that matters: a dataset
     that changed without bumping reports itself as unchanged, which is exactly the silent
     invalidation this module exists to prevent.
+
+    Also captures the contents *as of* the new version (#45), so "what did v3 contain?" has an
+    answer later. Callers invoke this after staging their change and before committing, so the
+    session is flushed first to read what the change actually produced rather than what was
+    there before it.
     """
     ds = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if ds is None:
         return 0
     ds.version = (ds.version or 1) + 1
+    snapshot(db, ds, ds.version)
     return ds.version
+
+
+def snapshot(db: Session, ds: Dataset, version: int) -> None:
+    """Store the dataset's current items as the contents of `version`.
+
+    Best-effort by design: a snapshot is a convenience for reading history, and failing the
+    write that changed the data because we couldn't record a copy of it would trade a real
+    operation for a bookkeeping one.
+    """
+    from ..models import DatasetSnapshot
+    try:
+        db.flush()   # see the staged add/delete, not the pre-change state
+        rows = (db.query(DatasetItem)
+                .filter(DatasetItem.dataset_id == ds.id)
+                .order_by(DatasetItem.id.asc()).all())
+        items = [{"id": r.id, "input": r.input, "expected": r.expected,
+                  "split": r.split or "", "meta": r.meta or {}} for r in rows]
+        # One snapshot per version: a path that bumps twice in a transaction must not leave two.
+        existing = (db.query(DatasetSnapshot)
+                    .filter(DatasetSnapshot.dataset_id == ds.id,
+                            DatasetSnapshot.version == version).first())
+        if existing is not None:
+            existing.items, existing.item_count = items, len(items)
+            existing.fingerprint = fingerprint(db, ds.id)
+            return
+        db.add(DatasetSnapshot(workspace_id=ds.workspace_id, dataset_id=ds.id, version=version,
+                               fingerprint=fingerprint(db, ds.id), item_count=len(items),
+                               items=items))
+        _prune_snapshots(db, ds.id)
+    except Exception:                                   # noqa: BLE001 — see docstring
+        log.exception("dataset snapshot failed for dataset %s v%s", ds.id, version)
+
+
+def _prune_snapshots(db: Session, dataset_id: int) -> None:
+    """Keep the newest MAX_SNAPSHOTS versions of a dataset."""
+    from ..models import DatasetSnapshot
+    keep = [s.id for s in (db.query(DatasetSnapshot.id)
+                           .filter(DatasetSnapshot.dataset_id == dataset_id)
+                           .order_by(DatasetSnapshot.version.desc())
+                           .limit(MAX_SNAPSHOTS).all())]
+    if len(keep) < MAX_SNAPSHOTS:
+        return
+    (db.query(DatasetSnapshot)
+     .filter(DatasetSnapshot.dataset_id == dataset_id, DatasetSnapshot.id.notin_(keep))
+     .delete(synchronize_session=False))
 
 
 def pin(db: Session, dataset_id: int | None) -> dict:

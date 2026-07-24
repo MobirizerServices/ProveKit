@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, Dataset, DatasetDetail, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
+import { api, Dataset, DatasetDetail, DatasetHistory, DatasetSnapshot, Experiment, ExperimentComparison, ScorerComparison } from "@/lib/api";
 import RegressionTriage from "@/components/RegressionTriage";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import ConsoleShell from "@/components/ConsoleShell";
@@ -18,6 +18,9 @@ export default function DatasetsPage() {
   const [cmpPick, setCmpPick] = useState<number[]>([]);
   const [cmp, setCmp] = useState<ExperimentComparison | null>(null);
   const [newName, setNewName] = useState("");
+  // Version history (#45) — what the set actually held at each version, not just that it moved.
+  const [history, setHistory] = useState<DatasetHistory | null>(null);
+  const [snap, setSnap] = useState<DatasetSnapshot | null>(null);
 
   const toggleCmp = (id: number) => setCmpPick((p) =>
     p.includes(id) ? p.filter((x) => x !== id) : [...p, id].slice(-2));
@@ -29,9 +32,11 @@ export default function DatasetsPage() {
   const load = useCallback(() => { api.datasets().then(setList).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (sel == null) { setDetail(null); setExperiments([]); setCmpPick([]); return; }
+    if (sel == null) { setDetail(null); setExperiments([]); setCmpPick([]); setHistory(null); setSnap(null); return; }
     api.dataset(sel).then(setDetail).catch(() => {});
     api.experiments(sel).then(setExperiments).catch(() => {});
+    setSnap(null);
+    api.datasetVersions(sel).then(setHistory).catch(() => setHistory(null));
   }, [sel]);
   useEffect(() => { if (sel == null && list.length) setSel(list[0].id); }, [list, sel]);
 
@@ -145,6 +150,53 @@ export default function DatasetsPage() {
                       {cmpPick.length === 1 && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Select a second run to test whether the difference is real.</div>}
                       {cmp && <Significance cmp={cmp} />}
                       {cmpPick.length === 2 && <RegressionTriage a={cmpPick[0]} b={cmpPick[1]} />}
+                    </div>
+                  )}
+
+                  {history && history.versions.length > 0 && (
+                    <div style={{ marginTop: 20 }}>
+                      <div className="dset-section-label">
+                        Version history
+                        <span className="muted" style={{ textTransform: "none", letterSpacing: 0, marginLeft: 8, fontSize: 11 }}>
+                          newest {history.retained} kept
+                        </span>
+                      </div>
+                      <div className="dsv-list">
+                        {history.versions.map((v) => (
+                          <button key={v.version} className={`dsv-row ${snap?.version === v.version ? "on" : ""}`}
+                            onClick={() => snap?.version === v.version
+                              ? setSnap(null)
+                              : api.datasetVersion(detail.id, v.version).then(setSnap).catch(() => setSnap(null))}>
+                            <span className="dsv-v">v{v.version}</span>
+                            {v.version === history.live_version && <span className="dsv-live">live</span>}
+                            <span className="dsv-n">{v.item_count} example{v.item_count === 1 ? "" : "s"}</span>
+                            <span className="mono dsv-fp" title="content fingerprint — an experiment pins this">{v.fingerprint.slice(0, 10)}</span>
+                            <span className="dsv-at muted">{new Date(v.created_at).toLocaleString()}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {snap && (
+                        <div className="dsv-snap">
+                          <div className="dsv-snap-head">
+                            Contents of v{snap.version} — {snap.item_count} example{snap.item_count === 1 ? "" : "s"} as they were then
+                            <button className="btn btn-sm btn-ghost" onClick={() => setSnap(null)}>Close</button>
+                          </div>
+                          {snap.items.length === 0 ? <div className="muted" style={{ fontSize: 12.5 }}>This version was empty.</div> : (
+                            <table className="dset-table dset-examples">
+                              <thead><tr><th>Input</th><th>Expected</th><th>Split</th></tr></thead>
+                              <tbody>
+                                {snap.items.map((i) => (
+                                  <tr key={i.id}>
+                                    <td className="dset-cell-in">{i.input}</td>
+                                    <td className="dset-cell-ex">{i.expected || <span className="muted">—</span>}</td>
+                                    <td>{i.split || <span className="muted">—</span>}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 

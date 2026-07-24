@@ -127,6 +127,15 @@ export interface ReplayResult {
   reliable?: boolean; fidelity_warning?: string;
 }
 
+export interface DatasetVersion { version: number; fingerprint: string; item_count: number; created_at: string }
+export interface DatasetHistory {
+  dataset_id: number; live_version: number; retained: number;
+  oldest_retained: number | null; versions: DatasetVersion[];
+}
+export interface DatasetSnapshot {
+  dataset_id: number; version: number; fingerprint: string; item_count: number;
+  created_at: string; items: { id: number; input: string; expected: string; split: string; meta: any }[];
+}
 export interface Dataset { id: number; name: string; description: string; item_count: number; created_at: string; }
 export interface DatasetItem { id: number; dataset_id: number; input: string; expected: string; meta: any; created_at: string; }
 export interface DatasetDetail extends Dataset { items: DatasetItem[]; }
@@ -346,6 +355,8 @@ export const api = {
   // experiments
   experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
   judgeCalibration: () => j<Calibration>("/api/experiments/judge-calibration"),
+  datasetVersions: (id: number) => j<DatasetHistory>(`/api/datasets/${id}/versions`),
+  datasetVersion: (id: number, version: number) => j<DatasetSnapshot>(`/api/datasets/${id}/versions/${version}`),
   reviewQueue: (limit = 50) => j<ReviewQueue>(`/api/review/queue?limit=${limit}`),
   experiment: (id: number) => j<Experiment>(`/api/experiments/${id}`),
   compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),

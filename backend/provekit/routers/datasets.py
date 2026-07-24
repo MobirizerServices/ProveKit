@@ -7,8 +7,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Dataset, DatasetItem, Run, Workspace, iso_utc
+from ..models import Dataset, DatasetItem, DatasetSnapshot, Run, Workspace, iso_utc
 from ..services import datasets as datasets_svc
+from ..services import errors
 from ..services.workspace import current_workspace, workspace_from_key
 
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
@@ -72,6 +73,45 @@ def dataset_version(dataset_id: int, db: Session = Depends(get_db),
     return {"dataset_id": dataset_id, "version": d.version or 1,
             "fingerprint": datasets_svc.fingerprint(db, dataset_id),
             "splits": datasets_svc.split_counts(db, dataset_id)}
+
+
+@router.get("/{dataset_id}/versions")
+def dataset_versions(dataset_id: int, db: Session = Depends(get_db),
+                     ws: Workspace = Depends(current_workspace)):
+    """The version history: what each version contained, without the contents themselves (#45).
+
+    `retained` names the cap so a history that has been pruned can't be mistaken for the whole
+    life of the dataset, and `live_version` says which entry is the dataset as it stands now.
+    """
+    d = _get_dataset(db, ws, dataset_id)
+    rows = (db.query(DatasetSnapshot)
+            .filter(DatasetSnapshot.dataset_id == dataset_id)
+            .order_by(DatasetSnapshot.version.desc()).all())
+    return {
+        "dataset_id": dataset_id,
+        "live_version": d.version or 1,
+        "retained": datasets_svc.MAX_SNAPSHOTS,
+        "oldest_retained": rows[-1].version if rows else None,
+        "versions": [{"version": s.version, "fingerprint": s.fingerprint,
+                      "item_count": s.item_count, "created_at": iso_utc(s.created_at)}
+                     for s in rows],
+    }
+
+
+@router.get("/{dataset_id}/versions/{version}")
+def dataset_version_contents(dataset_id: int, version: int, db: Session = Depends(get_db),
+                             ws: Workspace = Depends(current_workspace)):
+    """The items a dataset actually held at `version` — the question a pinned experiment asks."""
+    _get_dataset(db, ws, dataset_id)
+    s = (db.query(DatasetSnapshot)
+         .filter(DatasetSnapshot.dataset_id == dataset_id,
+                 DatasetSnapshot.version == version).first())
+    if s is None:
+        raise HTTPException(404, errors.dataset_version_missing(dataset_id, version,
+                                                                datasets_svc.MAX_SNAPSHOTS))
+    return {"dataset_id": dataset_id, "version": s.version, "fingerprint": s.fingerprint,
+            "item_count": s.item_count, "created_at": iso_utc(s.created_at),
+            "items": s.items or []}
 
 
 def _get_dataset(db: Session, ws: Workspace, dataset_id: int) -> Dataset:

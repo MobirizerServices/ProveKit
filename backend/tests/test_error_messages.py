@@ -64,6 +64,7 @@ _BUILDER_ARGS = {
     "bad_edit_kind": ("retrieval",),
     "tool_edit_needs_arguments": ("abc",),
     "dataset_unusable": (7,),
+    "dataset_version_missing": (7, 3, 50),
     "provider_failed": ("429 rate limit",),
     "replay_target_missing": ("origin trace not found",),
 }

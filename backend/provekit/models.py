@@ -169,6 +169,34 @@ class DatasetItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class DatasetSnapshot(Base):
+    """The contents a dataset had at one version (#45).
+
+    The version counter says *that* a dataset changed and the fingerprint proves *whether* two
+    runs saw the same data — but neither can answer "what did v3 actually contain?", which is the
+    question asked of any experiment old enough to be worth re-checking. This stores the items
+    themselves, keyed by the version they produced.
+
+    `items` is the whole content, denormalised on purpose: a snapshot must not change when the
+    live rows do, and pointing at `dataset_items` would make it a view of the present.
+    """
+    __tablename__ = "dataset_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=0)
+    #: Same hash services/datasets.fingerprint() computes, so an experiment's pinned
+    #: fingerprint can be matched back to the exact contents it ran over.
+    fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    item_count: Mapped[int] = mapped_column(Integer, default=0)
+    items: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    __table_args__ = (
+        Index("ix_dataset_snapshots_dataset_version", "dataset_id", "version"),
+    )
+
+
 class Experiment(Base):
     """One offline-evaluation run: a target executed over a dataset, scored. Compare
     experiments on the same dataset to catch regressions before they ship."""

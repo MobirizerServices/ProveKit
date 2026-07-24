@@ -241,3 +241,16 @@ def replay_target_missing(reason: str) -> str:
         return reason
     return with_docs(f"Replay failed: {reason}. {hint}",
                      _DEBUG_DOC, "3-replay-flow--re-run-the-whole-trace-from-a-step")
+
+def dataset_version_missing(dataset_id: int, version: int, retained: int) -> str:
+    """404 for a version whose contents were never captured or have since been pruned.
+
+    Names both causes, because "we never had it" and "we dropped it" call for different next
+    steps and the caller cannot tell them apart from the status code.
+    """
+    return with_docs(
+        f"No stored contents for dataset {dataset_id} v{version}. Snapshots start at a dataset's "
+        f"first change, and only the newest {retained} versions are kept — so this version either "
+        f"predates snapshots or has been pruned. Use GET /api/datasets/{dataset_id}/versions to "
+        "see which versions are still retrievable.",
+        "EVALUATION.md")

@@ -2346,3 +2346,20 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 .rvw-done em { font-style: normal; font-weight: 400; color: var(--muted); }
 .rvw-done em.dis { color: var(--amber); }
 @media (max-width: 700px) { .rvw-row { flex-direction: column; gap: 10px; } .rvw-actions { width: 100%; } }
+
+/* ============ Dataset version history (.dsv-*) ============ */
+.dsv-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
+.dsv-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 9px 13px;
+  background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--text); cursor: pointer; font-size: 12.5px; }
+.dsv-row:last-child { border-bottom: none; }
+.dsv-row:hover { background: var(--panel-2); }
+.dsv-row.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.dsv-v { font-weight: 650; min-width: 34px; }
+.dsv-live { font-size: 9.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent); border-radius: 999px; padding: 1px 7px; }
+.dsv-n { color: var(--muted); }
+.dsv-fp { font-size: 11px; color: var(--muted); }
+.dsv-at { margin-left: auto; font-size: 11.5px; white-space: nowrap; }
+.dsv-snap { margin-top: 12px; padding: 13px 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; }
+.dsv-snap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12.5px; font-weight: 600; margin-bottom: 10px; }
+@media (max-width: 700px) { .dsv-row { flex-wrap: wrap; } .dsv-at { margin-left: 0; width: 100%; } }

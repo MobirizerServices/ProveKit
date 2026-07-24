@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Flow, FlowRun, FlowVersion, ProviderConnection, Workspace, _now, iso_utc
 from ..services import errors, flow_trace, limits, pricing
-from ..services.llm_client import LLMError, complete
+from ..services.llm_client import LLMError, complete, mock_allowed
 from ..services.sealing import unseal
 from ..services.workspace import current_workspace
 
@@ -221,7 +221,7 @@ def _resolve_provider(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, st
             raise HTTPException(404, errors.not_in_project("model connection", "GET /api/connections"))
         c.last_used_at = _now(); db.commit()
         return c.provider, (unseal(c.key_sealed) if c.key_sealed else ""), c.base_url
-    if (data.provider or "").lower() == "mock":
+    if (data.provider or "").lower() == "mock" and mock_allowed():
         return "mock", "", ""
     raise HTTPException(422, errors.NO_MODEL_CHOSEN)
 

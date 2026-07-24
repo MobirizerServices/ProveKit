@@ -5,6 +5,9 @@ import tempfile
 _tmp = tempfile.mkdtemp(prefix="provekit-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ["SEED_EXAMPLES"] = "false"
+# The offline `mock` provider is test-only and unreachable in a running product; the suite
+# turns it on so the playground, flow and replay tests run without a key or network.
+os.environ["ALLOW_MOCK_PROVIDER"] = "true"
 # Keep the ingest spool inside this run's temp dir. Sharing the default (a system temp path)
 # would let one run's leftover batches count toward another's backlog and depth assertions.
 os.environ["SPOOL_DIR"] = f"{_tmp}/spool"

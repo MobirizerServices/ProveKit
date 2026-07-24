@@ -21,7 +21,14 @@ from ..models import (
 )
 from ..scorers import run_scorers
 from ..services import errors, limits, netguard, pricing, share
-from ..services.llm_client import LLMError, approx_usage, complete, judge, stream_complete
+from ..services.llm_client import (
+    LLMError,
+    approx_usage,
+    complete,
+    judge,
+    mock_allowed,
+    stream_complete,
+)
 # The multi-span walk below deliberately reuses the single-fork path's helpers rather than
 # copying them: `_messages`/`_text_of`/`_apply` are how ProveKit decides that a span's input
 # changed, and two implementations of that would drift into two different verdicts about
@@ -38,8 +45,14 @@ from .traces import _span_rows, _trace_spans
 
 router = APIRouter(prefix="/api", tags=["playground"])
 
-_PROVIDERS = {"openai", "anthropic", "openai_compatible", "mock"}
+_PROVIDERS = {"openai", "anthropic", "openai_compatible"}
 _MAX_TOKENS_CAP = 4096   # hard ceiling per run so an edit can't run up a huge bill
+
+
+def _allowed_providers() -> set[str]:
+    """The providers a connection may be created for. `mock` is test-only (llm_client), never
+    an option in a running product, so it is added only when the test flag is set."""
+    return _PROVIDERS | ({"mock"} if mock_allowed() else set())
 
 
 # ---- provider connections (BYO keys) ----
@@ -67,8 +80,9 @@ def list_connections(db: Session = Depends(get_db), ws: Workspace = Depends(curr
 def create_connection(data: _ConnIn, db: Session = Depends(get_db),
                       ws: Workspace = Depends(current_workspace)):
     provider = data.provider.lower()
-    if provider not in _PROVIDERS:
-        raise HTTPException(422, errors.bad_provider(provider, _PROVIDERS))
+    allowed = _allowed_providers()
+    if provider not in allowed:
+        raise HTTPException(422, errors.bad_provider(provider, allowed))
     if provider != "mock" and not data.key.strip():
         raise HTTPException(422, errors.provider_key_required(provider))
     if provider == "openai_compatible" and not data.base_url.strip():
@@ -128,7 +142,7 @@ def _resolve(db: Session, ws: Workspace, data: _RunIn) -> tuple[str, str, str]:
         c.last_used_at = _now(); db.commit()
         key = unseal(c.key_sealed) if c.key_sealed else ""
         return c.provider, key, c.base_url
-    if (data.provider or "").lower() == "mock":
+    if (data.provider or "").lower() == "mock" and mock_allowed():
         return "mock", "", ""
     raise HTTPException(422, errors.NO_MODEL_CHOSEN)
 

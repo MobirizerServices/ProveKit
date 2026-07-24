@@ -230,7 +230,7 @@ class ProviderConnection(Base):
     __tablename__ = "provider_connections"
     id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int] = _ws_fk()
-    provider: Mapped[str] = mapped_column(String(24))          # openai | anthropic | openai_compatible | mock
+    provider: Mapped[str] = mapped_column(String(24))          # openai | anthropic | openai_compatible
     label: Mapped[str] = mapped_column(String(120), default="")
     key_sealed: Mapped[str] = mapped_column(Text, default="")  # Fernet-encrypted; never returned
     key_hint: Mapped[str] = mapped_column(String(24), default="")   # e.g. "…a1b2" for display

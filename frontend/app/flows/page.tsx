@@ -28,7 +28,7 @@ export default function FlowsPage() {
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [versions, setVersions] = useState<FlowVersionSnapshot[]>([]);
   const [conns, setConns] = useState<ProviderConnection[]>([]);
-  const [connId, setConnId] = useState("mock");
+  const [connId, setConnId] = useState("");
   const [testInput, setTestInput] = useState("");
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<FlowRun | null>(null);
@@ -48,10 +48,9 @@ export default function FlowsPage() {
   useEffect(() => { loadFlows().then((rows) => { if (rows.length && id == null) open(rows[0].id); }); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     api.connections().then((cs) => {
-      setConns(cs);
-      // Test flows against a real provider by default; Mock only when no key is configured yet.
-      const real = cs.find((c) => c.provider !== "mock");
-      if (real) setConnId((v) => v === "mock" ? String(real.id) : v);
+      const usable = cs.filter((c) => c.provider !== "mock");
+      setConns(usable);
+      if (usable[0]) setConnId((v) => v || String(usable[0].id));
     }).catch(() => {});
   }, []);
 
@@ -100,7 +99,7 @@ export default function FlowsPage() {
       if (dirty) { await api.updateFlow(id, { graph }); setDirty(false); }
       const r = await api.runFlow(id, {
         input: testInput,
-        ...(connId === "mock" ? { provider: "mock" } : { connection_id: Number(connId) }),
+        connection_id: Number(connId),
       });
       setLastRun(r);
       setTab("runs");
@@ -258,10 +257,13 @@ export default function FlowsPage() {
                   <input className="flow-input" placeholder="Test input…" value={testInput}
                     onChange={(e) => setTestInput(e.target.value)} />
                   <select className="reg-sel" value={connId} onChange={(e) => setConnId(e.target.value)}>
-                    <option value="mock">Mock</option>
-                    {conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
+                    {conns.length === 0
+                      ? <option value="">No model connection</option>
+                      : conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
                   </select>
-                  <button className="btn btn-sm" disabled={running} onClick={test}>{running ? "Running…" : "▷ Test"}</button>
+                  <button className="btn btn-sm" disabled={running || !connId} onClick={test}
+                    title={connId ? "" : "Add a model connection in Settings to test this flow"}>
+                    {running ? "Running…" : "▷ Test"}</button>
                   {lastRun && <span className={`fb-status ${lastRun.status}`}>{lastRun.status} · {lastRun.duration_ms}ms</span>}
                 </div>
                 <FlowCanvas graph={graph} onChange={update} selected={selected}

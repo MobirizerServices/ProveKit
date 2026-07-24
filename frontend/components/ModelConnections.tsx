@@ -7,7 +7,6 @@ const PROVIDERS = [
   { id: "openai", label: "OpenAI", needsKey: true, needsUrl: false },
   { id: "anthropic", label: "Anthropic", needsKey: true, needsUrl: false },
   { id: "openai_compatible", label: "OpenAI-compatible", needsKey: true, needsUrl: true },
-  { id: "mock", label: "Mock (no key)", needsKey: false, needsUrl: false },
 ];
 
 // Per-project model-provider credentials used to re-run captured calls in the playground /
@@ -39,8 +38,8 @@ export default function ModelConnections() {
       <div style={label_}>Model connections</div>
       <p className="muted" style={{ fontSize: 12.5, margin: "0 0 10px" }}>
         Provider keys used to re-run captured calls in the trace playground. Stored encrypted;
-        the key is shown only once, here. Use <span className="mono">Mock</span> to try the
-        playground with no key.
+        the key is shown only once, here. Every run uses your own key — add a connection before
+        using the playground, replay, or flow tests.
       </p>
 
       {err && <div style={errBox}>{err}</div>}

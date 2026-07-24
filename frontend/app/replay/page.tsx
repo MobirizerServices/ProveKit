@@ -23,7 +23,7 @@ export default function ReplayPage() {
   const [spans, setSpans] = useState<TraceSpan[] | null>(null);
   const [forkId, setForkId] = useState<string>("");
   const [conns, setConns] = useState<ProviderConnection[]>([]);
-  const [connId, setConnId] = useState<string>("mock");
+  const [connId, setConnId] = useState<string>("");
 
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -41,10 +41,9 @@ export default function ReplayPage() {
   useEffect(() => { api.traces({ limit: 40 }).then(setTraces).catch(() => setTraces([])); }, []);
   useEffect(() => {
     api.connections().then((cs) => {
-      setConns(cs);
-      // Prefer a real provider for replay; Mock is the fallback when no key is configured.
-      const real = cs.find((c) => c.provider !== "mock");
-      if (real) setConnId((v) => v === "mock" ? String(real.id) : v);
+      const usable = cs.filter((c) => c.provider !== "mock");
+      setConns(usable);
+      if (usable[0]) setConnId((v) => v || String(usable[0].id));
     }).catch(() => {});
   }, []);
 
@@ -91,7 +90,7 @@ export default function ReplayPage() {
         model: model || fork.request?.model || "",
         messages: msgs,
         params,
-        ...(connId === "mock" ? { provider: "mock" } : { connection_id: Number(connId) }),
+        connection_id: Number(connId),
       });
       setResult(r);
       api.trace(r.new_trace_id).then(setCandidate).catch(() => {});
@@ -138,8 +137,9 @@ export default function ReplayPage() {
             <label>
               <span>Run with</span>
               <select value={connId} onChange={(e) => setConnId(e.target.value)}>
-                <option value="mock">Mock (no key)</option>
-                {conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
+                {conns.length === 0
+                  ? <option value="">No model connection</option>
+                  : conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
               </select>
             </label>
             <button className="btn btn-run" disabled={!fork || busy} onClick={run}>

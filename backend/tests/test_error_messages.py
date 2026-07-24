@@ -230,10 +230,12 @@ def test_unknown_project_explains_the_404():
 def test_connection_setup_errors_name_the_missing_field():
     c = _client()
     r = c.post("/api/connections", json={"provider": "cohere"})
-    assert r.status_code == 422 and "mock" in _detail(r)
+    # Names the providers that *are* supported rather than just rejecting the one given.
+    assert r.status_code == 422 and "openai" in _detail(r)
 
     r = c.post("/api/connections", json={"provider": "openai"})
-    assert r.status_code == 422 and "provider='mock'" in _detail(r)
+    # A provider needs your own key — and the message says so instead of offering a mock.
+    assert r.status_code == 422 and "key is required" in _detail(r)
 
     r = c.post("/api/connections", json={"provider": "openai_compatible", "key": "sk-x"})
     assert r.status_code == 422
@@ -248,7 +250,7 @@ def test_a_run_with_no_model_says_how_to_choose_one():
     r = c.post("/api/playground/run", json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]})
     assert r.status_code == 422
     d = _detail(r)
-    assert "GET /api/connections" in d and "provider='mock'" in d
+    assert "GET /api/connections" in d and "model connection" in d
 
     r = c.post("/api/playground/run", json={"model": "gpt-4o", "messages": [], "provider": "mock"})
     assert r.status_code == 422 and "role" in _detail(r)

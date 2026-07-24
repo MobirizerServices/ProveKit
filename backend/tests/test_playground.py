@@ -38,6 +38,18 @@ def test_connections_crud_and_masking():
         assert all(x["id"] != cid for x in c.get("/api/connections").json())
 
 
+def test_mock_provider_is_unavailable_in_production(monkeypatch):
+    """The offline mock provider is test-only. With ALLOW_MOCK_PROVIDER unset — i.e. a running
+    product — it can neither be created as a connection nor named on a run: `mock` is an unknown
+    provider like any other, so the only way to run anything is a real configured key."""
+    monkeypatch.delenv("ALLOW_MOCK_PROVIDER", raising=False)
+    with TestClient(app, base_url="https://testserver") as c:
+        assert c.post("/api/connections", json={"provider": "mock", "label": "x"}).status_code == 422
+        assert c.post("/api/playground/run", json={
+            "model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}],
+            "provider": "mock"}).status_code == 422
+
+
 def test_connection_validation():
     with TestClient(app, base_url="https://testserver") as c:
         assert c.post("/api/connections", json={"provider": "nope"}).status_code == 422

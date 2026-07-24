@@ -110,7 +110,7 @@ function findVars(msgs: Msg[]): string[] {
 }
 
 // The interactive playground: edit a captured LLM call's prompt / model / params / variables and
-// re-run it against a provider connection (or the keyless mock), diffing the new output. When a
+// re-run it against one of the project's provider connections, diffing the new output. When a
 // traceId is present, "Replay flow" forks the whole trace at this span and re-runs downstream.
 export default function Playground({ span, traceId, onClose }: { span: TraceSpan; traceId?: string; onClose: () => void }) {
   const [msgs, setMsgs] = useState<Msg[]>(() => seedMessages(span));
@@ -119,7 +119,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
   const [temperature, setTemperature] = useState<string>(p.temperature != null ? String(p.temperature) : "");
   const [maxTokens, setMaxTokens] = useState<string>(p.max_tokens != null ? String(p.max_tokens) : "512");
   const [conns, setConns] = useState<ProviderConnection[]>([]);
-  const [conn, setConn] = useState<string>("mock"); // "mock" or a connection id (string)
+  const [conn, setConn] = useState<string>("");   // a connection id (string); "" until one loads
   const [vars, setVars] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<PlaygroundResult[]>([]);   // newest first — A/B history
   const [compareModels, setCompareModels] = useState("");     // comma-separated models to A/B
@@ -138,9 +138,9 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
 
   useEffect(() => {
     api.connections().then((cs) => {
-      setConns(cs);
-      const real = cs.find((c) => c.provider !== "mock");
-      if (real) setConn(String(real.id));
+      const usable = cs.filter((c) => c.provider !== "mock");
+      setConns(usable);
+      if (usable[0]) setConn((v) => v || String(usable[0].id));
     }).catch(() => {});
     api.prompts().then(setSaved).catch(() => {});
     api.datasets().then((ds) => { setDatasets(ds); if (ds[0]) setDsId(String(ds[0].id)); }).catch(() => {});
@@ -170,7 +170,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
     return {
       model, messages: msgs.map((m) => ({ role: m.role, content: substitute(m.content) })),
       params, from_span_id: span.span_id,
-      ...(conn === "mock" ? { provider: "mock" } : { connection_id: Number(conn) }),
+      connection_id: Number(conn),
     };
   };
 
@@ -239,7 +239,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
           : { span_id: sid, kind: "llm", model: e.model || model, params: p.params,
               messages: e.msgs.map((m) => ({ role: m.role, content: substitute(m.content) })) }),
       ],
-      ...(conn === "mock" ? { provider: "mock" } : { connection_id: Number(conn) }),
+      connection_id: Number(conn),
     };
     const pid = getProjectId();
     const res = await fetch(`${API_BASE}/api/replay/multi`, {
@@ -276,7 +276,7 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
       setExp(await api.playgroundExperiment({
         model, messages, params, dataset_id: Number(dsId),
         scorers: ["exact_match", "contains", ...(useJudge ? ["llm_judge"] : [])],
-        ...(conn === "mock" ? { provider: "mock" } : { connection_id: Number(conn) }),
+        connection_id: Number(conn),
       }));
     } catch (e: any) { setErr(String(e.message || e)); } finally { setBusy(false); }
   };
@@ -339,10 +339,11 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
             <Field lbl="Connection">
               <select value={conn} onChange={(e) => setConn(e.target.value)} style={{ ...input, width: 190 }}>
-                <option value="mock">Mock (no key)</option>
-                {conns.filter((c) => c.provider !== "mock").map((c) => (
-                  <option key={c.id} value={String(c.id)}>{c.label} · {c.provider}</option>
-                ))}
+                {conns.length === 0
+                  ? <option value="">No model connection</option>
+                  : conns.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{c.label} · {c.provider}</option>
+                  ))}
               </select>
             </Field>
             <Field lbl="Model"><input value={model} onChange={(e) => setModel(e.target.value)} style={{ ...input, width: 170 }} /></Field>
@@ -350,9 +351,9 @@ export default function Playground({ span, traceId, onClose }: { span: TraceSpan
             <Field lbl="Max tok"><input value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} style={{ ...input, width: 72 }} /></Field>
           </div>
 
-          {conn === "mock" && (
+          {conns.length === 0 && (
             <div className="muted" style={{ fontSize: 11.5 }}>
-              Using the keyless mock model — add a real provider key in <span className="mono">Settings → Model connections</span> to run against OpenAI/Anthropic.
+              No model connection yet — add a provider key in <span className="mono">Settings → Model connections</span> to re-run this span.
             </div>
           )}
 

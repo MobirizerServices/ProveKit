@@ -137,16 +137,14 @@ def bad_webhook(reason: str) -> str:
 # --------------------------------------------------------------------- playground / replay
 def bad_provider(got: str, allowed) -> str:
     return with_docs(
-        f"'{got}' isn't a supported provider. Use one of: {', '.join(sorted(allowed))} — 'mock' needs "
-        "no API key and is the one to try the playground with.",
+        f"'{got}' isn't a supported provider. Use one of: {', '.join(sorted(allowed))}.",
         _DEBUG_DOC, "1-add-a-model-connection-one-time")
 
 
 def provider_key_required(provider: str) -> str:
     return with_docs(
         f"A provider API key is required for '{provider}': ProveKit calls the provider with your own "
-        "credentials and never ships one of its own. Paste a key, or use provider='mock' to re-run "
-        "against the keyless offline model.",
+        "credentials and never ships one of its own. Add the key on a model connection first.",
         _DEBUG_DOC, "1-add-a-model-connection-one-time")
 
 
@@ -157,8 +155,8 @@ BASE_URL_REQUIRED = with_docs(
     _DEBUG_DOC, "1-add-a-model-connection-one-time")
 
 NO_MODEL_CHOSEN = with_docs(
-    "This run has no model to call. Pass connection_id from GET /api/connections, or provider='mock' "
-    "to run against the keyless offline model.",
+    "This run has no model to call. Pass connection_id from GET /api/connections — add a model "
+    "connection with your provider key first if you have none.",
     _DEBUG_DOC, "1-add-a-model-connection-one-time")
 
 NO_MESSAGES = ("A run needs at least one message: send messages as "

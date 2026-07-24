@@ -13,7 +13,9 @@ import PageHero from "@/components/PageHero";
  * can read rather than a guess).
  */
 type Variant = { connId: string; model: string; temp: string };
-const DEFAULT_VARIANT: Variant = { connId: "mock", model: "gpt-4o-mini", temp: "" };
+// No connection until one is loaded: every run goes through a real provider key, so there is
+// nothing to fall back to when a workspace has none.
+const DEFAULT_VARIANT: Variant = { connId: "", model: "gpt-4o-mini", temp: "" };
 
 export default function PlaygroundPage() {
   const [conns, setConns] = useState<ProviderConnection[]>([]);
@@ -32,13 +34,13 @@ export default function PlaygroundPage() {
 
   useEffect(() => {
     api.connections().then((cs) => {
-      setConns(cs);
-      // Default to a real configured provider when one exists; Mock is only the fallback for a
-      // workspace that has no key yet, not the preferred way to run.
-      const real = cs.find((c) => c.provider !== "mock");
-      if (real) {
-        setA((v) => v.connId === "mock" ? { ...v, connId: String(real.id) } : v);
-        setB((v) => v.connId === "mock" ? { ...v, connId: String(real.id) } : v);
+      // Legacy mock connections can no longer run — never offer one as a choice.
+      const usable = cs.filter((c) => c.provider !== "mock");
+      setConns(usable);
+      const first = usable[0];
+      if (first) {
+        setA((v) => v.connId ? v : { ...v, connId: String(first.id) });
+        setB((v) => v.connId ? v : { ...v, connId: String(first.id) });
       }
     }).catch(() => {});
   }, []);
@@ -67,7 +69,7 @@ export default function PlaygroundPage() {
     model: v.model,
     messages: msgs.filter((m) => m.content.trim()),
     params: v.temp.trim() !== "" && !Number.isNaN(Number(v.temp)) ? { temperature: Number(v.temp) } : {},
-    ...(v.connId === "mock" ? { provider: "mock" } : { connection_id: Number(v.connId) }),
+    connection_id: Number(v.connId),
   });
 
   const run = async () => {
@@ -83,7 +85,7 @@ export default function PlaygroundPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1220 }}>
         <PageHero eyebrow="Debugging" title="Playground"
-          sub="Run a model against an ad-hoc prompt. Use Mock to try it without a key, load a saved prompt, or switch to Compare to run two models against the same messages." />
+          sub="Run a model against an ad-hoc prompt using your own provider key. Load a saved prompt, or switch to Compare to run two models against the same messages." />
 
         <div className="pgx-tabs">
           <button className={`pgx-tab ${mode === "prompt" ? "on" : ""}`} onClick={() => setMode("prompt")}>Prompt</button>
@@ -97,9 +99,17 @@ export default function PlaygroundPage() {
                 </select>
               </label>
             )}
-            <button className="btn btn-run" disabled={busy} onClick={run}>{busy ? "Running…" : mode === "compare" ? "Run both" : "Run"}</button>
+            <button className="btn btn-run" disabled={busy || !a.connId || (mode === "compare" && !b.connId)} onClick={run}>
+              {busy ? "Running…" : mode === "compare" ? "Run both" : "Run"}</button>
           </div>
         </div>
+
+        {conns.length === 0 && (
+          <div className="pr-card" style={{ marginBottom: 14 }}>
+            <span className="muted">No model connection yet. Runs go to your own provider with your
+              own key — add one in <a href="/settings" style={{ color: "var(--accent)" }}>Settings → Model connections</a> to use the playground.</span>
+          </div>
+        )}
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
 
@@ -153,8 +163,9 @@ function VariantBar({ v, set, conns, tag }: { v: Variant; set: (u: Variant) => v
       {tag && <span className="pgx-tag">{tag}</span>}
       <label><span>Connection</span>
         <select value={v.connId} onChange={(e) => set({ ...v, connId: e.target.value })}>
-          <option value="mock">Mock (no key)</option>
-          {conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
+          {conns.length === 0
+            ? <option value="">No model connection</option>
+            : conns.map((c) => <option key={c.id} value={String(c.id)}>{c.label || c.provider}</option>)}
         </select>
       </label>
       <label><span>Model</span>

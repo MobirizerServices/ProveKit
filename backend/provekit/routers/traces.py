@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, RetentionEvent, Run, SpanNote, Workspace, _now, iso_utc
-from ..services import apikey, deploy, limits, otel, pricing, redact, share, spool
+from ..services import apikey, deploy, errors, limits, mentions, otel, pricing, redact, share, spool
 from ..services import payloads
 from ..services import search as search_svc
 from ..services.auth import get_current_user
@@ -457,15 +457,20 @@ def list_feedback(trace_id: str, db: Session = Depends(get_db),
     return _list_feedback(db, ws, trace_id)
 
 
-# ---- per-span collaboration notes ----
+# ---- per-span collaboration notes: threads, @mentions, resolve (#65) ----
 class _NoteIn(BaseModel):
     span_id: str = ""
     body: str
+    #: Reply to this note. A reply to a reply is flattened onto the same root thread.
+    parent_id: int | None = None
 
 
 def _note_row(n: SpanNote) -> dict:
     return {"id": n.id, "trace_id": n.trace_id, "span_id": n.span_id, "author": n.author,
-            "body": n.body, "created_at": iso_utc(n.created_at)}
+            "body": n.body, "parent_id": n.parent_id, "mentions": n.mentions or [],
+            "resolved_at": iso_utc(n.resolved_at) if n.resolved_at else None,
+            "resolved_by": n.resolved_by or "",
+            "created_at": iso_utc(n.created_at)}
 
 
 @runs_router.get("/traces/{trace_id}/notes")
@@ -486,9 +491,53 @@ def add_note(trace_id: str, data: _NoteIn, request: Request, db: Session = Depen
         author = (get_current_user(request, db).name or "")[:120]
     except Exception:
         pass
-    n = SpanNote(workspace_id=ws.id, trace_id=trace_id, span_id=(data.span_id or "")[:16],
-                 author=author, body=data.body.strip()[:4000])
+
+    parent_id, span_id = None, (data.span_id or "")[:16]
+    if data.parent_id is not None:
+        parent = db.get(SpanNote, data.parent_id)
+        if not parent or parent.workspace_id != ws.id or parent.trace_id != trace_id:
+            raise HTTPException(404, errors.not_in_project(
+                "note to reply to", f"GET /api/traces/{trace_id}/notes"))
+        # Flatten: a reply always hangs off the note that opened the thread, and inherits the
+        # span it was written against so a reply can't drift onto a different node.
+        parent_id = parent.parent_id or parent.id
+        span_id = parent.span_id
+
+    body = data.body.strip()[:4000]
+    mentioned = mentions.resolve(db, ws.id, body)
+    n = SpanNote(workspace_id=ws.id, trace_id=trace_id, span_id=span_id, author=author,
+                 body=body, parent_id=parent_id, mentions=mentioned)
     db.add(n); db.commit(); db.refresh(n)
+    # After the commit: the note is saved whether or not anyone can be told about it.
+    mentions.notify(db, ws.id, mentioned, author=author, trace_id=trace_id, body=body,
+                    origin=str(request.base_url).rstrip("/"))
+    return _note_row(n)
+
+
+class _ResolveIn(BaseModel):
+    resolved: bool = True
+
+
+@runs_router.post("/notes/{nid}/resolve")
+def resolve_note(nid: int, data: _ResolveIn, request: Request, db: Session = Depends(get_db),
+                 ws: Workspace = Depends(current_workspace)):
+    """Mark a thread settled — or reopen it. Resolving is not deleting: the thread stays readable,
+    because the reasoning in it is usually the most valuable thing attached to the trace."""
+    n = db.get(SpanNote, nid)
+    if not n or n.workspace_id != ws.id:
+        raise HTTPException(404, "Note not found")
+    if n.parent_id:                      # resolve the thread, not one message inside it
+        n = db.get(SpanNote, n.parent_id) or n
+    if data.resolved:
+        who = ""
+        try:
+            who = (get_current_user(request, db).name or "")[:120]
+        except Exception:
+            pass
+        n.resolved_at, n.resolved_by = _now(), who
+    else:
+        n.resolved_at, n.resolved_by = None, ""
+    db.commit(); db.refresh(n)
     return _note_row(n)
 
 

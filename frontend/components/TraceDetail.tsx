@@ -382,41 +382,113 @@ function Inspector({ span: s, traceId, readOnly, onPlayground }: { span: TraceSp
   );
 }
 
-// Per-span collaboration notes, shown in the inspector's Notes tab.
+// Renders @mentions that the server actually resolved to a project member. Only those are
+// highlighted: styling an unresolved @name would promise a notification nobody received.
+function NoteBody({ body, mentions }: { body: string; mentions: string[] }) {
+  if (!mentions.length) return <span style={{ whiteSpace: "pre-wrap" }}>{body}</span>;
+  const handles = new Set(mentions.flatMap((m) => [m.toLowerCase(), m.split("@")[0].toLowerCase()]));
+  return (
+    <span style={{ whiteSpace: "pre-wrap" }}>
+      {body.split(/(@[A-Za-z0-9._-]{1,64})/g).map((part, i) =>
+        part.startsWith("@") && handles.has(part.slice(1).toLowerCase())
+          ? <span key={i} className="note-mention">{part}</span>
+          : <span key={i}>{part}</span>)}
+    </span>
+  );
+}
+
+// Per-span collaboration notes, shown in the inspector's Notes tab. Threads rather than a flat
+// list (#65): a reply belongs to the note that started the conversation, and resolving one says
+// it's settled without deleting the reasoning — usually the most valuable thing on the trace.
 function SpanNotes({ traceId, spanId }: { traceId: string; spanId: string }) {
   const [notes, setNotes] = useState<import("@/lib/api").SpanNote[] | null>(null);
   const [body, setBody] = useState("");
+  const [replyTo, setReplyTo] = useState<number | null>(null);
+  const [replyBody, setReplyBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showResolved, setShowResolved] = useState(false);
   const load = () => api.notes(traceId).then(setNotes).catch(() => setNotes([]));
   useEffect(() => { load(); }, [traceId]);
+
   const mine = (notes || []).filter((n) => n.span_id === spanId);
-  const add = async () => {
-    if (!body.trim()) return;
+  const roots = mine.filter((n) => !n.parent_id);
+  const repliesOf = (id: number) => mine.filter((n) => n.parent_id === id);
+  const visible = roots.filter((n) => showResolved || !n.resolved_at);
+  const hidden = roots.length - visible.length;
+
+  const post = async (text: string, parent: number | null) => {
+    if (!text.trim()) return;
     setBusy(true);
-    try { await api.addNote(traceId, { span_id: spanId, body: body.trim() }); setBody(""); load(); }
-    finally { setBusy(false); }
+    try {
+      await api.addNote(traceId, { span_id: spanId, body: text.trim(), ...(parent ? { parent_id: parent } : {}) });
+      if (parent) { setReplyBody(""); setReplyTo(null); } else setBody("");
+      load();
+    } finally { setBusy(false); }
+  };
+  const toggleResolved = async (id: number, resolved: boolean) => {
+    setBusy(true);
+    try { await api.resolveNote(id, resolved); load(); } finally { setBusy(false); }
   };
   const fmt = (s: string) => { try { return new Date(s).toLocaleString(); } catch { return ""; } };
+
   return (
     <div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
         {notes == null ? <span className="muted" style={{ fontSize: 12.5 }}>Loading…</span>
-          : mine.length === 0 ? <span className="muted" style={{ fontSize: 12.5 }}>No notes on this span yet.</span>
-          : mine.map((n) => (
-            <div key={n.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}>
-              <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{n.body}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 5 }}>
-                <span className="muted" style={{ fontSize: 10.5 }}>{n.author || "—"} · {fmt(n.created_at)}</span>
-                <button className="btn btn-sm btn-ghost" onClick={async () => { await api.deleteNote(n.id); load(); }}>Delete</button>
+          : roots.length === 0 ? <span className="muted" style={{ fontSize: 12.5 }}>No notes on this span yet.</span>
+          : visible.map((n) => (
+            <div key={n.id} className={`note-thread ${n.resolved_at ? "resolved" : ""}`}>
+              <div className="note-msg">
+                <div style={{ fontSize: 12.5 }}><NoteBody body={n.body} mentions={n.mentions || []} /></div>
+                <div className="note-foot">
+                  <span className="muted">{n.author || "—"} · {fmt(n.created_at)}</span>
+                  {n.resolved_at && <span className="note-resolved">resolved{n.resolved_by ? ` by ${n.resolved_by}` : ""}</span>}
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                    <button className="btn btn-sm btn-ghost" onClick={() => { setReplyTo(replyTo === n.id ? null : n.id); setReplyBody(""); }}>Reply</button>
+                    <button className="btn btn-sm btn-ghost" disabled={busy}
+                      onClick={() => toggleResolved(n.id, !n.resolved_at)}>{n.resolved_at ? "Reopen" : "Resolve"}</button>
+                    <button className="btn btn-sm btn-ghost" onClick={async () => { await api.deleteNote(n.id); load(); }}>Delete</button>
+                  </span>
+                </div>
               </div>
+
+              {repliesOf(n.id).map((r) => (
+                <div key={r.id} className="note-msg note-reply">
+                  <div style={{ fontSize: 12.5 }}><NoteBody body={r.body} mentions={r.mentions || []} /></div>
+                  <div className="note-foot">
+                    <span className="muted">{r.author || "—"} · {fmt(r.created_at)}</span>
+                    <span style={{ marginLeft: "auto" }}>
+                      <button className="btn btn-sm btn-ghost" onClick={async () => { await api.deleteNote(r.id); load(); }}>Delete</button>
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {replyTo === n.id && (
+                <div className="note-reply-box">
+                  <textarea value={replyBody} onChange={(e) => setReplyBody(e.target.value)}
+                    placeholder="Reply… use @name to notify a teammate"
+                    onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) post(replyBody, n.id); }} />
+                  <button className="btn btn-sm" disabled={busy || !replyBody.trim()} onClick={() => post(replyBody, n.id)}>Reply</button>
+                </div>
+              )}
             </div>
           ))}
+        {hidden > 0 && (
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowResolved(true)}>
+            Show {hidden} resolved thread{hidden === 1 ? "" : "s"}
+          </button>
+        )}
+        {showResolved && roots.some((n) => n.resolved_at) && (
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowResolved(false)}>Hide resolved</button>
+        )}
       </div>
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a note for your team…"
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) add(); }}
+      <textarea value={body} onChange={(e) => setBody(e.target.value)}
+        placeholder="Add a note for your team… use @name to notify them"
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) post(body, null); }}
         style={{ width: "100%", minHeight: 56, resize: "vertical", background: "var(--panel-2)", color: "var(--text)",
           border: "1px solid var(--border-strong)", borderRadius: 8, padding: "8px 10px", fontSize: 12.5 }} />
-      <button className="btn btn-sm" onClick={add} disabled={busy || !body.trim()} style={{ marginTop: 6 }}>Add note</button>
+      <button className="btn btn-sm" onClick={() => post(body, null)} disabled={busy || !body.trim()} style={{ marginTop: 6 }}>Add note</button>
     </div>
   );
 }

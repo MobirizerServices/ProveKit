@@ -530,6 +530,17 @@ class SpanNote(Base):
     author: Mapped[str] = mapped_column(String(120), default="")
     body: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    #: Reply threading (#65). A reply points at the note that opened the thread; a reply to a
+    #: reply is flattened onto the same root, because a tree of arbitrary depth in a debugging
+    #: side panel is harder to read than the conversation it is recording.
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("span_notes.id"), nullable=True,
+                                                  index=True)
+    #: Emails of project members named with @ in the body, resolved at write time against actual
+    #: membership — a mention of someone who can't open the trace is not a mention.
+    mentions: Mapped[list] = mapped_column(JSON, default=list)
+    #: A resolved thread stays readable; resolving is not deleting. Only a root note carries this.
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_by: Mapped[str] = mapped_column(String(120), default="")
 
 
 class Feedback(Base):

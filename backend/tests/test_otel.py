@@ -2,7 +2,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from provekit.database import SessionLocal
 from provekit.main import app
+from provekit.models import Run
 from provekit.services import otel
 
 
@@ -162,40 +164,54 @@ def _identified(sid: str, tid: str = "a" * 32, **attrs):
     return s
 
 
+def _stored(tid: str, sid: str) -> int:
+    """How many rows exist for one (trace, span) pair.
+
+    Asserted instead of a delta over `/api/runs?limit=200`: that endpoint hard-caps at 200, so
+    once a suite has filled the window a "+1" can never arrive and the dedupe assertions fail
+    for a reason that has nothing to do with dedupe. Identity is what these tests actually mean.
+    """
+    db = SessionLocal()
+    try:
+        return db.query(Run).filter(Run.trace_id == tid, Run.span_id == sid).count()
+    finally:
+        db.close()
+
+
 def test_retried_export_does_not_duplicate_spans():
     """OTLP exporters retry on 5xx by replaying the whole batch. The replay must be a no-op,
     not a second copy — duplicates silently inflate span counts, tokens and cost."""
     with TestClient(app) as client:
         batch = _otlp(_identified("1111111111111111"), _identified("2222222222222222"))
         assert client.post("/v1/traces", json=batch).status_code == 200
-        after_first = len(client.get("/api/runs?limit=200").json())
 
         for _ in range(3):            # the exporter keeps retrying
             assert client.post("/v1/traces", json=batch).status_code == 200
-        assert len(client.get("/api/runs?limit=200").json()) == after_first
+        assert _stored("a" * 32, "1111111111111111") == 1, "a replayed span was stored twice"
 
         # A new span in an otherwise-replayed batch still lands.
         grown = _otlp(_identified("1111111111111111"), _identified("3333333333333333"))
         client.post("/v1/traces", json=grown)
-        assert len(client.get("/api/runs?limit=200").json()) == after_first + 1
+        assert _stored("a" * 32, "1111111111111111") == 1
+        assert _stored("a" * 32, "3333333333333333") == 1, "the new span in a replay was dropped"
 
 
 def test_same_span_repeated_within_one_batch_is_stored_once():
     with TestClient(app) as client:
-        before = len(client.get("/api/runs?limit=200").json())
         dup = _identified("4444444444444444")
         client.post("/v1/traces", json=_otlp(dup, dup))
-        assert len(client.get("/api/runs?limit=200").json()) == before + 1
+        assert _stored("a" * 32, "4444444444444444") == 1
 
 
 def test_same_span_id_in_two_traces_is_kept():
     """OTel scopes span-id uniqueness to a *trace*. Two traces reusing an id is legal, and
     dropping the second would be worse data loss than the duplicate the dedupe prevents."""
     with TestClient(app) as client:
-        before = len(client.get("/api/runs?limit=200").json())
         client.post("/v1/traces", json=_otlp(_identified("6666666666666666", tid="c" * 32)))
         client.post("/v1/traces", json=_otlp(_identified("6666666666666666", tid="d" * 32)))
-        assert len(client.get("/api/runs?limit=200").json()) == before + 2
+        # Both kept: the id is only unique *within* a trace.
+        assert _stored("c" * 32, "6666666666666666") == 1
+        assert _stored("d" * 32, "6666666666666666") == 1
 
 
 def test_same_span_id_in_two_projects_is_not_a_collision():

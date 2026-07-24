@@ -207,6 +207,12 @@ export interface ReviewQueue {
 }
 
 export interface Evaluator { name: string; category: string; description: string }
+// A rule a project defined, evaluated server-side (#48). Declarative, not uploaded code.
+export interface CustomScorer {
+  id: number; name: string; description: string; kind: string;
+  config: Record<string, any>; enabled: boolean; created_at: string;
+}
+export const SCORER_KINDS = ["contains", "not_contains", "equals", "regex", "json_path", "length_between"] as const;
 // Judge-vs-human calibration over stored feedback — real agreement/kappa, or a caution when
 // too few traces carry both a human label and a judge score to say anything honest.
 export interface Calibration {
@@ -389,6 +395,12 @@ export const api = {
   deleteExperiment: (id: number) => j(`/api/experiments/${id}`, { method: "DELETE" }),
 
   // ---- evaluators (scorer catalog) + automations ----
+  customScorers: () => j<CustomScorer[]>("/api/evaluators/custom"),
+  createCustomScorer: (body: { name: string; kind: string; config: Record<string, any>; description?: string }) =>
+    j<CustomScorer>("/api/evaluators/custom", { method: "POST", body: JSON.stringify(body) }),
+  tryCustomScorer: (id: number, output: string) =>
+    j<{ score: number | null; applies: boolean }>(`/api/evaluators/custom/${id}/try`, { method: "POST", body: JSON.stringify({ output }) }),
+  deleteCustomScorer: (id: number) => j(`/api/evaluators/custom/${id}`, { method: "DELETE" }),
   evaluators: () => j<Evaluator[]>("/api/evaluators"),
   automations: () => j<Automation[]>("/api/automation"),
   createAutomation: (a: AutomationIn) => j<Automation>("/api/automation", { method: "POST", body: JSON.stringify(a) }),

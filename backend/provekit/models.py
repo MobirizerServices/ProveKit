@@ -112,6 +112,35 @@ class UsageRecord(Base):
     )
 
 
+class CustomScorer(Base):
+    """A project-defined scorer, evaluated server-side (#48).
+
+    **Declarative, not code.** The obvious reading of "server-side custom scorers" is uploading a
+    Python function, and that is remote code execution wearing a feature's clothes — a sandbox
+    that is 95% right is a hole, and this codebase has no sandbox. So a custom scorer is a rule
+    built from a fixed set of primitives the server already knows how to evaluate. That gives the
+    thing the client-side scorers could not: it is stored per project, shared by everyone in it,
+    and usable by online eval, which runs on the server where no SDK is present.
+
+    Arbitrary Python scorers stay client-side, in `provekit.scorers`, on purpose — that is where
+    running untrusted code is the caller's own risk rather than the platform's.
+    """
+    __tablename__ = "custom_scorers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    #: Referenced by name wherever built-ins are, so a rule or experiment names it the same way.
+    name: Mapped[str] = mapped_column(String(80), default="")
+    description: Mapped[str] = mapped_column(String(300), default="")
+    kind: Mapped[str] = mapped_column(String(32), default="contains")
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_custom_scorer_name"),
+    )
+
+
 class ProjectInvite(Base):
     """An invitation to a project for someone who has no account yet (#73).
 

@@ -170,8 +170,11 @@ def test_impersonating_does_not_grant_operator_actions():
     try:
         admin, tenant = _client(), _client()
         email, pid = _tenant(tenant)
-        uid = next(u["id"] for u in admin.get("/api/admin/users").json()["users"]
-                   if u["email"] == email)
+        # Search by email rather than scanning the first page: /api/admin/users is paged, and
+        # once a suite has created enough accounts the target falls off page one — which fails
+        # here as a StopIteration that has nothing to do with impersonation.
+        found = admin.get("/api/admin/users", params={"q": email}).json()["users"]
+        uid = next(u["id"] for u in found if u["email"] == email)
 
         admin.post("/api/admin/impersonate", json={"workspace_id": pid, "reason": "ticket 9"})
         grant = admin.patch(f"/api/admin/users/{uid}", json={"is_superuser": True})

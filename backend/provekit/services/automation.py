@@ -123,12 +123,17 @@ def _score(db: Session, rule: AutomationRule, root: Run) -> bool:
     labels — an online score nobody can check is a number, not a signal.
     """
     from ..scorers import run_scorers
+    from . import custom_scorers
 
     out = (root.result or {}).get("text") or "" if isinstance(root.result, dict) else ""
     already = {f.name for f in db.query(Feedback)
                .filter(Feedback.trace_id == root.trace_id, Feedback.source == "eval").all()}
     wrote = False
-    for name, value in (run_scorers(rule.scorers or [], out, "") or {}).items():
+    # Custom scorers are the reason this resolution exists: online eval runs on the server,
+    # where there is no SDK to supply a Python scorer, so a project-defined rule is the only
+    # kind that can grade a live trace (#48).
+    resolved = custom_scorers.resolve(db, rule.workspace_id, rule.scorers or [])
+    for name, value in (run_scorers(resolved, out, "") or {}).items():
         if name in already:
             continue                       # don't re-score a trace a previous pass handled
         db.add(Feedback(workspace_id=rule.workspace_id, trace_id=root.trace_id, name=name,

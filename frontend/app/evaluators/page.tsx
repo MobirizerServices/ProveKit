@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, Calibration, Evaluator, Experiment } from "@/lib/api";
+import { api, Calibration, CustomScorer, Evaluator, Experiment, SCORER_KINDS } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
 
@@ -18,10 +18,41 @@ export default function EvaluatorsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [cal, setCal] = useState<Calibration | null>(null);
   const [sel, setSel] = useState<string | null>(null);
+  // Project-defined rules (#48) — declarative, so online eval can run them server-side.
+  const [custom, setCustom] = useState<CustomScorer[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", kind: "contains", value: "", description: "" });
+  const [tried, setTried] = useState<Record<number, string>>({});
+  const [err, setErr] = useState("");
 
   useEffect(() => { api.evaluators().then(setRows).catch(() => setRows([])); }, []);
   useEffect(() => { api.experiments().then(setExperiments).catch(() => {}); }, []);
   useEffect(() => { api.judgeCalibration().then(setCal).catch(() => setCal(null)); }, []);
+  const loadCustom = () => api.customScorers().then(setCustom).catch(() => setCustom([]));
+  useEffect(() => { loadCustom(); }, []);
+
+  const addCustom = async () => {
+    setErr("");
+    const cfg: Record<string, any> =
+      draft.kind === "regex" ? { pattern: draft.value }
+      : draft.kind === "json_path" ? { path: draft.value }
+      : draft.kind === "length_between" ? { min: 1, max: Number(draft.value) || 500 }
+      : { value: draft.value };
+    try {
+      await api.createCustomScorer({ name: draft.name.trim(), kind: draft.kind, config: cfg,
+                                     description: draft.description.trim() });
+      setAdding(false); setDraft({ name: "", kind: "contains", value: "", description: "" });
+      loadCustom();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
+  const trySample = async (r: CustomScorer) => {
+    const out = prompt(`Sample output to score against "${r.name}":`);
+    if (out == null) return;
+    try {
+      const v = await api.tryCustomScorer(r.id, out);
+      setTried((t) => ({ ...t, [r.id]: v.applies ? `scored ${v.score}` : "does not apply to that output" }));
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
 
   // Real per-scorer usage: which experiments referenced this scorer, and its mean across them.
   const usage = useMemo(() => {
@@ -54,6 +85,65 @@ export default function EvaluatorsPage() {
         <div className="evx">
           {/* LEFT — evaluator cards, grouped by what they measure */}
           <div className="evx-cards">
+            <div className="ev-group">
+              <div className="ev-cat" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                This project&apos;s rules
+                <button className="btn btn-sm btn-ghost" onClick={() => setAdding((a) => !a)}>
+                  {adding ? "Cancel" : "+ New rule"}</button>
+              </div>
+              {err && <div className="auth-err" style={{ marginBottom: 10 }}>{err}</div>}
+              <p className="muted" style={{ fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.55 }}>
+                Rules, not uploaded code — so they run server-side, which is the only way online
+                eval can grade a live trace. Python scorers stay client-side in{" "}
+                <code className="mono">provekit.scorers</code>.
+              </p>
+
+              {adding && (
+                <div className="pr-card" style={{ marginBottom: 12 }}>
+                  <div className="au-form">
+                    <label className="field"><span>Name</span>
+                      <input value={draft.name} placeholder="cites_policy"
+                        onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
+                    <label className="field"><span>Rule</span>
+                      <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
+                        {SCORER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                      </select></label>
+                    <label className="field">
+                      <span>{draft.kind === "regex" ? "Pattern" : draft.kind === "json_path" ? "Dotted path" : draft.kind === "length_between" ? "Max length" : "Value"}</span>
+                      <input value={draft.value}
+                        onChange={(e) => setDraft({ ...draft, value: e.target.value })} /></label>
+                  </div>
+                  <div className="pr-actions">
+                    <button className="btn btn-run btn-sm" disabled={!draft.name.trim() || !draft.value.trim()}
+                      onClick={addCustom}>Create rule</button>
+                  </div>
+                </div>
+              )}
+
+              {custom.length === 0 ? (
+                <p className="muted" style={{ fontSize: 12.5 }}>No project rules yet.</p>
+              ) : (
+                <div className="evx-grid">
+                  {custom.map((r) => (
+                    <div key={r.id} className="evx-card" style={{ cursor: "default" }}>
+                      <div className="evx-card-top">
+                        <span className="evx-icon">◇</span>
+                        <span className="evx-cat-badge">{r.kind}</span>
+                      </div>
+                      <code className="evx-name">{r.name}</code>
+                      <p className="evx-desc">{r.description || JSON.stringify(r.config)}</p>
+                      {tried[r.id] && <p className="evx-desc" style={{ color: "var(--accent)" }}>{tried[r.id]}</p>}
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => trySample(r)}>Try</button>
+                        <button className="btn btn-sm btn-ghost"
+                          onClick={async () => { await api.deleteCustomScorer(r.id); loadCustom(); }}>Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {rows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
               : groups.map(([cat, items]) => (
                 <div key={cat} className="ev-group">

@@ -86,7 +86,7 @@ export default function PlaygroundPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1220 }}>
         <PageHero eyebrow="Debugging" title="Playground"
-          sub="Run a model against an ad-hoc prompt using your own provider key. Load a saved prompt, or switch to Compare to run two models against the same messages." />
+          sub="Try a prompt without touching your code. Runs on your own provider key. Use Compare to send the same prompt to two models side by side." />
 
         <div className="pgx-tabs">
           <button className={`pgx-tab ${mode === "prompt" ? "on" : ""}`} onClick={() => setMode("prompt")}>Prompt</button>
@@ -107,8 +107,8 @@ export default function PlaygroundPage() {
 
         {conns.length === 0 && (
           <div style={{ marginBottom: 14 }}><Empty
-            what="The playground needs a model connection before it can run anything."
-            why="Runs go to your own provider on your own key — ProveKit never proxies them and never holds a key of its own, so there is nothing to run against until you add one."
+            what="Add a model connection before you can run anything here."
+            why="Your prompts go straight to your own provider on your own key. We never hold a key of our own, so there is nothing to run against until you add one."
             action={{ label: "Add a connection in Settings", href: "/settings" }}
           /></div>
         )}

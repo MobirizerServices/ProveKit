@@ -83,13 +83,13 @@ export default function SessionsPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1180 }}>
         <PageHero eyebrow="Observability" title="Sessions"
-          sub="Multi-turn conversations, grouped by the session id your agent reports. Each turn is a captured trace — open the transcript to read it, or jump to the spans." />
+          sub="Back-and-forth conversations, kept together. Each reply is its own run, grouped here so you can read the whole chat instead of one turn at a time." />
 
         {traces == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           : sessions.length === 0 ? (
             <Empty
-              what="A session groups the separate runs of one conversation."
-              why="Your traces are here already — they just aren't linked to each other. Only your code knows which runs belong to the same conversation, so it has to say so."
+              what="A session keeps one conversation together."
+              why="Your runs are already here, just not linked. Only your code knows which ones belong to the same chat, so it has to tell us."
               code={'import provekit.trace as pk\n\n@pk.trace(name="reply", session_id=conversation_id)\ndef reply(msg): ...'}
               action={{ label: "Look at your traces", href: "/traces" }}
             />

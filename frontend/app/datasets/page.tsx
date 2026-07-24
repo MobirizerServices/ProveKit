@@ -64,7 +64,7 @@ export default function DatasetsPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1180 }}>
         <PageHero eyebrow="Evaluation" title="Datasets"
-          sub="Collections of examples your evaluations run against. Seed them from real traces, split them for train/test, and score a version with pk.evaluate()." />
+          sub="A saved set of test examples. Use the same set every time you change something, and you can tell whether it got better. Build one from real runs, or add examples by hand." />
 
         <div className="dset">
           {/* LEFT — dataset registry */}
@@ -92,10 +92,10 @@ export default function DatasetsPage() {
             {sel == null ? (
               list.length === 0
                 ? <div style={{ padding: 20 }}><Empty
-                    what="A dataset is a fixed set of examples you score an agent against."
-                    why="Fixed is the point: the same examples every time is what makes two runs comparable, so a change can be shown to have helped rather than argued about."
+                    what="A dataset is a fixed set of test examples."
+                    why="Same examples every time. That is what lets you say a change helped, instead of arguing about it."
                     action={{ label: "Name one and press Add", onClick: () => nameRef.current?.focus() }}
-                    note="Or seed one from real traffic: open a trace → Add to dataset."
+                    note="Or build one from real traffic: open a run → Add to dataset."
                   /></div>
                 : <div className="muted au2-empty" style={{ padding: 40 }}>Select a dataset.</div>
             )

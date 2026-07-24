@@ -225,10 +225,11 @@ def calibrate(rows, *, pass_at: float = PASS_AT, judge_name: str = "", human_nam
         # label more. The rates are the part that would get quoted as a credibility claim, so
         # they are withheld rather than published with a disclaimer nobody carries forward.
         out["caution"] = (
-            f"{n} trace(s) carry both a human label and a judge score — fewer than "
-            f"{MIN_LABELLED_N}, so no agreement rate, kappa or verdict is reported. A "
-            f"calibration number from a handful of labels is worse than none: it gets quoted. "
-            f"Label more traces in the portal.")
+            f"Only {n} run{'' if n == 1 else 's'} {'has' if n == 1 else 'have'} been judged both "
+            f"ways — by you and by the scorer. We need at least {MIN_LABELLED_N} before the "
+            f"numbers mean anything. A score from a handful of examples looks solid and is not, "
+            f"and once someone quotes it the damage is done — so we show nothing instead. "
+            f"Judge a few more runs in the Review queue.")
         return out
 
     out["agreement"] = (a + d) / n

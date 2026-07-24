@@ -2481,3 +2481,12 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 .wf-legend b { font-weight: 600; color: var(--text-dim); font-size: 10px; letter-spacing: .04em; }
 .wf-legend-fail { color: var(--red); opacity: .85; }
 @media (max-width: 900px) { .wf-legend { display: none; } }   /* no room; the badges still read */
+
+/* One line under each Overview metric saying what it means. The label stays — "P95 latency" is
+   the term every other tool uses and someone will need to recognise it — but the meaning sits
+   right under it, so nobody has to already know it to read their own dashboard. */
+.ov-tile-hint { margin-top: 2px; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+/* One plain sentence above the calibration numbers. Kappa, agreement rate and a confusion
+   matrix are all precise and all opaque; the panel now says what question they answer before
+   showing the answer. */
+.evx-cal-intro { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--muted); }

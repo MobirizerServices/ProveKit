@@ -103,7 +103,7 @@ export default function SettingsPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1080 }}>
         <PageHero eyebrow="Workspace" title="Settings"
-          sub="Every project is an isolated workspace with its own keys, traces, datasets, and members. Owners control retention, privacy, and access."
+          sub="Each project is kept separate — its own keys, runs, datasets and people. Owners decide how long data is kept, what is hidden, and who can see it."
           status={current ? `${current.name} · ${current.role}${current.is_default ? " · default" : ""}` : undefined} />
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}

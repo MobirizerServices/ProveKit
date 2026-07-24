@@ -79,7 +79,7 @@ export default function AutomationsPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1120 }}>
         <PageHero eyebrow="Control" title="Automations"
-          sub="Turn matching production traces into dataset items automatically — so a real failure becomes a regression test without anyone lifting it by hand."
+          sub="Rules that watch your live traffic and act on it. Turn every failed run into a test example automatically, so nobody has to remember to do it."
           actions={<button className="btn-hero solid" onClick={startCreate}>+ New rule</button>} />
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
@@ -141,10 +141,10 @@ export default function AutomationsPage() {
             ) : !current ? (
               rows && rows.length === 0 ? (
                 <div style={{ padding: 20 }}><Empty
-                  what="An automation watches live traffic and acts on the runs that match."
-                  why="It is how production feeds back into evaluation: promote every failed run into a dataset, or score a sample of real traffic, without anyone remembering to do it."
+                  what="An automation watches your live traffic and acts on runs that match."
+                  why="Save every failed run as a test example, or score a sample of real traffic — automatically, without anyone remembering."
                   action={{ label: "+ New rule", onClick: () => setCreating(true) }}
-                  note="A new rule only acts on traffic from the moment you create it — it will not sweep your history."
+                  note="A new rule only affects traffic from now on. It will not go back over your old runs."
                 /></div>
               ) : (
                 <div className="muted au2-empty" style={{ padding: 40 }}>Select a rule, or create one to route traces into a dataset.</div>

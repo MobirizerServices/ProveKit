@@ -70,28 +70,28 @@ export default function GettingStarted({ traceCount }: { traceCount: number | nu
       state: hasKey ? "done" : "todo",
       title: "Create a project key",
       detail: live.length > 0
-        ? `${live.length} active key${live.length === 1 ? "" : "s"}.`
+        ? `${live.length} key${live.length === 1 ? "" : "s"} ready to use.`
         : hasTraces
-          ? "A trace has arrived, so a working key exists."
-          : "The SDK authenticates with it. Nothing can arrive until one exists.",
+          ? "A run arrived, so your key works."
+          : "Your code needs this key to send anything here.",
       action: hasKey ? undefined : { label: "Project keys", href: "/api-keys" },
     },
     {
       state: hasTraces ? "done" : "todo",
-      title: "Send your first trace",
+      title: "Send your first run",
       detail: hasTraces
-        ? `${traceCount} trace${traceCount === 1 ? "" : "s"} captured.`
+        ? `${traceCount} run${traceCount === 1 ? "" : "s"} recorded.`
         : hasKey && !keyUsed
-          ? "Your key has never reached this server, so the SDK hasn't connected yet — check PROVEKIT_ENDPOINT, or run provekit doctor."
-          : "Two environment variables and one decorator. Every model call underneath is captured for you.",
-      action: hasTraces ? undefined : { label: "How to instrument", href: "/traces" },
+          ? "Your key has not reached us yet. Check PROVEKIT_ENDPOINT, or run: provekit doctor"
+          : "Add two settings and one line to your agent. Every model call gets recorded for you.",
+      action: hasTraces ? undefined : { label: "Show me how", href: "/traces" },
     },
     {
       state: scored ? "done" : "todo",
-      title: "Score a run",
+      title: "Check if it is any good",
       detail: scored
         ? "You have something to compare against."
-        : "Tracing shows what happened. A dataset is what lets you prove a change made it better.",
+        : "Traces show what happened. Scoring shows whether your changes made it better.",
       action: scored ? undefined : { label: "Datasets", href: "/datasets" },
     },
   ];
@@ -121,10 +121,10 @@ export default function GettingStarted({ traceCount }: { traceCount: number | nu
       {!hasTraces && hasKey && (
         <pre className="gs-code mono">{`pip install "provekit[trace]"
 
-export PROVEKIT_API_KEY=agm_...        # from Project keys
+export PROVEKIT_API_KEY=pk_...         # copy it from Project keys
 export PROVEKIT_ENDPOINT=${typeof window === "undefined" ? "" : window.location.origin}
 
-import provekit.auto                   # one import — captures everything below it`}</pre>
+import provekit.auto                   # that is it — your model calls are now recorded`}</pre>
       )}
     </section>
   );

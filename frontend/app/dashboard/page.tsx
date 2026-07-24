@@ -42,7 +42,7 @@ export default function DashboardPage() {
         <section className="ov-hero">
           <div className="ov-hero-in">
             <div>
-              <div className="ov-eyebrow"><i />Production workspace</div>
+              <div className="ov-eyebrow"><i />{WINDOWS.find((w) => w.hours === hours)?.label ?? ""} · your project</div>
               <h1>{greeting()}{me?.name ? `, ${me.name.split(" ")[0]}` : ""}.</h1>
               <p>{healthLine(m)}</p>
             </div>
@@ -69,13 +69,16 @@ export default function DashboardPage() {
           <>
             {/* ── stat tiles with real deltas + sparklines ── */}
             <div className="ov-tiles">
-              <Tile label="Total traces" icon="◇" value={m.trace_count.toLocaleString()}
+              <Tile label="Total traces" icon="◇" hint="One trace = one run of your agent"
+                value={m.trace_count.toLocaleString()}
                 delta={deltaOf(m.series, "count")} series={m.series.map((b) => b.count)} tone="var(--blue)" />
-              <Tile label="Error rate" icon="⚠" value={`${(m.error_rate * 100).toFixed(2)}%`}
+              <Tile label="Error rate" icon="⚠" hint="Runs that ended in a failure"
+                value={`${(m.error_rate * 100).toFixed(2)}%`}
                 delta={deltaOf(m.series, "errors")} deltaGoodDown series={m.series.map((b) => b.errors)} tone="var(--red)" />
-              <Tile label="P95 latency" icon="◷" value={fmtMs(m.latency_p95_ms)}
+              <Tile label="P95 latency" icon="◷" hint="9 out of 10 runs were faster than this"
+                value={fmtMs(m.latency_p95_ms)}
                 delta={deltaOf(m.series, "p95")} deltaGoodDown series={m.series.map((b) => b.p95 || 0)} tone="var(--amber)" />
-              <Tile label="Total cost" icon="$" value={cost || "—"}
+              <Tile label="Total cost" icon="$" hint="What these runs cost you" value={cost || "—"}
                 series={m.series.map((b) => costOfBucket(b).cost)} tone="var(--green)"
                 note={partial ? `${covPct}% of calls reported usage` : undefined} />
             </div>
@@ -168,12 +171,15 @@ function greeting(): string {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
+// Plain sentences, and each one says what to do next or that there is nothing to do.
+// The old copy read "No reliability signals need attention", which is six words for "nothing
+// broke" and leaves a reader translating rather than reading.
 function healthLine(m: Metrics | null): string {
-  if (!m) return "Loading your reliability signals…";
-  if (m.trace_count === 0) return "No traces yet — instrument an agent to start capturing evidence.";
-  const fails = (m.recent_failures ?? []).length + (m.error_count || 0);
-  if (fails === 0) return "Your agents are healthy. No reliability signals need attention.";
-  return `Your agents are running. ${m.error_count} error${m.error_count === 1 ? "" : "s"} in this window need${m.error_count === 1 ? "s" : ""} a look.`;
+  if (!m) return "Loading…";
+  if (m.trace_count === 0) return "No runs yet. Connect your agent and they will show up here.";
+  const errs = m.error_count || 0;
+  if (errs === 0) return "Nothing failed. All your runs finished successfully.";
+  return `${errs} run${errs === 1 ? "" : "s"} failed. Open Traces to see what went wrong.`;
 }
 // A real "vs previous period": compare the recent half of the series to the older half.
 // One fetch, real data — no invented baseline.
@@ -189,9 +195,9 @@ function deltaOf(series: Metrics["series"], key: "count" | "errors" | "p95"): nu
   return ((b - a) / a) * 100;
 }
 
-function Tile({ label, icon, value, delta, deltaGoodDown, series, tone, note }: {
+function Tile({ label, icon, value, delta, deltaGoodDown, series, tone, note, hint }: {
   label: string; icon: string; value: string; delta?: number | null; deltaGoodDown?: boolean;
-  series: number[]; tone: string; note?: string;
+  series: number[]; tone: string; note?: string; hint?: string;
 }) {
   const good = delta == null ? null : (deltaGoodDown ? delta <= 0 : delta >= 0);
   return (
@@ -201,6 +207,7 @@ function Tile({ label, icon, value, delta, deltaGoodDown, series, tone, note }: 
         <span className="ov-tile-label">{label}</span>
       </div>
       <div className="ov-tile-val">{value}</div>
+      {hint && <div className="ov-tile-hint">{hint}</div>}
       <div className="ov-tile-foot">
         {delta != null && (
           <span className={`ov-delta ${good ? "up" : "down"}`}>

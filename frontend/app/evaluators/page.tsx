@@ -79,8 +79,9 @@ export default function EvaluatorsPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1220 }}>
         <PageHero eyebrow="Quality" title="Evaluators"
-          sub={<>The scorers an experiment or automation can run. Reference one by name in{" "}
-            <code className="mono">pk.evaluate(scorers=[…])</code> or attach it to an automation.</>} />
+          sub={<>The checks that grade your agent&apos;s answers. Each one looks at an answer and
+            gives it a score. Pick them by name in{" "}
+            <code className="mono">pk.evaluate(scorers=[…])</code>, or attach one to an automation.</>} />
 
         <div className="evx">
           {/* LEFT — evaluator cards, grouped by what they measure */}
@@ -93,9 +94,10 @@ export default function EvaluatorsPage() {
               </div>
               {err && <div className="auth-err" style={{ marginBottom: 10 }}>{err}</div>}
               <p className="muted" style={{ fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.55 }}>
-                Rules, not uploaded code — so they run server-side, which is the only way online
-                eval can grade a live trace. Python scorers stay client-side in{" "}
-                <code className="mono">provekit.scorers</code>.
+                These are rules you fill in, not code you upload — so they can run here on the
+                server, which is the only way live traffic can be scored automatically. Need real
+                code? Write a Python scorer with{" "}
+                <code className="mono">provekit.scorers</code> and run it from your own machine.
               </p>
 
               {adding && (
@@ -174,11 +176,13 @@ export default function EvaluatorsPage() {
           {/* RIGHT — real judge calibration */}
           <aside className="evx-cal">
             <div className="evx-cal-head">Judge calibration</div>
+            <p className="evx-cal-intro">Does the automatic scoring agree with you? We compare
+              runs you judged by hand against what the scorer said about the same run.</p>
             {cal == null ? <div className="muted au2-empty">Loading…</div>
               : !cal.sufficient ? (
                 <div className="evx-cal-body">
                   <AgreementDonut kappa={null} agreement={null} />
-                  <div className="evx-cal-verdict warn">Not enough labelled traces</div>
+                  <div className="evx-cal-verdict warn">Not enough judged yet</div>
                   <p className="evx-cal-note">{cal.caution || `${cal.n} trace(s) carry both a human label and a judge score — need at least ${cal.min_n}. Add human thumbs on the Traces page to calibrate.`}</p>
                   <Coverage cal={cal} />
                 </div>
@@ -190,11 +194,11 @@ export default function EvaluatorsPage() {
                   </div>
                   <div className="evx-cal-rates">
                     <div><span>Agreement</span><b>{cal.agreement != null ? `${Math.round(cal.agreement * 100)}%` : "—"}</b></div>
-                    <div><span>Cohen's κ</span><b>{cal.kappa != null ? cal.kappa.toFixed(2) : "—"}</b></div>
-                    <div><span>False pass</span><b>{cal.false_pass_rate != null ? `${Math.round(cal.false_pass_rate * 100)}%` : "—"}</b></div>
-                    <div><span>False fail</span><b>{cal.false_fail_rate != null ? `${Math.round(cal.false_fail_rate * 100)}%` : "—"}</b></div>
+                    <div><span title="Cohen's kappa: agreement after removing the part you'd expect by luck. Above 0.6 is good, below 0.4 is weak.">Agreement score</span><b>{cal.kappa != null ? cal.kappa.toFixed(2) : "—"}</b></div>
+                    <div><span>It passed, you said no</span><b>{cal.false_pass_rate != null ? `${Math.round(cal.false_pass_rate * 100)}%` : "—"}</b></div>
+                    <div><span>It failed, you said yes</span><b>{cal.false_fail_rate != null ? `${Math.round(cal.false_fail_rate * 100)}%` : "—"}</b></div>
                   </div>
-                  <div className="evx-cal-label">Confusion (human × judge)</div>
+                  <div className="evx-cal-label">Where you agreed and disagreed</div>
                   <div className="evx-confusion">
                     <div className="evx-cm ok"><span>both pass</span><b>{cal.confusion.both_pass}</b></div>
                     <div className="evx-cm bad"><span>human pass · judge fail</span><b>{cal.confusion.human_pass_judge_fail}</b></div>

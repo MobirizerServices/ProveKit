@@ -74,9 +74,10 @@ export default function PromptsPage() {
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
           <PageHero eyebrow="Control" title="Prompt registry"
-            sub={<>Version, label, compare and roll back prompts without a deploy. Your app fetches
-              by label — <code className="mono">GET /v1/prompts/&#123;name&#125;?label=production</code> —
-              so moving the pointer here changes what production runs.</>} />
+            sub={<>Change a prompt without shipping new code. Save versions here, mark one as
+              &quot;production&quot;, and your app picks it up on its next call —{" "}
+              <code className="mono">GET /v1/prompts/&#123;name&#125;?label=production</code>. Move the
+              label, and what your users get changes.</>} />
 
           {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
 
@@ -84,10 +85,10 @@ export default function PromptsPage() {
             <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           ) : names.length === 0 ? (
             <Empty
-              what="Saved prompts are versioned here, and fetched by your code at runtime."
-              why="That is what lets you change a prompt without a deploy, and A/B two versions against live traffic. Prompts are saved from a real run rather than typed here, so the version you ship is one you have already seen work."
+              what="Your prompts live here, and your code reads them from here."
+              why="That is how you change a prompt without shipping code, and test two versions on live traffic. You save them from a real run, so you have already seen the prompt work before it goes live."
               action={{ label: "Open a trace to save one", href: "/traces" }}
-              note="In a trace: click an LLM node → ▶ Edit & re-run → 💾 Save version."
+              note="Open a run → click an LLM step → ▶ Edit & re-run → 💾 Save version."
             />
           ) : (
             <div className="reg-grid">

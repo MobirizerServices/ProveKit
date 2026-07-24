@@ -109,7 +109,7 @@ export default function ReplayPage() {
       <div className="page">
         <div className="page-inner" style={{ maxWidth: 1180 }}>
           <PageHero eyebrow="Debugging" title="Replay workspace"
-            sub="Replace the prompt or model, preserve the recorded tool responses, and see precisely where execution diverges." />
+            sub="Re-run a past run with a different prompt or model. Everything else stays the same as the original, so you can see exactly where the two runs split apart." />
 
           {/* ---------------- pick an origin ---------------- */}
           <div className="rp-bar">

@@ -71,7 +71,7 @@ export default function ExperimentsPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1320 }}>
         <PageHero eyebrow="Controlled comparison" title="Experiments"
-          sub="Compare every prompt, model, and retrieval change against trusted evidence."
+          sub="Changed a prompt or a model? Run both versions over the same examples and see which one did better — with numbers, not a feeling."
           actions={
             <select className="reg-sel" value={filter}
               onChange={(e) => { setFilter(e.target.value === "" ? "" : Number(e.target.value)); setSel(null); }}>
@@ -85,10 +85,10 @@ export default function ExperimentsPage() {
           <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
         ) : list.length === 0 ? (
           <Empty
-            what="An experiment is one scored run of your agent over a dataset."
-            why="Two of them side by side is how you tell whether a prompt or model change actually helped, instead of guessing from a handful of examples."
+            what="An experiment is one scored run of your agent over a set of test examples."
+            why="Run two and compare them. That is how you know a change helped, instead of guessing."
             action={{ label: "Create a dataset first", href: "/datasets" }}
-            note="Once a dataset exists, pk.evaluate(dataset, target) records an experiment here."
+            note="You need a dataset first. Then pk.evaluate(dataset, target) puts the results here."
           />
         ) : (
           <div className="xp2">

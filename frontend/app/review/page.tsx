@@ -55,18 +55,18 @@ export default function ReviewPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1080 }}>
         <PageHero eyebrow="Quality" title="Review queue"
-          sub="Traces worth a person's judgement, ordered by what they'd teach. A judge-scored run that nobody has labelled becomes a calibration pair the moment you rule on it."
+          sub="Runs where your opinion is worth having. Mark each one good or bad. Once about 20 are marked, we can tell you how closely the automatic scoring agrees with you."
           actions={<button className="btn-hero" onClick={load}>Refresh</button>} />
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
 
         {s && (
           <div className="ses-stats" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-            <Tile label="Awaiting review" value={String(s.awaiting)} sub={s.scanned >= s.scan_limit ? `newest ${s.scan_limit} scanned` : "unlabelled runs"} />
-            <Tile label="You've labelled" value={String(s.human_labelled)} sub="human verdicts stored" />
-            <Tile label="Calibration pairs" value={String(s.paired)} sub={`judge + human on the same run`} tone={s.paired >= s.min_pairs ? "ok" : "warn"} />
-            <Tile label="Pairs still needed" value={String(s.pairs_needed)}
-              sub={s.pairs_needed === 0 ? `past the ${s.min_pairs} minimum` : `before kappa is reported`}
+            <Tile label="Waiting for you" value={String(s.awaiting)} sub={s.scanned >= s.scan_limit ? `newest ${s.scan_limit} checked` : "runs nobody has judged yet"} />
+            <Tile label="You've judged" value={String(s.human_labelled)} sub="your verdicts so far" />
+            <Tile label="Judged by both" value={String(s.paired)} sub="you and the auto-scorer, same run" tone={s.paired >= s.min_pairs ? "ok" : "warn"} />
+            <Tile label="Still needed" value={String(s.pairs_needed)}
+              sub={s.pairs_needed === 0 ? `past the ${s.min_pairs} we need` : "before we can measure agreement"}
               tone={s.pairs_needed === 0 ? "ok" : "warn"} />
           </div>
         )}

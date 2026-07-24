@@ -168,8 +168,8 @@ export default function FlowsPage() {
               <div className="page-eyebrow">Visual builder</div>
               <h1>Agent Flows</h1>
               <p className="muted" style={{ fontSize: 13.5, margin: "6px 0 0" }}>
-                Compose agents, models, logic and approvals on a canvas, then test-run them with
-                trace evidence attached.
+                Build an agent by dragging steps onto a canvas — models, logic, approvals — then
+                test-run it. Every test is recorded like a normal run.
               </p>
             </div>
             <button className="btn btn-run" onClick={create}>+ New flow</button>
@@ -177,8 +177,8 @@ export default function FlowsPage() {
           {flows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
             : flows.length === 0 ? (
               <Empty
-                what="A flow composes agents, models and logic on a canvas."
-                why="Nothing here yet. A test-run of a flow is captured as a normal trace, so you debug it with the same tools as the rest of your agent."
+                what="Build an agent by dragging steps onto a canvas."
+                why="Test-runs are recorded like any other run, so you debug a flow with the same tools you already use."
                 action={{ label: "+ New flow", onClick: create }}
               />
             ) : (

@@ -192,7 +192,7 @@ export default function TracesPage() {
     <ConsoleShell>
       <main style={{ maxWidth: sel ? 1600 : 1180, margin: "0 auto", padding: "24px 20px 80px", transition: "max-width .2s" }}>
         <PageHero eyebrow="Observability" title="Trace explorer"
-          sub="Every run your agent makes, captured from one decorator — the whole flow of model calls, tools, and steps, nested as it actually ran."
+          sub="Every run your agent makes. Add one line to your code and every model call, tool and step inside it is recorded — in the order it actually happened."
           actions={shown.length > 0 &&
             <button className="btn-hero" onClick={tour.start} title="Replay the walkthrough">✦ Tour</button>} />
 

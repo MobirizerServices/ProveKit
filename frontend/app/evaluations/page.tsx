@@ -56,15 +56,15 @@ export default function EvaluationsPage() {
     <ConsoleShell>
       <div className="cs-page" style={{ maxWidth: 1160 }}>
         <PageHero eyebrow="Quality" title="Evaluations"
-          sub="Every scored run across your datasets — the quality signal over time, the runs that need a look, and which scorers cover your evals." />
+          sub="All your scores in one place. Is quality going up or down over time, which runs need a look, and what is being checked." />
 
         {rows == null ? <div className="muted" style={{ fontSize: 13 }}>Loading…</div>
           : scored.length === 0 ? (
             <Empty
-              what="Evaluations are the scores your experiments produced, over time."
-              why="Experiments compare two runs. This page is the longer view: is quality drifting, which runs need a look, and which scorers are actually covering your evals."
+              what="This is where your scores collect over time."
+              why="Experiments compare two runs. This page shows the longer story — is quality slipping, and which runs need a look."
               action={{ label: "See your experiments", href: "/experiments" }}
-              note="Nothing scores automatically — a result lands here when an experiment runs."
+              note="Nothing is scored on its own. Run an experiment and the results appear here."
             />
           ) : (
             <>

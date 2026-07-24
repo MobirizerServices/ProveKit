@@ -50,6 +50,11 @@ export interface Usage {
   playground_usd: { limit: number | null }; approximate: boolean;
 }
 export interface Member { user_id: number; email: string; name: string; role: string; }
+// An invitation to someone who has no account yet (#73): visible, expiring, revocable.
+export interface Invite {
+  invite_id: number; email: string; role: string; invited_by: string;
+  status: "pending" | "expired" | "accepted"; expires_at: string | null; created_at: string;
+}
 export interface AdminStats { users: number; projects: number; members: number; spans: number; traces: number; datasets: number; experiments: number; }
 export interface AdminUser { id: number; email: string; name: string; auth_provider: string; is_superuser: boolean; is_bootstrap: boolean; project_count: number; created_at: string; }
 export interface AuditEntry {
@@ -401,6 +406,9 @@ export const api = {
   createProject: (name: string) => j<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),
   renameProject: (id: number, name: string) => j<{ id: number; name: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   updateProject: (id: number, patch: { name?: string; retention?: number; redact_pii?: boolean; replay_url?: string }) => j<{ id: number; name: string; retention: number; redact_pii: boolean; replay_url: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  invites: (id: number) => j<Invite[]>(`/api/projects/${id}/invites`),
+  revokeInvite: (pid: number, inviteId: number) =>
+    j(`/api/projects/${pid}/invites/${inviteId}`, { method: "DELETE" }),
   suspendProject: (id: number, suspended: boolean, reason = "") =>
     j<{ id: number; name: string; suspended_at: string | null; suspended_reason: string }>(
       `/api/projects/${id}/suspend`, { method: "POST", body: JSON.stringify({ suspended, reason }) }),

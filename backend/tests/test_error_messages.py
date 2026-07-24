@@ -202,7 +202,9 @@ def test_membership_errors_each_name_the_next_step():
     pid = owner.post("/api/projects", json={"name": "Errors"}).json()["id"]
 
     r = owner.post(f"/api/projects/{pid}/members", json={"email": "nobody@nowhere.test"})
-    assert r.status_code == 404 and "sign up" in _detail(r)
+    # Inviting an address with no account is no longer a dead end: it records a pending
+    # invitation (#73), which is the state the owner actually wanted to see.
+    assert r.status_code == 200 and r.json()["status"] == "pending"
 
     assert owner.post(f"/api/projects/{pid}/members", json={"email": other_email}).status_code == 200
     r = owner.post(f"/api/projects/{pid}/members", json={"email": other_email})

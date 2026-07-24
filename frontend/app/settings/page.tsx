@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, getProjectId, Member, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
+import { api, getProjectId, Invite, Member, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
 import ModelConnections from "@/components/ModelConnections";
@@ -24,6 +24,7 @@ export default function SettingsPage() {
   const [sel, setSel] = useState<number | null>(null);
   const [section, setSection] = useState<SectionKey>("general");
   const [members, setMembers] = useState<Member[]>([]);
+  const [pending, setPending] = useState<Invite[]>([]);
   const [newProj, setNewProj] = useState("");
   const [rename, setRename] = useState("");
   const [invite, setInvite] = useState("");
@@ -44,6 +45,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (sel == null) { setMembers([]); return; }
     api.members(sel).then(setMembers).catch(() => setMembers([]));
+    api.invites(sel).then(setPending).catch(() => setPending([]));
     const p = projects.find((x) => x.id === sel);
     setRename(p?.name || "");
     setRetention(p?.retention ?? 0);
@@ -81,7 +83,18 @@ export default function SettingsPage() {
       setSel(null); load();
     }
   });
-  const addMember = () => wrap(async () => { if (sel && invite.trim()) { await api.addMember(sel, invite.trim()); setInvite(""); api.members(sel).then(setMembers); } });
+  const addMember = () => wrap(async () => {
+    if (!sel || !invite.trim()) return;
+    await api.addMember(sel, invite.trim());
+    setInvite("");
+    api.members(sel).then(setMembers).catch(() => {});
+    api.invites(sel).then(setPending).catch(() => {});
+  });
+  const revoke = (id: number) => wrap(async () => {
+    if (!sel) return;
+    await api.revokeInvite(sel, id);
+    api.invites(sel).then(setPending).catch(() => {});
+  });
   const removeMember = (uid: number) => wrap(async () => { if (sel) { await api.removeMember(sel, uid); api.members(sel).then(setMembers); } });
 
   return (
@@ -207,7 +220,7 @@ export default function SettingsPage() {
                     <h2 className="set2-h">Members & roles</h2>
                     {isOwner && (
                       <div className="set2-row" style={{ marginBottom: 14 }}>
-                        <input value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="teammate@company.com"
+                        <input value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="teammate@company.com — invites them if they have no account yet"
                           onKeyDown={(e) => e.key === "Enter" && addMember()} />
                         <button className="btn btn-sm" onClick={addMember}>Invite</button>
                       </div>
@@ -224,6 +237,27 @@ export default function SettingsPage() {
                       ))}
                       {members.length === 0 && <div className="muted" style={{ fontSize: 13, padding: "8px 2px" }}>No members yet.</div>}
                     </div>
+
+                    {pending.length > 0 && (
+                      <>
+                        <div className="set2-h" style={{ fontSize: 13, margin: "20px 0 8px" }}>Pending invitations</div>
+                        <div className="set2-members">
+                          {pending.map((i) => (
+                            <div key={i.invite_id} className="set2-member">
+                              <div>
+                                <span className="set2-member-name">{i.email}</span>
+                                <span className="set2-member-meta">
+                                  {i.role} · <span className={`inv-${i.status}`}>{i.status}</span>
+                                  {i.expires_at ? ` · ${i.status === "expired" ? "expired" : "expires"} ${new Date(i.expires_at).toLocaleDateString()}` : ""}
+                                </span>
+                              </div>
+                              {isOwner && <button className="btn btn-sm btn-ghost" onClick={() => revoke(i.invite_id)}>Revoke</button>}
+                            </div>
+                          ))}
+                        </div>
+                        <p className="set2-help">They join automatically when they sign up with that address.</p>
+                      </>
+                    )}
                   </>
                 )}
 

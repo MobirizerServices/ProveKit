@@ -9,8 +9,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Run, User, Workspace, WorkspaceMember, _now, iso_utc
-from ..services import audit, errors, limits, roles, tenant
+from ..models import ProjectInvite, Run, User, Workspace, WorkspaceMember, _now, iso_utc
+from ..services import audit, errors, invites, limits, roles, tenant
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
 
@@ -180,13 +180,46 @@ def list_members(pid: int, user: User = Depends(get_current_user), db: Session =
     return [{"user_id": u.id, "email": u.email, "name": u.name, "role": m.role} for m, u in rows]
 
 
+@router.get("/{pid}/invites")
+def list_invites(pid: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Outstanding invitations, with whether each is still good (#73)."""
+    _require_owner(db, pid, user)
+    return [{"invite_id": i.id, "email": i.email, "role": i.role,
+             "invited_by": i.invited_by_email, "status": invites.status_of(i),
+             "expires_at": iso_utc(i.expires_at), "created_at": iso_utc(i.created_at)}
+            for i in invites.pending_for(db, pid)]
+
+
+@router.delete("/{pid}/invites/{invite_id}")
+def revoke_invite(pid: int, invite_id: int, request: Request,
+                  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _require_owner(db, pid, user)
+    inv = db.get(ProjectInvite, invite_id)
+    if not inv or inv.workspace_id != pid:
+        raise HTTPException(404, errors.not_in_project("invitation", f"GET /api/projects/{pid}/invites"))
+    email = inv.email
+    db.delete(inv); db.commit()
+    audit.record(db, user, audit.MEMBER_REMOVE, workspace_id=pid, target_type="invite",
+                 target_id=invite_id, target_label=email, detail={"revoked": True}, request=request)
+    return {"ok": True}
+
+
 @router.post("/{pid}/members")
 def add_member(pid: int, data: _MemberIn, request: Request,
                user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _require_owner(db, pid, user)
+    ws = _require_owner(db, pid, user)
     target = db.query(User).filter(func.lower(User.email) == data.email.strip().lower()).first()
     if not target:
-        raise HTTPException(404, errors.NO_SUCH_ACCOUNT)
+        # No account yet: record a pending invitation instead of a dead end (#73). The owner
+        # gets something to look at, and the membership is granted when the address registers.
+        inv = invites.create(db, ws, data.email, data.role, invited_by=user.email,
+                             origin=str(request.base_url).rstrip("/"))
+        audit.record(db, user, audit.MEMBER_ADD, workspace_id=pid, target_type="invite",
+                     target_id=inv.id, target_label=inv.email,
+                     detail={"role": inv.role, "pending": True}, request=request)
+        return {"user_id": None, "email": inv.email, "name": "", "role": inv.role,
+                "status": invites.status_of(inv), "expires_at": iso_utc(inv.expires_at),
+                "invite_id": inv.id}
     if is_member(db, pid, target.id):
         raise HTTPException(409, errors.ALREADY_MEMBER)
     # Anything unrecognised becomes viewer, not member. If a caller sends a role we don't

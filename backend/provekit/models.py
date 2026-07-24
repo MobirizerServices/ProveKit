@@ -76,6 +76,29 @@ class WorkspaceMember(Base):
     __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_member"),)
 
 
+class ProjectInvite(Base):
+    """An invitation to a project for someone who has no account yet (#73).
+
+    Membership needs a `users` row, so inviting a colleague used to be a 404 until they had
+    signed up — leaving the owner with nothing to look at and no way to tell whether the person
+    had been asked. An invite is that missing state: visible, expiring, and revocable, consumed
+    the moment the address registers.
+    """
+    __tablename__ = "project_invites"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="member")
+    invited_by_email: Mapped[str] = mapped_column(String(255), default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    __table_args__ = (
+        Index("ix_project_invites_ws_email", "workspace_id", "email"),
+    )
+
+
 class ApiKey(Base):
     """A named, revocable project key (a pk_ bearer key) for shipping traces.
 

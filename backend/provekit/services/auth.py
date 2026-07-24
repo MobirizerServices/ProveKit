@@ -11,6 +11,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import time
 
 from fastapi import Depends, HTTPException, Request
@@ -20,6 +21,8 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import User
+
+log = logging.getLogger("provekit.auth")
 
 COOKIE = "agm_session"
 _TTL = 30 * 24 * 3600
@@ -107,7 +110,16 @@ def new_account_setup(db: Session, user: User) -> None:
 
     Kept as the account-creation hook (three call sites depend on it) and deliberately silent:
     nothing done here is worth failing a signup for.
+
+    Today that is one thing: joining the projects that invited this address before it had an
+    account (#73). Best-effort — an invite that fails to apply must not cost someone their
+    signup, and the invitation stays pending for the owner to see.
     """
+    from .invites import consume_for
+    try:
+        consume_for(db, user)
+    except Exception:                     # noqa: BLE001 — see docstring
+        log.exception("invite consumption failed for user %s", getattr(user, "id", "?"))
     return None
 
 

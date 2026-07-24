@@ -68,8 +68,10 @@ def test_members_add_list_remove():
 def test_guards():
     owner = _client()
     p = owner.post("/api/projects", json={"name": "Guarded"}).json()
-    # unknown email → 404
-    assert owner.post(f"/api/projects/{p['id']}/members", json={"email": "nobody@ex.com"}).status_code == 404
+    # An unknown email is now an invitation rather than a 404 (#73): the person can be asked
+    # before they have an account, and the owner can see and revoke it.
+    inv = owner.post(f"/api/projects/{p['id']}/members", json={"email": "nobody@ex.com"})
+    assert inv.status_code == 200 and inv.json()["status"] == "pending"
     # a different (registered) user is not a member → project is hidden (404) on mutate
     stranger = _client()
     _register(stranger)

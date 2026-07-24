@@ -96,9 +96,6 @@ OWNER_ONLY = ("Only a project owner can change project settings or membership. "
               "GET /api/projects/{pid}/members lists the owners — ask one of them to make the change, "
               "or to give you the owner role.")
 
-NO_SUCH_ACCOUNT = ("No ProveKit account uses that email. Members are added to a project by account, not "
-                   "invited by email, so ask them to sign up with this exact address first — then add "
-                   "them again.")
 
 # There is no role-change endpoint on this router, so "remove and re-add" is the honest fix
 # rather than a pointer to a PATCH that doesn't exist.

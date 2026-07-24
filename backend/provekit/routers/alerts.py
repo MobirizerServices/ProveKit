@@ -16,8 +16,16 @@ from .metrics import compute_metrics
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
-# Metrics an alert may watch (must be numeric keys of compute_metrics()).
-_METRICS = {"error_rate", "latency_p50_ms", "latency_p95_ms", "trace_count", "total_tokens", "error_count"}
+# Metrics an alert may watch. Volume and speed come from compute_metrics(); quality comes from
+# _quality_metrics() below, which is computed only when a rule actually watches it.
+_VOLUME_METRICS = {"error_rate", "latency_p50_ms", "latency_p95_ms", "trace_count",
+                   "total_tokens", "error_count"}
+# Quality (#49). Everything above answers "is it up and fast" — nothing answered "is it still
+# any good", which is the question an eval stack exists to ask. `judge_kappa` is the one that
+# matters: a judge drifting out of agreement with humans silently invalidates every online
+# score downstream of it, and nothing else in the product would notice.
+_QUALITY_METRICS = {"judge_kappa", "judge_agreement", "eval_mean_score", "human_mean_score"}
+_METRICS = _VOLUME_METRICS | _QUALITY_METRICS
 _COMPARATORS = {"gt", "lt"}
 
 
@@ -49,6 +57,43 @@ def _get(db: Session, ws: Workspace, aid: int) -> Alert:
     if not a or a.workspace_id != ws.id:
         raise HTTPException(404, errors.not_in_project("alert", "GET /api/alerts"))
     return a
+
+
+def _quality_metrics(db: Session, ws: Workspace, window_hours: int) -> dict[str, float | None]:
+    """Quality signals an alert can watch. A value of None means *we don't know*.
+
+    None is load-bearing here. `_fire` skips a metric it can't read, so a judge with too few
+    paired labels never triggers an alert — calibration already refuses to publish a kappa below
+    `MIN_LABELLED_N`, and an alerting path that quietly substituted 0.0 for "unmeasured" would
+    page someone at 3am about a number the product declines to state on screen.
+    """
+    from ..models import Feedback
+    from ..services import calibration
+
+    rows = (db.query(Feedback)
+            .filter(Feedback.workspace_id == ws.id,
+                    Feedback.source.in_(sorted(calibration.HUMAN_SOURCES | calibration.JUDGE_SOURCES)))
+            .order_by(Feedback.id.asc()).all())
+    cal = calibration.calibrate(rows)
+
+    def _mean(sources: frozenset[str]) -> float | None:
+        cutoff = _now() - timedelta(hours=max(1, window_hours))
+        vals = [float(f.score) for f in rows
+                if f.source in sources and f.score is not None and _aware(f.created_at) >= cutoff]
+        return sum(vals) / len(vals) if vals else None
+
+    return {
+        # Both None until calibration has enough paired labels to say anything.
+        "judge_kappa": cal.get("kappa"),
+        "judge_agreement": cal.get("agreement"),
+        "eval_mean_score": _mean(calibration.JUDGE_SOURCES),
+        "human_mean_score": _mean(calibration.HUMAN_SOURCES),
+    }
+
+
+def _aware(dt):
+    from datetime import timezone
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 @router.post("")
@@ -114,8 +159,10 @@ def check_alerts(db: Session, ws: Workspace) -> list[dict]:
     fired = []
     now = _now()
     for a in db.query(Alert).filter(Alert.workspace_id == ws.id, Alert.enabled.is_(True)).all():
-        m = compute_metrics(db, ws, a.window_hours)
-        value = m.get(a.metric)
+        if a.metric in _QUALITY_METRICS:
+            value = _quality_metrics(db, ws, a.window_hours).get(a.metric)
+        else:
+            value = compute_metrics(db, ws, a.window_hours).get(a.metric)
         if value is None or not _breached(float(value), a.comparator, a.threshold):
             continue
         # cooldown: don't re-fire within the rule's own window

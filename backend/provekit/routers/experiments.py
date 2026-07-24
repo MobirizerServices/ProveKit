@@ -305,13 +305,14 @@ def get_experiment(eid: int, db: Session = Depends(get_db),
                          "expected": r.expected, "scores": r.scores} for r in results]}
 
 
-@router.get("/{eid}/compare/{other_id}")
-def compare_experiments(eid: int, other_id: int, db: Session = Depends(get_db),
-                        ws: Workspace = Depends(current_workspace)):
+def _compare(db: Session, ws: Workspace, eid: int, other_id: int) -> dict:
     """Is the difference between two experiments real, or is it noise?
 
     Returns per-scorer means with intervals, the delta, and a permutation-test p-value —
     paired on item id where the two runs scored the same examples.
+
+    Shared by the portal and the key-authed door (#41): a CI gate that judged by different
+    arithmetic from the dashboard would be a second opinion nobody asked for.
     """
     a, b = _get_experiment(db, ws, eid), _get_experiment(db, ws, other_id)
     a_rows = db.query(ExperimentResult).filter(ExperimentResult.experiment_id == a.id).all()
@@ -333,7 +334,26 @@ def compare_experiments(eid: int, other_id: int, db: Session = Depends(get_db),
                   "created_at": iso_utc(a.created_at)},
             "b": {"id": b.id, "name": b.name, "dataset_id": b.dataset_id,
                   "created_at": iso_utc(b.created_at)},
-            "alpha": stats.ALPHA, "warning": warning, "scorers": scorers}
+            "alpha": stats.ALPHA, "warning": warning, "comparable": ok, "scorers": scorers}
+
+
+@router.get("/{eid}/compare/{other_id}")
+def compare_experiments(eid: int, other_id: int, db: Session = Depends(get_db),
+                        ws: Workspace = Depends(current_workspace)):
+    return _compare(db, ws, eid, other_id)
+
+
+@key_router.get("/{eid}/compare/{other_id}")
+def compare_experiments_by_key(eid: int, other_id: int, request: Request,
+                               db: Session = Depends(get_db),
+                               authorization: str | None = Header(default=None)):
+    """The same comparison, reachable with a project key — which is what a CI job has.
+
+    Without this the significance test existed only behind a browser session, so the one place
+    it matters most (a gate deciding whether to block a deploy) could not consult it.
+    """
+    ws = workspace_from_key(db, request, authorization)
+    return _compare(db, ws, eid, other_id)
 
 
 @router.get("/{eid}/triage/{other_id}")

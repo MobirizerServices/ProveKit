@@ -332,13 +332,72 @@ def cmd_eval_run(args) -> int:
 
     summary = _get(args, f"/v1/experiments/{eid}")
     _emit(args, summary, _render_summary(summary))
-    # The gate: a regression must fail the build, not just be reported in a log nobody reads.
+
+    # An absolute floor: "never ship below 0.8", regardless of history.
     if args.fail_under is not None:
         mean = summary.get("mean_score")
         if not isinstance(mean, (int, float)) or mean < args.fail_under:
             print(f"provekit: mean_score {mean} is below --fail-under {args.fail_under}",
                   file=sys.stderr)
             return 1
+
+    if args.baseline is not None:
+        return _gate_against_baseline(args, eid)
+    return 0
+
+
+#: Exit code for "this comparison cannot be judged" — distinct from 1 (a real regression) so a
+#: pipeline can tell "your change made it worse" apart from "I can't tell, and won't pretend to".
+EXIT_INCOMPARABLE = 3
+
+
+def _gate_against_baseline(args, eid: int) -> int:
+    """Fail the build only when a regression is *real*.
+
+    A threshold gate fails on noise. Running 20 examples twice against an unchanged model moves
+    the mean by a couple of points either way, so a naive `mean < baseline` gate either blocks
+    good changes or gets its threshold loosened until it blocks nothing. This asks the question
+    a reviewer actually has — did the score move more than chance explains — using the same
+    paired significance test the dashboard shows, so the gate and the UI can never disagree.
+
+    It also declines rather than guesses: if the dataset changed between the two runs, the delta
+    is an artefact of the edit and no p-value rescues it.
+    """
+    # Baseline first, candidate second: services/stats.compare returns `delta = mean(B) - mean(A)`
+    # for /experiments/{A}/compare/{B}, so this order makes delta read as "how the candidate
+    # moved". Reversing it inverts the gate — blocking improvements and passing regressions —
+    # which is silent, because both still produce a confident-looking number.
+    cmp_ = _get(args, f"/v1/experiments/{args.baseline}/compare/{eid}")
+
+    if not cmp_.get("comparable", True):
+        print(f"provekit: refusing to judge this run against baseline {args.baseline} — "
+              f"{cmp_.get('warning') or 'the two runs are not comparable'}", file=sys.stderr)
+        print("provekit: re-run the baseline against the current dataset, or pass "
+              "--allow-incomparable to gate anyway.", file=sys.stderr)
+        if not args.allow_incomparable:
+            return EXIT_INCOMPARABLE
+
+    real, noise = [], []
+    for name, r in sorted((cmp_.get("scorers") or {}).items()):
+        delta = r.get("delta")
+        if delta is None or delta >= 0:
+            continue                       # improved or unchanged — not this gate's business
+        (real if r.get("significant") else noise).append((name, delta, r.get("p_value"),
+                                                          r.get("paired_n") or r.get("a", {}).get("n")))
+
+    for name, delta, p, n in noise:
+        p_txt = "n/a" if p is None else f"{p:.3f}"
+        print(f"provekit: {name} moved {delta:+.3f} — within noise (p={p_txt}, n={n}); not blocking")
+    for name, delta, p, n in real:
+        p_txt = "n/a" if p is None else f"{p:.3f}"
+        print(f"provekit: {name} regressed {delta:+.3f} and the move is real "
+              f"(p={p_txt}, n={n})", file=sys.stderr)
+
+    if real:
+        print(f"provekit: blocking — {len(real)} scorer(s) regressed significantly against "
+              f"experiment {args.baseline}.", file=sys.stderr)
+        return 1
+    print(f"provekit: no significant regression against experiment {args.baseline}.")
     return 0
 
 
@@ -515,6 +574,12 @@ def build_parser() -> argparse.ArgumentParser:
     er.add_argument("--fail-under", type=float, default=None,
                     help="exit 1 if mean_score falls below this — the CI regression gate")
     er.set_defaults(func=cmd_eval_run)
+    er.add_argument("--baseline", type=int, default=None, metavar="EXPERIMENT_ID",
+                    help="gate against this experiment: fail only if a regression is "
+                         "statistically real, not merely lower")
+    er.add_argument("--allow-incomparable", action="store_true",
+                    help="gate even when the dataset changed between the runs (by default "
+                         "that refuses to judge and exits 3)")
 
     up = groups.add_parser("up", help="run ProveKit locally (API, plus the portal in a checkout)")
     up.add_argument("--port", type=int, default=8000, help="API port (default 8000)")

@@ -482,3 +482,70 @@ def test_up_starts_the_api_and_reports_it(monkeypatch, capsys):
     assert "no login" in out
     # It launched uvicorn against the real app rather than importing the server itself.
     assert any("uvicorn" in part for part in started[0])
+
+
+# ---- the significance-aware gate (#41) ----
+def _cmp(delta, significant, comparable=True, p=0.01, n=40):
+    return _Resp(200, {"comparable": comparable,
+                       "warning": "" if comparable else "the dataset changed between these runs",
+                       "scorers": {"acc": {"delta": delta, "significant": significant,
+                                           "p_value": p, "paired_n": n}}})
+
+
+def _gate(monkeypatch, env, resp, extra=None):
+    """Run `eval run --baseline 5` against a stubbed portal, returning (exit code, stub)."""
+    stub = _stub(monkeypatch, {
+        ("GET", "/v1/datasets"): _Resp(200, [{"id": 1, "name": "ds", "item_count": 1}]),
+        ("GET", "/v1/datasets/1/items"): _Resp(200, [{"id": 9, "input": "q", "expected": "a"}]),
+        ("POST", "/v1/experiments"): _Resp(200, {"id": 7, "name": "run"}),
+        ("POST", "/v1/experiments/7/results"): _Resp(200, {"id": 1}),
+        ("GET", "/v1/experiments/7"): _Resp(200, {"id": 7, "mean_score": 0.9, "result_count": 1,
+                                                  "scorer_means": {"acc": 0.9}}),
+        ("GET", "/v1/experiments/5/compare/7"): resp,
+    })
+    code = cli.main(["eval", "run", "--dataset", "ds", "--baseline", "5",
+                     "--command", "echo a"] + (extra or []))
+    return code, stub
+
+
+def test_gate_calls_compare_baseline_first_so_delta_reads_as_candidate_movement(monkeypatch, env):
+    """stats.compare returns mean(B) - mean(A) for /experiments/{A}/compare/{B}. Reversing the
+    order inverts the gate — blocking improvements and passing regressions — and both still
+    produce a confident-looking number, so nothing surfaces it."""
+    code, stub = _gate(monkeypatch, env, _cmp(delta=-0.30, significant=True))
+    assert ("GET", "/v1/experiments/5/compare/7") in [(c["method"], c["path"]) for c in stub.calls]
+    assert code == 1
+
+
+def test_a_real_regression_blocks(monkeypatch, env, capsys):
+    code, _ = _gate(monkeypatch, env, _cmp(delta=-0.30, significant=True))
+    assert code == 1
+    assert "regressed" in capsys.readouterr().err
+
+
+def test_a_dip_within_noise_does_not_block(monkeypatch, env, capsys):
+    """The entire point of the item: a threshold gate fails here, this one does not."""
+    code, _ = _gate(monkeypatch, env, _cmp(delta=-0.04, significant=False, p=0.42, n=20))
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "within noise" in out and "not blocking" in out
+
+
+def test_an_improvement_never_blocks(monkeypatch, env):
+    code, _ = _gate(monkeypatch, env, _cmp(delta=+0.25, significant=True))
+    assert code == 0
+
+
+def test_an_incomparable_baseline_refuses_with_its_own_exit_code(monkeypatch, env, capsys):
+    """Distinct from 1 so a pipeline can tell "your change made it worse" apart from
+    "I can't tell, and won't pretend to"."""
+    code, _ = _gate(monkeypatch, env, _cmp(delta=-0.5, significant=True, comparable=False))
+    assert code == cli.EXIT_INCOMPARABLE
+    assert "refusing to judge" in capsys.readouterr().err
+
+
+def test_incomparable_can_be_overridden_explicitly(monkeypatch, env):
+    code, _ = _gate(monkeypatch, env, _cmp(delta=-0.5, significant=True, comparable=False),
+                    extra=["--allow-incomparable"])
+    assert code == 1        # now it judges, and the regression is real
+

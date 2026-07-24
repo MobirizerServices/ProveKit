@@ -38,6 +38,17 @@ def instrumentation_coverage():
             "local_answer": "provekit doctor"}
 
 
+@coverage_router.get("/otel")
+def otel_conformance():
+    """Which GenAI semantic-convention attributes this build maps, and the gaps (#89).
+
+    Served for the same reason as the library catalogue: an OTel-native tool should be able to
+    state precisely what it understands, and a claim in a README is one nobody can check.
+    """
+    from .. import conformance
+    return conformance.report()
+
+
 @pricing_router.get("")
 def price_table(version: str | None = None):
     """The rate table, so a client can price tokens without keeping its own copy.

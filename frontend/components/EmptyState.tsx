@@ -21,10 +21,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { API_BASE, ApiKey, Project, getProjectId, setProjectId } from "@/lib/api";
-
-/** Must match services/seed.SAMPLE_PROJECT_NAME (backend/tests/test_onboarding.py pins it). */
-export const SAMPLE_PROJECT_NAME = "Sample data (demo)";
+import { API_BASE, ApiKey, getProjectId } from "@/lib/api";
 
 // What ProveKit can auto-instrument. Mirrors provekit/doctor.py `_COVERAGE`, which is the
 // source of truth; test_onboarding.py fails if the two drift. The portal cannot compute the
@@ -201,7 +198,6 @@ interface Retention { stored_spans: number; pruned_total: number }
 
 export default function EmptyState({ origin }: { origin: string }) {
   const [signals, setSignals] = useState<IngestSignals>({ keys: null, storedSpans: null, prunedTotal: null });
-  const [sample, setSample] = useState<Project | null>(null);
   const [showCoverage, setShowCoverage] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -215,12 +211,6 @@ export default function EmptyState({ origin }: { origin: string }) {
           prunedTotal: ret ? ret.pruned_total : null,
         });
       });
-    get<Project[]>("/api/projects").then((ps) => {
-      if (!live || !ps) return;
-      const cur = getProjectId();
-      const s = ps.find((p) => p.name === SAMPLE_PROJECT_NAME && String(p.id) !== cur);
-      setSample(s ?? null);
-    });
     return () => { live = false; };
   }, []);
 
@@ -295,24 +285,6 @@ def run_agent(question: str) -> str:
         `}</style>
       </div>
 
-      {sample && (
-        <div style={{ ...panel, borderColor: "var(--purple)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={sampleBadge}>sample</span>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>There are example traces to explore</span>
-          </div>
-          <p className="muted" style={{ margin: "6px 0 12px", fontSize: 13, lineHeight: 1.6 }}>
-            We preloaded a separate project, <b>{SAMPLE_PROJECT_NAME}</b>, with fabricated traces
-            so the waterfall, sessions and a failed run are readable before you have an
-            integration. It is never mixed with your real data, and deleting that project in
-            Settings removes all of it.
-          </p>
-          <button className="btn btn-sm" onClick={() => { setProjectId(sample.id); location.reload(); }}>
-            Open sample project →
-          </button>
-        </div>
-      )}
-
       <div style={panel}>
         <button onClick={() => setShowCoverage((v) => !v)}
           style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", padding: 0, fontSize: 14, fontWeight: 600 }}>
@@ -365,9 +337,4 @@ const th: React.CSSProperties = {
 };
 const td: React.CSSProperties = {
   padding: "6px 10px 6px 0", borderBottom: "1px solid var(--hairline)", whiteSpace: "nowrap",
-};
-export const sampleBadge: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase",
-  color: "var(--purple)", border: "1px solid var(--purple)", borderRadius: 999,
-  padding: "1px 7px", flexShrink: 0,
 };

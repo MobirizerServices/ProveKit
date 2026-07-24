@@ -324,14 +324,6 @@ def test_portal_coverage_table_matches_doctor():
     assert found == [tuple(row) for row in doctor._COVERAGE]
 
 
-@pytest.mark.skipif(not (FRONTEND / "components" / "EmptyState.tsx").exists(),
-                    reason="frontend not checked out")
-def test_portal_and_backend_agree_on_the_sample_project_name():
-    """The empty state's "open the sample" shortcut matches on this exact string."""
-    src = (FRONTEND / "components" / "EmptyState.tsx").read_text()
-    assert f'SAMPLE_PROJECT_NAME = {json.dumps(seed.SAMPLE_PROJECT_NAME)}' in src
-
-
 def test_the_sample_project_seeds_the_flow_the_landing_page_shows(db, user, seeding_on):
     """A fresh Studio opening on a blank canvas contradicts the hero, which shows a
     'Customer Support Agent' flow. The sample project seeds exactly that — as a draft, since a

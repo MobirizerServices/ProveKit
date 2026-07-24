@@ -1,16 +1,15 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { api, API_BASE, getProjectId, TraceSpan, TraceSummary } from "@/lib/api";
+import { api, API_BASE, TraceSpan, TraceSummary } from "@/lib/api";
 import { fmtCost } from "@/lib/cost";
 import { Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
 import TraceDetail from "@/components/TraceDetail";
 import TraceCompare from "@/components/TraceCompare";
-import EmptyState, { SAMPLE_PROJECT_NAME, sampleBadge } from "@/components/EmptyState";
+import EmptyState from "@/components/EmptyState";
 import Tour, { TourStep, useTour } from "@/components/Tour";
 
 function ListSkeleton() {
@@ -67,11 +66,6 @@ export default function TracesPage() {
   const [loaded, setLoaded] = useState(false);
   const [more, setMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  // True while the selected project is the preloaded sample. Fabricated traces shown without
-  // saying so would break the one promise a tracing tool has to keep, so this banner rides
-  // above the list for as long as the sample project is open.
-  const [inSample, setInSample] = useState(false);
-
   const filters = { status: failuresOnly ? "failed" : undefined, window_hours: windowHours || undefined, q: dq || undefined };
   const filterKey = JSON.stringify(filters);
 
@@ -115,11 +109,6 @@ export default function TracesPage() {
     // Deep-link: /traces?trace=<id> opens that trace directly (e.g. from a dashboard failure).
     const deep = new URLSearchParams(window.location.search).get("trace");
     if (deep) setSel(deep);
-    api.projects().then((ps) => {
-      const pid = getProjectId();
-      const cur = ps.find((p) => String(p.id) === pid) ?? ps.find((p) => p.is_default);
-      setInSample(cur?.name === SAMPLE_PROJECT_NAME);
-    }).catch(() => {});
   }, []);
 
   // Live updates. The server announces new traces over SSE and we refetch through the normal
@@ -159,8 +148,8 @@ export default function TracesPage() {
       : b.id - a.id);   // recent (default) — the API already returns newest-first by id
 
   // First visit to a *populated* portal gets the tour, once (#37). Gated on a loaded, non-empty
-  // list so it can never teach an empty screen — and on a fresh account the seeded
-  // "Sample data (demo)" project means there is something real to teach against on visit one.
+  // list so it can never teach an empty screen — a fresh account has no traces until its own
+  // agent reports, so the tour simply waits until there is something real to point at.
   const tour = useTour(TOUR_KEY, loaded && shown.length > 0);
   // Every step after the first needs a trace open, or there is no flow graph to point at.
   // Idempotent: `before` can fire again on a re-measure.
@@ -207,17 +196,6 @@ export default function TracesPage() {
           actions={shown.length > 0 &&
             <button className="btn-hero" onClick={tour.start} title="Replay the walkthrough">✦ Tour</button>} />
 
-        {inSample && (
-          <div style={sampleBanner}>
-            <span style={sampleBadge}>sample</span>
-            <span>
-              These traces are fabricated demo data in <b>{SAMPLE_PROJECT_NAME}</b> — no agent
-              of yours produced them. Switch projects in the top bar for your real traces, or
-              delete this project in <Link href="/settings" style={{ color: "var(--accent)" }}>Settings</Link> when
-              you&apos;re done.
-            </span>
-          </div>
-        )}
 
         {traces.length === 0 && !failuresOnly && !windowHours && !dq ? (
           <EmptyState origin={origin} />
@@ -315,7 +293,7 @@ export default function TracesPage() {
               )}
               {more && (
                 <div className="tx-foot">
-                  <span className="muted">{shown.length} loaded{inSample ? " · sample data" : ""}</span>
+                  <span className="muted">{shown.length} loaded</span>
                   <button className="btn btn-sm" onClick={loadMore} disabled={loadingMore}>
                     {loadingMore ? "Loading…" : `Load ${PAGE} more`}
                   </button>
@@ -360,12 +338,6 @@ function TxStatus({ t }: { t: TraceSummary }) {
   if (t.status === "failed") return <span className="tx-status err">● Error</span>;
   return <span className="tx-status ok">● Success</span>;
 }
-
-const sampleBanner: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 14px",
-  borderRadius: 10, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-dim)",
-  background: "var(--panel)", border: "1px solid var(--purple)",
-};
 
 const panel: React.CSSProperties = {
   background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 16,

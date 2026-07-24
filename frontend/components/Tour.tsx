@@ -2,10 +2,10 @@
 
 // Interactive product tour (#37).
 //
-// A first visit to a *populated* portal should teach the flow, not present it cold — and since
-// a new account now gets the "Sample data (demo)" project, there is real material to teach
-// against on visit one. So this is a spotlight tour: it dims the page, rings one real element
-// at a time, and explains it in place. Nothing is faked; every step points at a live control.
+// A first visit to a *populated* portal should teach the flow, not present it cold. So this is
+// a spotlight tour: it dims the page, rings one real element at a time, and explains it in
+// place. It is gated on a non-empty trace list, so it only ever runs once the account's own
+// agent has reported something real. Nothing is faked; every step points at a live control.
 //
 // TWO RULES IT KEEPS
 //

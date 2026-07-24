@@ -394,3 +394,32 @@ def test_every_leaf_command_is_wired():
                  ["datasets", "create", "n"], ["datasets", "add", "1", "--input", "x"],
                  ["eval", "run", "--dataset", "d", "--command", "c"], ["doctor"]):
         assert callable(parser.parse_args(argv).func)
+
+
+# ---- dataset writes go to /v1 (#91) ----
+def test_dataset_create_uses_the_key_authed_v1_route(monkeypatch, env, capsys):
+    """The server has POST /v1/datasets now, so the /api fallback must not be reached."""
+    stub = _stub(monkeypatch, {("POST", "/v1/datasets"): _Resp(200, {"id": 4, "name": "ci"})})
+    assert cli.main(["datasets", "create", "ci"]) == 0
+    paths = [c["path"] for c in stub.calls]
+    assert paths == ["/v1/datasets"], f"fell back unnecessarily: {paths}"
+
+
+def test_dataset_add_uses_the_key_authed_v1_route(monkeypatch, env):
+    stub = _stub(monkeypatch, {
+        ("POST", "/v1/datasets/4/items"): _Resp(200, {"id": 9, "input": "q", "expected": "a"}),
+    })
+    assert cli.main(["datasets", "add", "4", "--input", "q", "--expected", "a"]) == 0
+    assert [c["path"] for c in stub.calls] == ["/v1/datasets/4/items"]
+
+
+def test_dataset_create_still_falls_back_for_an_older_server(monkeypatch, env):
+    """A self-hosted portal a release behind only has the cookie-authed route; `datasets
+    create` should look older, not broken."""
+    stub = _stub(monkeypatch, {
+        ("POST", "/v1/datasets"): _Resp(404, {"detail": "Not Found"}),
+        ("POST", "/api/datasets"): _Resp(200, {"id": 5, "name": "ci"}),
+    })
+    assert cli.main(["datasets", "create", "ci"]) == 0
+    assert [c["path"] for c in stub.calls] == ["/v1/datasets", "/api/datasets"]
+

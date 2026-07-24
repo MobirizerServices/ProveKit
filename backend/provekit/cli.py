@@ -86,13 +86,15 @@ def _post(args, path: str, body: dict):
 
 
 def _write(args, v1_path: str, api_path: str, body: dict):
-    """POST a dataset write, which has no key-authed route on every server.
+    """POST a dataset write, tolerating a server too old to accept it on `/v1`.
 
-    `/v1/datasets` is read-only — pk.evaluate() only ever pulled items — and creating a
-    dataset lives on the portal's cookie-authed `/api` router. Rather than ship
-    `datasets create` as a portal-only feature, try `/v1` first and fall back to `/api`,
-    which a self-hosted (non-hosted) instance resolves to the default project. The day the
-    server grows `POST /v1/datasets`, the fallback simply stops being reached.
+    `POST /v1/datasets` and `/v1/datasets/{id}/items` are key-authed routes now
+    (routers/dataset_writes.py), so against a current server the first attempt succeeds and
+    the fallback below is never reached — `test_cli.py` pins that.
+
+    The fallback stays because this CLI talks to *remote* instances it does not control: a
+    self-hosted portal a release or two behind still only has the cookie-authed `/api` route,
+    and failing there would make `datasets create` look broken rather than merely older.
     """
     base, headers = _resolve(args)
     resp = _send(base, headers, "POST", v1_path, body=body)

@@ -46,7 +46,14 @@ export default function FlowsPage() {
   }, []);
 
   useEffect(() => { loadFlows().then((rows) => { if (rows.length && id == null) open(rows[0].id); }); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { api.connections().then(setConns).catch(() => {}); }, []);
+  useEffect(() => {
+    api.connections().then((cs) => {
+      setConns(cs);
+      // Test flows against a real provider by default; Mock only when no key is configured yet.
+      const real = cs.find((c) => c.provider !== "mock");
+      if (real) setConnId((v) => v === "mock" ? String(real.id) : v);
+    }).catch(() => {});
+  }, []);
 
   const open = async (fid: number) => {
     setId(fid); setSelected(null); setDirty(false); setLastRun(null); setErr("");

@@ -30,7 +30,18 @@ export default function PlaygroundPage() {
   const [resA, setResA] = useState<PlaygroundResult | null>(null);
   const [resB, setResB] = useState<PlaygroundResult | null>(null);
 
-  useEffect(() => { api.connections().then(setConns).catch(() => {}); }, []);
+  useEffect(() => {
+    api.connections().then((cs) => {
+      setConns(cs);
+      // Default to a real configured provider when one exists; Mock is only the fallback for a
+      // workspace that has no key yet, not the preferred way to run.
+      const real = cs.find((c) => c.provider !== "mock");
+      if (real) {
+        setA((v) => v.connId === "mock" ? { ...v, connId: String(real.id) } : v);
+        setB((v) => v.connId === "mock" ? { ...v, connId: String(real.id) } : v);
+      }
+    }).catch(() => {});
+  }, []);
   useEffect(() => { api.prompts().then(setPrompts).catch(() => {}); }, []);
 
   // Latest version of each named saved prompt — the useful thing to load into the composer.

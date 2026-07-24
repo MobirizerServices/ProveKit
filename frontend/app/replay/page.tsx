@@ -39,7 +39,14 @@ export default function ReplayPage() {
   const [showDiff, setShowDiff] = useState(false);
 
   useEffect(() => { api.traces({ limit: 40 }).then(setTraces).catch(() => setTraces([])); }, []);
-  useEffect(() => { api.connections().then(setConns).catch(() => {}); }, []);
+  useEffect(() => {
+    api.connections().then((cs) => {
+      setConns(cs);
+      // Prefer a real provider for replay; Mock is the fallback when no key is configured.
+      const real = cs.find((c) => c.provider !== "mock");
+      if (real) setConnId((v) => v === "mock" ? String(real.id) : v);
+    }).catch(() => {});
+  }, []);
 
   // Load the chosen origin and default the fork to its first model call.
   useEffect(() => {

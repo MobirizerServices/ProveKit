@@ -102,9 +102,63 @@ version end to end. It's safe to point `baseline-file` and `summary-file` at the
 the baseline is read before the eval runs, and overwritten after.
 
 Deltas are a comparison, not a verdict. The interval in the comment is there to stop a team
-shipping on noise — 0.82 vs 0.79 over 20 examples is nothing. When you want a p-value,
-open the two experiments in the portal: **Datasets → your set → Experiments** compares them
-paired by item.
+shipping on noise — 0.82 vs 0.79 over 20 examples is nothing.
+
+You no longer have to open the portal to get a p-value. See the next section.
+
+## Gate on significance, not on a threshold
+
+A threshold gate has one failure mode, and it is fatal to the gate itself: it fails on noise.
+Run the same unchanged model over twenty examples twice and the mean moves a couple of points
+either way. A gate that blocks on that blocks good changes, so somebody loosens the threshold,
+and after two or three loosenings it blocks nothing at all.
+
+`--baseline` asks the question a reviewer actually has — *did the score move more than chance
+explains* — using the same paired permutation test the portal shows:
+
+```bash
+provekit eval run \
+  --dataset regression-set \
+  --command "python agent.py" \
+  --baseline 196            # a known-good experiment id
+```
+
+```text
+acc moved -0.040 — within noise (p=0.420, n=20); not blocking
+provekit: no significant regression against experiment 196.
+```
+
+```text
+provekit: acc regressed -1.000 and the move is real (p=0.000, n=20)
+provekit: blocking — 1 scorer(s) regressed significantly against experiment 196.
+```
+
+An improvement never blocks, whatever its size.
+
+### Exit codes
+
+| Code | Meaning |
+|-----:|---------|
+| `0` | No significant regression. A dip within noise lands here, and says so. |
+| `1` | A regression that is statistically real, or `--fail-under` was breached. |
+| `3` | **Refused to judge** — the dataset changed between the two runs. |
+
+`3` is deliberately not `1`. "Your change made it worse" and "I can't tell, and won't pretend
+to" call for different reactions, and a pipeline that conflates them teaches people to ignore
+the gate. If the dataset was edited between the baseline and this run, the delta is an artefact
+of the edit and no p-value rescues it — re-run the baseline against the current dataset, or pass
+`--allow-incomparable` to gate anyway.
+
+### Which to use
+
+`--fail-under` and `--baseline` answer different questions and compose:
+
+- **`--fail-under 0.8`** — an absolute floor. *Never ship below this*, regardless of history.
+- **`--baseline 196`** — a relative guard. *Don't ship a real regression*, however good the
+  absolute number is.
+
+Using both is normal: the floor catches a collapse with no baseline to compare against, and the
+baseline catches a slow slide that never crosses the floor.
 
 ## The comment
 

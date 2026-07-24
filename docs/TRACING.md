@@ -53,7 +53,8 @@ it the current context, so everything beneath it nests automatically:
 | Source | Captured |
 |---|---|
 | **LLM & framework calls** | automatically — see the auto-instrumented list below |
-| **Outbound HTTP** (tool APIs, vector DBs, webhooks) | automatically with `provekit[http]` — every `httpx`/`requests`/`urllib` call becomes a child span |
+| **Outbound HTTP** (tool APIs, webhooks) | automatically with `provekit[http]` — every `httpx`/`requests`/`aiohttp`/`urllib`/`urllib3` call becomes a child span |
+| **Data stores** (vector DBs, Postgres, Redis, S3) | automatically with `provekit[data]` — `botocore`, `sqlalchemy`, `psycopg`, `asyncpg`, `redis`, `pymongo`, `elasticsearch` |
 | Any OTel-instrumented library | automatically — it nests under the current span |
 | Your own sub-steps (tools, retrieval, branches) | wrap them in `with pk.span("name"):` |
 | Your `logging.*` calls | captured as **events** on the active span (INFO+; transport noise filtered). Disable with `pk.configure(capture_logs=False)`. |
@@ -68,13 +69,31 @@ model, provider, token usage, and input/output captured.
 `pip install "provekit[trace-all]"` — one decorator then captures calls from any of these that
 your project uses (each instrumentor is dormant unless its library is installed):
 
-- **Providers:** OpenAI · Anthropic · Bedrock · Mistral · Groq · Google GenAI · Vertex AI · LiteLLM
-- **Frameworks:** LangChain · LlamaIndex · CrewAI · AutoGen · OpenAI Agents · smolagents · DSPy · Haystack · Guardrails · Instructor · Agno · Pydantic AI
-- **HTTP** (with `provekit[http]` or `[trace-all]`): `httpx` · `requests` · `aiohttp` · `urllib`
+**37 libraries** across four groups:
+
+- **Providers:** OpenAI · Anthropic · Bedrock · Mistral · Groq · Google GenAI · Vertex AI ·
+  LiteLLM · Portkey
+- **Agent frameworks:** LangChain · LlamaIndex · CrewAI · AutoGen · OpenAI Agents · smolagents ·
+  Agno · Pydantic AI · BeeAI · Google ADK · Claude Agent SDK
+- **Orchestration & tooling:** DSPy · Haystack · Guardrails · Instructor · MCP
+- **HTTP** (with `provekit[http]` or `[trace-all]`): `httpx` · `requests` · `aiohttp` ·
+  `urllib` · `urllib3`
+- **Data stores** (with `provekit[data]` or `[trace-all]`): `botocore` · `sqlalchemy` ·
+  `psycopg` · `asyncpg` · `redis` · `pymongo` · `elasticsearch`
+
+That last group is the one people forget to install and then miss. A retrieval that took 900ms
+is invisible without it, and it is very often the thing that actually made the run slow — the
+model call looks fine and the trace has a hole where the vector search should be.
+
+This list is not maintained by hand. It is **derived** from the instrumentors the SDK actually
+registers, served live at `GET /api/coverage`, and a test fails if the two ever disagree — so
+what the docs claim and what the runtime does cannot drift apart. To see which of these are
+installed *and instrumented* in your own environment, run [`provekit doctor`](CLI.md); the
+server cannot see your virtualenv and will not guess.
 
 Anything else — your own tools, retrieval, business logic — you capture with `pk.span()`
-(below). That's the honest split: **LLM/framework calls and outbound HTTP are automatic; your
-own in-process steps are one line each.**
+(below). That's the honest split: **LLM/framework calls, outbound HTTP and data-store calls are
+automatic; your own in-process steps are one line each.**
 
 ## Sub-steps with `pk.span()`
 

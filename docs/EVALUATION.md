@@ -65,7 +65,51 @@ These all grade one string against another. For an agent that is rarely the whol
 [§5](#5-scoring-more-than-the-final-string) grades the path it took, whether its answer is
 grounded in what it retrieved, and what the run cost.
 
+### 3.1 Scorers your project defines
+
+Built-in scorers run client-side, from your code. That leaves two gaps: a teammate cannot reuse
+one, and **online eval cannot run it at all** — that grades live traces on the server, where
+there is no SDK.
+
+So a project can define scorers that live server-side, referenced by name exactly as a built-in
+is:
+
+```bash
+curl -X POST $PROVEKIT_ENDPOINT/api/evaluators/custom \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"cites_policy","kind":"contains","config":{"value":"policy"},
+       "description":"the answer must cite the policy"}'
+
+# try it before you trust it
+curl -X POST $PROVEKIT_ENDPOINT/api/evaluators/custom/1/try \
+  -H 'Content-Type: application/json' -d '{"output":"per the refund policy, yes"}'
+# {"score": 1.0, "applies": true}
+```
+
+Kinds: `contains` · `not_contains` · `equals` · `regex` · `json_path` · `length_between`.
+
+**These are rules, not uploaded code, and that is deliberate.** The obvious version of this
+feature is "upload a Python function", which is remote code execution wearing a feature's
+clothes — a sandbox that is 95% right is a hole, and ProveKit does not have one. Arbitrary
+Python scorers stay client-side, where running your own code is your own risk rather than the
+platform's.
+
+The `regex` kind is fenced accordingly: the pattern is compiled and **rejected at creation
+time** (a broken rule fails while you are looking at it, not silently scoring 0.0 for a month),
+its length is capped, catastrophic-backtracking constructs are refused by name, and the text is
+truncated before matching — Python's `re` has no timeout, so bounding the input is the only real
+defence available.
+
+A rule returns *nothing* rather than `0.0` when it cannot apply — a `json_path` rule against an
+output that isn't JSON has no opinion. An ungradeable row scored zero would drag an experiment
+mean by exactly as much as a genuine failure, while looking identical to one.
+
 ## 4. Gate CI on regressions
+
+> **Gate on whether the move is real.** `provekit eval run --baseline <experiment_id>` fails
+> only when a regression is statistically significant, and reports a dip within noise instead of
+> blocking. A threshold gate fails on chance and gets loosened until it blocks nothing. See
+> [CI_GATE.md](CI_GATE.md).
 
 `pk.evaluate` returns the summary, so a failing score fails the build:
 
@@ -264,6 +308,27 @@ cal = httpx.get(f"{PROVEKIT_ENDPOINT}/v1/experiments/judge-calibration",
 assert cal["sufficient"], cal["caution"]        # label more traces before trusting it
 assert cal["kappa"] >= 0.4                      # moderate agreement with humans, or don't ship on it
 ```
+
+### 6.1 Alert when the judge drifts
+
+Checking calibration once tells you the judge was trustworthy that day. A judge that drifts out
+of agreement afterwards silently invalidates every online score beneath it, and nothing else in
+the product would notice — the scores keep arriving and keep looking like numbers.
+
+Kappa is a watchable alert metric, alongside `judge_agreement`, `eval_mean_score` and
+`human_mean_score`:
+
+```bash
+curl -X POST $PROVEKIT_ENDPOINT/api/alerts \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"judge drift","metric":"judge_kappa","comparator":"lt",
+       "threshold":0.4,"window_hours":24,"webhook_url":"https://hooks.slack.com/..."}'
+```
+
+An unmeasurable metric **never fires**. Calibration refuses to publish a kappa below 20 paired
+labels, and an alert that read "withheld" as `0.0` would page someone at 3am about a number the
+product declines to state on screen. Below the threshold, you get no alert — which is the same
+answer the portal gives you.
 
 ## Feedback vs. evaluation
 

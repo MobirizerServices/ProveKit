@@ -31,8 +31,9 @@ when the thing you asked for did not happen — so `set -e` in a CI job means wh
 | Exit code | Meaning |
 |---|---|
 | `0` | It worked. |
-| `1` | Config missing, portal unreachable, a 4xx/5xx, or `eval run --fail-under` tripped. |
+| `1` | Config missing, portal unreachable, a 4xx/5xx, or an `eval run` gate tripped. |
 | `2` | You typed the command wrong (argparse usage error). |
+| `3` | `eval run --baseline` **refused to judge** — the dataset changed between the two runs, so the delta means nothing. Deliberately not `1`: "your change made it worse" and "I can't tell" call for different reactions. |
 
 ## Commands
 
@@ -124,7 +125,9 @@ data point, not a reason to abandon the run.
 | `--scorer` | Repeatable. `exact_match`, `contains`, `regex_match`, `json_valid`. Defaults to `exact_match`. |
 | `--name` | Experiment name in the portal (default `cli-eval`). |
 | `--timeout` | Per-item target timeout, seconds (default 60). |
-| `--fail-under` | Exit 1 if `mean_score` drops below this. A missing score counts as a failure, not a pass. |
+| `--fail-under` | Exit 1 if `mean_score` drops below this. A missing score counts as a failure, not a pass. An absolute floor. |
+| `--baseline` | Experiment id to gate against. Exits 1 only if a regression is **statistically real**, using the same paired test the portal shows — a dip within noise passes and says so. Exits 3 if the dataset changed between the runs. |
+| `--allow-incomparable` | Gate anyway when the dataset changed, instead of exiting 3. |
 
 ```
 Experiment 7 — pr-a1b2c3d
@@ -133,6 +136,45 @@ Experiment 7 — pr-a1b2c3d
   exact_match: 0.667
   mean_score: 0.667
 ```
+
+**Gating on significance.** A threshold gate fails on chance: run an unchanged model over
+twenty examples twice and the mean moves a couple of points either way. `--baseline` asks
+whether the move is bigger than chance explains.
+
+```bash
+provekit eval run --dataset regression-set --command "python agent.py" --baseline 196
+```
+
+```text
+acc moved -0.040 — within noise (p=0.420, n=20); not blocking
+provekit: no significant regression against experiment 196.
+```
+
+The two flags compose, and answer different questions: `--fail-under` is *never ship below
+this*, `--baseline` is *don't ship a real regression*. See [CI_GATE.md](CI_GATE.md).
+
+### `provekit up`
+
+Run ProveKit locally with one command — the API, plus the portal when you are in a checkout
+with its dependencies installed.
+
+```bash
+provekit up                       # API on :8000, portal on :3000
+provekit up --no-frontend         # API only
+provekit up --port 9000
+```
+
+```text
+  API     http://127.0.0.1:8000
+  Portal  http://localhost:3000
+
+  Local mode needs no login. Ctrl-C to stop.
+```
+
+It waits for `/healthz` to answer before printing the URL — a URL that 404s for another two
+seconds is how a first run gets written off as broken — and shuts both processes down on
+Ctrl-C. Needs the server extra (`pip install "provekit[server]"`); without it the command says
+so by name, and the read-only commands above keep working against a remote portal.
 
 The summary is printed (and flushed) *before* the threshold verdict goes to stderr, so a
 failing gate in a piped CI log never appears above the numbers that explain it.

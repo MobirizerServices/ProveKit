@@ -103,6 +103,7 @@ nav:
       - MCP debug channel: MCP.md
       - CLI: CLI.md
       - CI eval gate: CI_GATE.md
+      - Bulk & scheduled export: EXPORT.md
   - API:
       - HTTP API: API.md
       - API stability: API_STABILITY.md
@@ -115,9 +116,18 @@ nav:
       - Admin console: ADMIN.md
       - Backup & restore: BACKUP.md
       - Data residency: RESIDENCY.md
+      - Performance: PERFORMANCE.md
       - Publishing to PyPI: PUBLISHING.md
+  - Enterprise:
+      - SSO (OIDC): SSO.md
+      - SCIM provisioning: SCIM.md
+      - Compliance posture: COMPLIANCE.md
+      - Subprocessors: SUBPROCESSORS.md
+      - DPA template: DPA.md
   - Contribute:
       - Adding an instrumentor: CONTRIBUTING_INSTRUMENTORS.md
+      - Custom span renderers: CUSTOM_RENDERERS.md
+      - Terraform provider (prototype): TERRAFORM.md
   - Design & planning:
       - Interactive debugging: design/INTERACTIVE_DEBUGGING.md
       - Roadmap (100): ROADMAP_100.md

@@ -2385,3 +2385,14 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 .inv-pending { color: var(--amber); font-weight: 600; }
 .inv-expired { color: var(--red); font-weight: 600; }
 .inv-accepted { color: var(--green); font-weight: 600; }
+
+/* ============ Support impersonation banner (#81) ============ */
+.imp-banner { display: flex; align-items: center; gap: 11px; margin: 0 0 14px; padding: 10px 14px;
+  border-radius: 10px; font-size: 12.5px; line-height: 1.55; color: var(--text);
+  background: color-mix(in srgb, var(--amber) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent); }
+.imp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber) 60%, transparent); animation: imp-pulse 2s infinite; }
+@keyframes imp-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.imp-viewing { font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); border-radius: 999px; padding: 2px 8px; }

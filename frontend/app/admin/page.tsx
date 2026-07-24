@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_BASE, AdminProject, AdminStats, AdminUser, AuditEntry, api } from "@/lib/api";
+import { API_BASE, AdminProject, AdminStats, AdminUser, AuditEntry, Impersonation, api } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 
 // Fleet health (roadmap #84). Typed here rather than in lib/api because it is only ever read
@@ -29,6 +29,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [projects, setProjects] = useState<AdminProject[]>([]);
+  const [imp, setImp] = useState<Impersonation | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [err, setErr] = useState("");
   // Server-side paging + search: the tables used to fetch every row, which is fine on a small
@@ -65,8 +66,53 @@ export default function AdminPage() {
     catch (e) { setErr(e instanceof Error ? e.message : "Could not change superuser access."); }
   };
 
+  // The session expires on its own, so the banner has to re-read rather than count down from
+  // a number it was handed once — a stale "4 min left" on an already-dead session is worse
+  // than no timer.
+  useEffect(() => {
+    const read = () => api.impersonationStatus().then(setImp).catch(() => setImp(null));
+    read();
+    const t = setInterval(read, 15000);
+    return () => clearInterval(t);
+  }, []);
+
+  const startImp = async (p: AdminProject) => {
+    const reason = prompt(`Why are you opening ${p.name}? (recorded in the audit log)`)?.trim();
+    if (!reason || reason.length < 3) return;
+    try {
+      setImp(await api.startImpersonation(p.id, reason, 15));
+    } catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+  };
+  const stopImp = async () => {
+    try { setImp(await api.stopImpersonation()); } catch { /* already over */ setImp(null); }
+  };
+
   return (
     <ConsoleShell>
+      {imp?.active && (
+
+        <div className="imp-banner">
+
+          <span className="imp-dot" />
+
+          <span style={{ flex: 1 }}>
+
+            <b>Support session — read-only.</b> Viewing <b>{imp.workspace}</b> ({imp.owner}),
+
+            {" "}{imp.span_count?.toLocaleString()} spans. Every write in this deployment is
+
+            refused until you stop. Expires in{" "}
+
+            {Math.max(0, Math.round((imp.seconds_remaining ?? 0) / 60))} min.
+
+          </span>
+
+          <button className="btn btn-sm" onClick={stopImp}>Stop</button>
+
+        </div>
+
+      )}
+
       <main style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 80px" }}>
         <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>Admin</h1>
         <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
@@ -139,7 +185,7 @@ export default function AdminPage() {
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table style={table}>
-                  <thead><tr style={hrow}><th style={th}>Name</th><th style={th}>Owner</th><th style={th}>Members</th><th style={th}>Spans</th><th style={th}>Retention</th><th style={th}>PII</th></tr></thead>
+                  <thead><tr style={hrow}><th style={th}>Name</th><th style={th}>Owner</th><th style={th}>Members</th><th style={th}>Spans</th><th style={th}>Retention</th><th style={th}>PII</th><th style={th}></th></tr></thead>
                   <tbody>
                     {projects.map((p) => (
                       <tr key={p.id} style={{ borderTop: "1px solid var(--border)" }}>
@@ -149,6 +195,13 @@ export default function AdminPage() {
                         <td style={td}>{p.span_count.toLocaleString()}</td>
                         <td style={td}>{p.retention || "default"}</td>
                         <td style={td}>{p.redact_pii ? "on" : "—"}</td>
+                        <td style={{ ...td, textAlign: "right" }}>
+                          {imp?.active && imp.workspace_id === p.id
+                            ? <span className="imp-viewing">viewing</span>
+                            : <button className="btn btn-sm btn-ghost" disabled={!!imp?.active}
+                                title={imp?.active ? "Stop the current support session first" : "Open read-only, time-boxed"}
+                                onClick={() => startImp(p)}>View as…</button>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

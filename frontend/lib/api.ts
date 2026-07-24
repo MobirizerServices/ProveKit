@@ -82,6 +82,11 @@ function adminQs(p?: AdminQuery): string {
   const s = qs.toString();
   return s ? `?${s}` : "";
 }
+// A time-boxed, read-only support session over one project (#81).
+export interface Impersonation {
+  active: boolean; read_only?: boolean; workspace_id?: number; workspace?: string;
+  owner?: string; expires_at?: number; seconds_remaining?: number; span_count?: number;
+}
 export interface AdminProject { id: number; name: string; owner: string; member_count: number; span_count: number; retention: number; redact_pii: boolean; created_at: string; }
 export interface Alert {
   id: number; name: string; metric: string; comparator: string; threshold: number;
@@ -427,6 +432,10 @@ export const api = {
   removeMember: (id: number, userId: number) => j(`/api/projects/${id}/members/${userId}`, { method: "DELETE" }),
   // platform superadmin
   adminStats: () => j<AdminStats>("/api/admin/stats"),
+  impersonationStatus: () => j<Impersonation>("/api/admin/impersonate"),
+  startImpersonation: (workspace_id: number, reason: string, minutes: number) =>
+    j<Impersonation>("/api/admin/impersonate", { method: "POST", body: JSON.stringify({ workspace_id, reason, minutes }) }),
+  stopImpersonation: () => j<Impersonation>("/api/admin/impersonate", { method: "DELETE" }),
   adminUsers: (p?: AdminQuery) => j<Paged<"users", AdminUser>>(`/api/admin/users${adminQs(p)}`),
   adminProjects: (p?: AdminQuery) => j<Paged<"projects", AdminProject>>(`/api/admin/projects${adminQs(p)}`),
   adminAudit: (p?: AuditQuery) => {

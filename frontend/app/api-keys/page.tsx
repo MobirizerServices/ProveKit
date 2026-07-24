@@ -105,7 +105,10 @@ def run_agent(question: str) -> str:
           {keys.length === 0 ? (
             <div className="muted" style={{ padding: 20, fontSize: 13.5 }}>No API keys yet.</div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+            /* The key table has five columns and can't usefully reflow — let it scroll inside
+               its own panel rather than pushing the whole page sideways on a phone. */
+            <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5, minWidth: 520 }}>
               <thead>
                 <tr style={{ textAlign: "left", color: "var(--muted)" }}>
                   <th style={th}>Name</th><th style={th}>Key</th><th style={th}>Last used</th>
@@ -128,6 +131,7 @@ def run_agent(question: str) -> str:
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </main>

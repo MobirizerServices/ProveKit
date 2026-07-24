@@ -353,6 +353,115 @@ def cmd_doctor(args) -> int:
     return 1 if report.worst == doctor.BAD else 0
 
 
+# ---- provekit up (#38) ----
+#
+# Local mode already skips login and lands in a default project; what was still missing is
+# *starting* the thing — two terminals running two commands, which is the step people bounce
+# off before they ever see a trace.
+#
+# Deliberately spawns subprocesses rather than importing the server: this CLI's whole contract
+# is core deps only (httpx), so `provekit traces list` keeps working in an environment that has
+# no server installed. The server extra is checked for, and named, rather than blowing up with
+# an ImportError from three frames down.
+
+def _repo_frontend():
+    """A checked-out frontend with its dependencies installed, if we're in the repo.
+
+    Returns a Path or None. Imported locally so the CLI's import cost stays where it is.
+    """
+    import pathlib as _p
+    here = _p.Path(__file__).resolve()
+    for base in (_p.Path.cwd(), *here.parents[:4]):
+        fe = base / "frontend"
+        if (fe / "package.json").exists() and (fe / "node_modules").exists():
+            return fe
+    return None
+
+
+def cmd_up(args) -> int:
+    """Run the API (and the portal, in a checkout) with one command."""
+    import shutil
+    import signal
+    import subprocess
+    import time as _t
+
+    try:
+        import uvicorn  # noqa: F401
+    except ImportError:
+        raise CliError(
+            "the server isn't installed in this environment. `provekit up` runs the API "
+            "locally, which needs the server extra: pip install \"provekit[server]\". "
+            "The read-only commands (traces, datasets, eval) work against a remote portal "
+            "without it.") from None
+
+    procs: list[tuple[str, subprocess.Popen]] = []
+
+    def _stop(*_a):
+        for name, proc in procs:
+            if proc.poll() is None:
+                proc.terminate()
+        for _name, proc in procs:
+            try:
+                proc.wait(timeout=8)
+            except Exception:
+                proc.kill()
+
+    api = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "provekit.main:app",
+         "--host", args.host, "--port", str(args.port)])
+    procs.append(("api", api))
+
+    fe_dir = None if args.no_frontend else _repo_frontend()
+    if fe_dir and shutil.which("npm"):
+        procs.append(("portal", subprocess.Popen(
+            ["npm", "run", "dev", "--", "--port", str(args.frontend_port)], cwd=str(fe_dir))))
+
+    signal.signal(signal.SIGINT, lambda *a: (_stop(), sys.exit(0)))
+    signal.signal(signal.SIGTERM, lambda *a: (_stop(), sys.exit(0)))
+
+    # Wait for the API to actually answer before claiming it is up — printing a URL that 404s
+    # for another two seconds is how a first run gets written off as broken.
+    base = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '') else args.host}:{args.port}"
+    ready = False
+    for _ in range(60):
+        if api.poll() is not None:
+            break
+        try:
+            if httpx.get(f"{base}/healthz", timeout=1.0).status_code < 500:
+                ready = True
+                break
+        except Exception:
+            _t.sleep(0.5)
+    if api.poll() is not None:
+        _stop()
+        raise CliError(f"the API exited immediately (code {api.returncode}). Run it directly to "
+                       f"see why: python -m uvicorn provekit.main:app --port {args.port}")
+
+    # flush=True throughout: this process then blocks forever, and Python block-buffers stdout
+    # whenever it isn't a TTY — so piped or redirected, these lines would sit unseen in the
+    # buffer while uvicorn's own logging (which configures its own handler) streamed past them.
+    print(f"  API     {base}" + ("" if ready else "  (still starting)"), flush=True)
+    if fe_dir:
+        print(f"  Portal  http://localhost:{args.frontend_port}", flush=True)
+    else:
+        print("  Portal  not started — no built frontend beside this install.", flush=True)
+        print("          The API is usable on its own; point the SDK at it with "
+              f"PROVEKIT_ENDPOINT={base}", flush=True)
+    print("\n  Local mode needs no login. Ctrl-C to stop.", flush=True)
+
+    try:
+        while True:
+            for name, proc in procs:
+                if proc.poll() is not None:
+                    print(f"\n{name} exited (code {proc.returncode}); shutting down.", flush=True)
+                    _stop()
+                    return 1
+            _t.sleep(0.5)
+    except KeyboardInterrupt:
+        _stop()
+    return 0
+
+
 # ---- parser ----
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
@@ -406,6 +515,13 @@ def build_parser() -> argparse.ArgumentParser:
     er.add_argument("--fail-under", type=float, default=None,
                     help="exit 1 if mean_score falls below this — the CI regression gate")
     er.set_defaults(func=cmd_eval_run)
+
+    up = groups.add_parser("up", help="run ProveKit locally (API, plus the portal in a checkout)")
+    up.add_argument("--port", type=int, default=8000, help="API port (default 8000)")
+    up.add_argument("--host", default="127.0.0.1", help="API bind address (default 127.0.0.1)")
+    up.add_argument("--frontend-port", type=int, default=3000, help="portal port (default 3000)")
+    up.add_argument("--no-frontend", action="store_true", help="run only the API")
+    up.set_defaults(func=cmd_up)
 
     doc = groups.add_parser("doctor", help="say why no traces are arriving")
     doc.add_argument("--send", action="store_true", help="also send one probe span")

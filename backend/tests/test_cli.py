@@ -423,3 +423,62 @@ def test_dataset_create_still_falls_back_for_an_older_server(monkeypatch, env):
     assert cli.main(["datasets", "create", "ci"]) == 0
     assert [c["path"] for c in stub.calls] == ["/v1/datasets", "/api/datasets"]
 
+
+# ---- provekit up (#38) ----
+def test_up_names_the_missing_extra_rather_than_raising_importerror(monkeypatch, capsys):
+    """The CLI is core-deps-only by contract, so `up` has to explain the gap it can't fill."""
+    import builtins
+    real_import = builtins.__import__
+
+    def _no_uvicorn(name, *a, **k):
+        if name == "uvicorn":
+            raise ImportError("no uvicorn")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", _no_uvicorn)
+    assert cli.main(["up"]) == 1
+    err = capsys.readouterr().err
+    assert "provekit[server]" in err
+    # …and points out that the remote-facing commands still work without it.
+    assert "traces" in err
+
+
+def test_up_starts_the_api_and_reports_it(monkeypatch, capsys):
+    """Spawns uvicorn rather than importing the server, waits for it to actually answer, and
+    names the URL only once it does."""
+    import subprocess as _sp
+    import time as _time
+
+    started = []
+
+    class _Proc:
+        returncode = None
+
+        def __init__(self, argv, *a, **k):
+            started.append(argv)
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.returncode = 0
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(_sp, "Popen", _Proc)
+    monkeypatch.setattr(cli, "_repo_frontend", lambda: None)
+    monkeypatch.setattr(cli.httpx, "get", lambda *a, **k: _Resp(200, {"ok": True}))
+    # `_t` in cmd_up is the real time module, so patching it here breaks the monitor loop.
+    monkeypatch.setattr(_time, "sleep",
+                        lambda *_a: (_ for _ in ()).throw(KeyboardInterrupt()))
+
+    assert cli.main(["up", "--no-frontend", "--port", "8123"]) == 0
+    out = capsys.readouterr().out
+    assert "http://127.0.0.1:8123" in out
+    assert "no login" in out
+    # It launched uvicorn against the real app rather than importing the server itself.
+    assert any("uvicorn" in part for part in started[0])

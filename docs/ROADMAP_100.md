@@ -74,7 +74,7 @@ The single strongest lever on adoption. ProveKit's pitch is "one import" — the
 35. **One-click deploy.** ~~No blueprints.~~ `render.yaml`, `railway.json`, `fly.toml` and [ONE_CLICK.md](../deploy/ONE_CLICK.md). Not yet deployed against real accounts — flagged as such in the doc rather than implied working. 🟡 S ◑
 36. **Migration guides.** ~~Nothing for people switching.~~ [MIGRATING.md](MIGRATING.md) — concept mapping for LangSmith and Langfuse, what moves cleanly, what doesn't, and the OTLP endpoint as the fastest path. 🟡 M ✅
 37. **Interactive product tour.** ~~A populated portal was presented cold.~~ A dismissible first-visit tour over the sample project (#32), shown once. 🟢 M ✅
-38. **Zero-config local mode polish.** Local mode skips login and lands in a default project — extend it to a single `provekit up` that runs backend + frontend + demo data. 🟡 S ◑
+38. **Zero-config local mode polish.** ~~Local mode skipped login and landed in a default project, but *starting* it was still two terminals running two commands — the step people bounce off before they ever see a trace.~~ `provekit up` runs the API, and the portal too when it finds a checkout with dependencies installed. It waits for `/healthz` to actually answer before printing the URL (a URL that 404s for another two seconds is how a first run gets written off as broken), shuts both children down on Ctrl-C, and exits with the child's reason if one dies. It **spawns** rather than imports: this CLI's contract is core deps only, so `provekit traces list` keeps working against a remote portal in an environment with no server installed — and if the server extra is missing, `up` names it instead of surfacing an ImportError from three frames down. 🟡 S ✅
 
 ## D. Evaluation depth (39–52)
 

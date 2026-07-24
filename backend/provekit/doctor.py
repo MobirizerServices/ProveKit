@@ -17,6 +17,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from . import trace as _trace
 from urllib.parse import urlparse
 
 OK, WARN, BAD = "ok", "warn", "bad"
@@ -122,18 +123,14 @@ def check_packages(rep: Report) -> bool:
 # walks it against the local environment (`local_coverage`); the portal renders it as a
 # catalogue (`coverage_catalog`) — see frontend/components/EmptyState.tsx, whose copy of the
 # list is pinned to this one by tests/test_onboarding.py.
-_COVERAGE = [
-    ("openai", "openinference.instrumentation.openai", "provekit[trace]"),
-    ("anthropic", "openinference.instrumentation.anthropic", "provekit[trace]"),
-    ("langchain", "openinference.instrumentation.langchain", "provekit[trace-all]"),
-    ("llama_index", "openinference.instrumentation.llama_index", "provekit[trace-all]"),
-    ("crewai", "openinference.instrumentation.crewai", "provekit[trace-all]"),
-    ("litellm", "openinference.instrumentation.litellm", "provekit[trace-all]"),
-    ("groq", "openinference.instrumentation.groq", "provekit[trace-all]"),
-    ("mistralai", "openinference.instrumentation.mistralai", "provekit[trace-all]"),
-    ("httpx", "opentelemetry.instrumentation.httpx", "provekit[http]"),
-    ("requests", "opentelemetry.instrumentation.requests", "provekit[http]"),
-]
+# What ProveKit can auto-instrument. DERIVED from provekit.trace, which is where the
+# instrumentors are actually registered — not a second copy.
+#
+# It was a second copy, and it drifted: the runtime instrumented 24 libraries while this list
+# advertised 10, so the product under-reported itself by more than half and nothing caught it.
+# A catalogue that can disagree with the code it describes is worse than no catalogue, because
+# it is quoted in comparisons and believed.
+_COVERAGE = [(lib, mod, extra) for lib, mod, extra in _trace.catalogue()]
 
 
 def coverage_catalog() -> list[dict[str, str]]:

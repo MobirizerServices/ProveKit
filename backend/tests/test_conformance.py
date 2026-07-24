@@ -9,7 +9,7 @@ import pathlib
 
 from fastapi.testclient import TestClient
 
-from provekit import conformance
+from provekit import conformance, doctor
 from provekit.main import app
 
 _OTEL_SRC = (pathlib.Path(__file__).resolve().parents[1]
@@ -48,3 +48,55 @@ def test_the_endpoint_serves_the_matrix():
     assert body["gaps"] and "gen_ai" in body["mapped"]
     # It says where the numbers come from, so a reader isn't left to assume a spec version.
     assert "not pinned" in body["note"].lower()
+
+
+# ---- instrumentation catalogue (the drift that already happened once) ----
+
+def test_the_catalogue_is_derived_from_the_runtime_not_copied():
+    """doctor._COVERAGE was a hand-written second copy and it drifted: the runtime
+    instrumented 24 libraries while the catalogue advertised 10, so the product under-reported
+    itself by more than half and nothing caught it. A catalogue that can disagree with the code
+    it describes is worse than none, because it gets quoted in comparisons and believed."""
+    from provekit import trace
+
+    runtime = {lib for lib, _m, _c, _e in (*trace._INSTRUMENTORS, *trace._HTTP_INSTRUMENTORS)}
+    published = {r["library"] for r in doctor.coverage_catalog()}
+    assert published == runtime, f"catalogue and runtime disagree: {published ^ runtime}"
+
+
+def test_every_instrumentor_row_is_well_formed():
+    """A malformed row is a library that silently never instruments."""
+    from provekit import trace
+
+    for lib, module, cls, extra in (*trace._INSTRUMENTORS, *trace._HTTP_INSTRUMENTORS):
+        assert lib and module and cls and extra
+        assert module.startswith(("openinference.instrumentation.", "opentelemetry.instrumentation."))
+        assert cls.endswith("Instrumentor"), f"{lib}: {cls} breaks the naming convention"
+        assert extra.startswith("provekit["), f"{lib}: {extra} is not an installable extra"
+
+
+def test_every_named_extra_actually_exists_in_pyproject():
+    """The catalogue tells a user which extra to install. If that extra isn't defined, the
+    instruction is a dead end."""
+    import re
+    src = (pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+    defined = set(re.findall(r'(?m)^([a-z-]+) = \[', src))
+    named = {r["extra"].removeprefix("provekit[").removesuffix("]")
+             for r in doctor.coverage_catalog()}
+    assert named <= defined, f"catalogue names undefined extras: {named - defined}"
+
+
+def test_a_renamed_instrumentor_class_still_resolves():
+    """Upstream renames are the quiet failure: the library stays installed, the catalogue keeps
+    advertising it, and spans just stop appearing. The loader falls back to the module's single
+    *Instrumentor class rather than skipping."""
+    import types
+
+    from provekit import trace
+
+    mod = types.SimpleNamespace(RenamedThingInstrumentor=object)
+    assert trace._resolve_instrumentor(mod, "OldNameInstrumentor") is object
+    # Ambiguity is not guessed at — two candidates means we decline rather than pick wrong.
+    two = types.SimpleNamespace(AInstrumentor=object, BInstrumentor=int)
+    assert trace._resolve_instrumentor(two, "GoneInstrumentor") is None
+

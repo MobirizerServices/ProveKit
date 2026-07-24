@@ -82,6 +82,20 @@ http = [
     "opentelemetry-instrumentation-httpx>=0.40b0",
     "opentelemetry-instrumentation-requests>=0.40b0",
     "opentelemetry-instrumentation-urllib>=0.40b0",
+    "opentelemetry-instrumentation-urllib3>=0.40b0",
+    "opentelemetry-instrumentation-aiohttp-client>=0.40b0",
+]
+# `pip install provekit[data]` — the calls an agent makes *around* the model: vector stores,
+# databases, queues, AWS. A retrieval that took 900ms is invisible without these, and it is
+# very often the thing that actually made the run slow.
+data = [
+    "opentelemetry-instrumentation-botocore>=0.40b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.40b0",
+    "opentelemetry-instrumentation-psycopg>=0.40b0",
+    "opentelemetry-instrumentation-asyncpg>=0.40b0",
+    "opentelemetry-instrumentation-redis>=0.40b0",
+    "opentelemetry-instrumentation-pymongo>=0.40b0",
+    "opentelemetry-instrumentation-elasticsearch>=0.40b0",
 ]
 # `pip install provekit[trace-all]` — bundle the whole instrumentor set so one decorator
 # captures LLM calls across every common provider and agent framework, no manual spans.
@@ -100,10 +114,26 @@ trace-all = [
     "openinference-instrumentation-mistralai>=0.1",
     "openinference-instrumentation-dspy>=0.1",
     "openinference-instrumentation-haystack>=0.1",
+    "openinference-instrumentation-google-genai>=0.1",
+    "openinference-instrumentation-vertexai>=0.1",
+    "openinference-instrumentation-portkey>=0.1",
+    "openinference-instrumentation-autogen>=0.1",
+    "openinference-instrumentation-openai-agents>=0.1",
+    "openinference-instrumentation-smolagents>=0.1",
+    "openinference-instrumentation-agno>=0.1",
+    "openinference-instrumentation-pydantic-ai>=0.1",
+    "openinference-instrumentation-beeai>=0.1",
+    "openinference-instrumentation-google-adk>=0.1",
+    "openinference-instrumentation-claude-agent-sdk>=0.1",
+    "openinference-instrumentation-guardrails>=0.1",
+    "openinference-instrumentation-instructor>=0.1",
+    "openinference-instrumentation-mcp>=0.1",
     # generic HTTP so non-LLM calls are captured too
     "opentelemetry-instrumentation-httpx>=0.40b0",
     "opentelemetry-instrumentation-requests>=0.40b0",
     "opentelemetry-instrumentation-urllib>=0.40b0",
+    "opentelemetry-instrumentation-urllib3>=0.40b0",
+    "opentelemetry-instrumentation-aiohttp-client>=0.40b0",
 ]
 # `pip install provekit[mcp]` — the MCP debug server (`provekit-mcp`). A *debug channel*, not
 # client instrumentation: it reads already-captured traces from your portal by project key.

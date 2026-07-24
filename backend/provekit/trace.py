@@ -39,43 +39,83 @@ _endpoint = None
 
 # Best-effort auto-instrumentation: whichever of these are installed get enabled so their
 # calls nest under the decorated entrypoint with no manual spans. All optional — a missing
-# package (or a class that moved) is silently skipped. Install the matching openinference
-# package (or use `provekit[trace-all]`) to light one up.
+# package is silently skipped. Install the matching openinference package (or use
+# `provekit[trace-all]`) to light one up.
+#
+# Each row is (library, module, class, extra). The library and extra are carried here rather
+# than duplicated in doctor.py because the catalogue the portal and `provekit doctor` publish
+# is *derived* from this list — a second copy drifted once already, under-reporting what the
+# runtime actually instruments by more than half.
 _INSTRUMENTORS = [
     # LLM providers
-    ("openinference.instrumentation.openai", "OpenAIInstrumentor"),
-    ("openinference.instrumentation.anthropic", "AnthropicInstrumentor"),
-    ("openinference.instrumentation.bedrock", "BedrockInstrumentor"),
-    ("openinference.instrumentation.mistralai", "MistralAIInstrumentor"),
-    ("openinference.instrumentation.groq", "GroqInstrumentor"),
-    ("openinference.instrumentation.google_genai", "GoogleGenAIInstrumentor"),
-    ("openinference.instrumentation.vertexai", "VertexAIInstrumentor"),
-    ("openinference.instrumentation.litellm", "LiteLLMInstrumentor"),
+    ("openai", "openinference.instrumentation.openai", "OpenAIInstrumentor", "provekit[trace]"),
+    ("anthropic", "openinference.instrumentation.anthropic", "AnthropicInstrumentor", "provekit[trace]"),
+    ("bedrock", "openinference.instrumentation.bedrock", "BedrockInstrumentor", "provekit[trace-all]"),
+    ("mistralai", "openinference.instrumentation.mistralai", "MistralAIInstrumentor", "provekit[trace-all]"),
+    ("groq", "openinference.instrumentation.groq", "GroqInstrumentor", "provekit[trace-all]"),
+    ("google_genai", "openinference.instrumentation.google_genai", "GoogleGenAIInstrumentor", "provekit[trace-all]"),
+    ("vertexai", "openinference.instrumentation.vertexai", "VertexAIInstrumentor", "provekit[trace-all]"),
+    ("litellm", "openinference.instrumentation.litellm", "LiteLLMInstrumentor", "provekit[trace-all]"),
+    ("portkey", "openinference.instrumentation.portkey", "PortkeyInstrumentor", "provekit[trace-all]"),
     # agent frameworks
-    ("openinference.instrumentation.langchain", "LangChainInstrumentor"),
-    ("openinference.instrumentation.llama_index", "LlamaIndexInstrumentor"),
-    ("openinference.instrumentation.crewai", "CrewAIInstrumentor"),
-    ("openinference.instrumentation.autogen", "AutogenInstrumentor"),
-    ("openinference.instrumentation.openai_agents", "OpenAIAgentsInstrumentor"),
-    ("openinference.instrumentation.smolagents", "SmolagentsInstrumentor"),
-    ("openinference.instrumentation.dspy", "DSPyInstrumentor"),
-    ("openinference.instrumentation.haystack", "HaystackInstrumentor"),
-    ("openinference.instrumentation.guardrails", "GuardrailsInstrumentor"),
-    ("openinference.instrumentation.instructor", "InstructorInstrumentor"),
-    ("openinference.instrumentation.agno", "AgnoInstrumentor"),
-    ("openinference.instrumentation.pydantic_ai", "OpenInferencePydanticAIInstrumentor"),
+    ("langchain", "openinference.instrumentation.langchain", "LangChainInstrumentor", "provekit[trace-all]"),
+    ("llama_index", "openinference.instrumentation.llama_index", "LlamaIndexInstrumentor", "provekit[trace-all]"),
+    ("crewai", "openinference.instrumentation.crewai", "CrewAIInstrumentor", "provekit[trace-all]"),
+    ("autogen", "openinference.instrumentation.autogen", "AutogenInstrumentor", "provekit[trace-all]"),
+    ("openai_agents", "openinference.instrumentation.openai_agents", "OpenAIAgentsInstrumentor", "provekit[trace-all]"),
+    ("smolagents", "openinference.instrumentation.smolagents", "SmolagentsInstrumentor", "provekit[trace-all]"),
+    ("agno", "openinference.instrumentation.agno", "AgnoInstrumentor", "provekit[trace-all]"),
+    ("pydantic_ai", "openinference.instrumentation.pydantic_ai", "OpenInferencePydanticAIInstrumentor", "provekit[trace-all]"),
+    ("beeai", "openinference.instrumentation.beeai", "BeeAIInstrumentor", "provekit[trace-all]"),
+    ("google_adk", "openinference.instrumentation.google_adk", "GoogleADKInstrumentor", "provekit[trace-all]"),
+    ("claude_agent_sdk", "openinference.instrumentation.claude_agent_sdk", "ClaudeAgentSDKInstrumentor", "provekit[trace-all]"),
+    # orchestration / tooling
+    ("dspy", "openinference.instrumentation.dspy", "DSPyInstrumentor", "provekit[trace-all]"),
+    ("haystack", "openinference.instrumentation.haystack", "HaystackInstrumentor", "provekit[trace-all]"),
+    ("guardrails", "openinference.instrumentation.guardrails", "GuardrailsInstrumentor", "provekit[trace-all]"),
+    ("instructor", "openinference.instrumentation.instructor", "InstructorInstrumentor", "provekit[trace-all]"),
+    ("mcp", "openinference.instrumentation.mcp", "MCPInstrumentor", "provekit[trace-all]"),
 ]
 
-# Generic (non-LLM) instrumentors: every outbound HTTP call your agent makes — tool APIs,
-# vector DBs, webhooks — becomes a child span too, so "capture everything" isn't just the
-# model calls. Best-effort, same as above: install `provekit[http]` (or `[trace-all]`) to
-# light these up. These come from opentelemetry-instrumentation-*, not openinference.
+# Generic (non-LLM) instrumentors: the calls an agent makes *around* the model — tool APIs,
+# vector stores, databases, queues — become child spans too, so "capture everything" isn't
+# just the model calls. A retrieval that took 900ms is invisible without these, and it is
+# very often the thing that actually made the run slow.
 _HTTP_INSTRUMENTORS = [
-    ("opentelemetry.instrumentation.httpx", "HTTPXClientInstrumentor"),
-    ("opentelemetry.instrumentation.requests", "RequestsInstrumentor"),
-    ("opentelemetry.instrumentation.aiohttp_client", "AioHttpClientInstrumentor"),
-    ("opentelemetry.instrumentation.urllib", "URLLibInstrumentor"),
+    ("httpx", "opentelemetry.instrumentation.httpx", "HTTPXClientInstrumentor", "provekit[http]"),
+    ("requests", "opentelemetry.instrumentation.requests", "RequestsInstrumentor", "provekit[http]"),
+    ("aiohttp", "opentelemetry.instrumentation.aiohttp_client", "AioHttpClientInstrumentor", "provekit[http]"),
+    ("urllib", "opentelemetry.instrumentation.urllib", "URLLibInstrumentor", "provekit[http]"),
+    ("urllib3", "opentelemetry.instrumentation.urllib3", "URLLib3Instrumentor", "provekit[http]"),
+    ("botocore", "opentelemetry.instrumentation.botocore", "BotocoreInstrumentor", "provekit[data]"),
+    ("sqlalchemy", "opentelemetry.instrumentation.sqlalchemy", "SQLAlchemyInstrumentor", "provekit[data]"),
+    ("psycopg", "opentelemetry.instrumentation.psycopg", "PsycopgInstrumentor", "provekit[data]"),
+    ("asyncpg", "opentelemetry.instrumentation.asyncpg", "AsyncPGInstrumentor", "provekit[data]"),
+    ("redis", "opentelemetry.instrumentation.redis", "RedisInstrumentor", "provekit[data]"),
+    ("pymongo", "opentelemetry.instrumentation.pymongo", "PymongoInstrumentor", "provekit[data]"),
+    ("elasticsearch", "opentelemetry.instrumentation.elasticsearch", "ElasticsearchInstrumentor", "provekit[data]"),
 ]
+
+#: Every library this build knows how to instrument, as (library, module, extra).
+#: The single source the doctor catalogue and `GET /api/coverage` are both built from.
+def catalogue() -> list[tuple[str, str, str]]:
+    return [(lib, mod, extra) for lib, mod, _cls, extra in (*_INSTRUMENTORS, *_HTTP_INSTRUMENTORS)]
+
+
+def _resolve_instrumentor(mod, cls: str):
+    """The instrumentor class, tolerating an upstream rename.
+
+    Named lookup first. If that fails, fall back to the module's single `*Instrumentor` class —
+    OpenInference and OpenTelemetry both follow that convention, and a class that gets renamed
+    upstream would otherwise turn into a library we silently stop instrumenting while the
+    catalogue keeps advertising it. Silence is the failure mode worth engineering against here:
+    nothing surfaces it except missing spans nobody knows to look for.
+    """
+    found = getattr(mod, cls, None)
+    if found is not None:
+        return found
+    names = [n for n in dir(mod) if n.endswith("Instrumentor") and not n.startswith("_")]
+    return getattr(mod, names[0]) if len(names) == 1 else None
 
 
 # ---- OTLP/JSON serialization (matches services.otel.ingest, which reads OTLP-JSON) ----
@@ -191,10 +231,13 @@ def _auto_instrument(provider) -> None:
     prev_level = inst_log.level
     inst_log.setLevel(logging.CRITICAL)
     try:
-        for module, cls in (*_INSTRUMENTORS, *_HTTP_INSTRUMENTORS):
+        for _lib, module, cls, _extra in (*_INSTRUMENTORS, *_HTTP_INSTRUMENTORS):
             try:
                 mod = __import__(module, fromlist=[cls])
-                getattr(mod, cls)().instrument(tracer_provider=provider)
+                target = _resolve_instrumentor(mod, cls)
+                if target is None:
+                    continue
+                target().instrument(tracer_provider=provider)
                 log.debug("provekit: auto-instrumented %s", module)
             except Exception:  # not installed / already instrumented / incompatible → skip
                 pass

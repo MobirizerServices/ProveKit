@@ -64,9 +64,12 @@ _MISSING = object()
 
 
 def _families() -> set[str]:
-    """Instrumentor families ProveKit installs, as the module tail (…instrumentation.openai)."""
-    mods = [m for m, _ in trace_sdk._INSTRUMENTORS + trace_sdk._HTTP_INSTRUMENTORS]
-    return {m.rsplit(".", 1)[-1] for m in mods}
+    """Instrumentor families ProveKit installs, as the module tail (…instrumentation.openai).
+
+    Reads the public catalogue rather than destructuring the instrumentor rows, so widening the
+    row shape can't break this the way it did when the extra/library metadata was added.
+    """
+    return {mod.rsplit(".", 1)[-1] for _lib, mod, _extra in trace_sdk.catalogue()}
 
 
 @functools.lru_cache(maxsize=None)

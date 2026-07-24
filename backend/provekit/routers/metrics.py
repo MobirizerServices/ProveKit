@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .. import doctor
 from ..database import get_db
 from ..models import MetricRollup, ModelRollup, Run, Workspace, _now, iso_utc
 from ..services import pricing, rollups
@@ -16,6 +17,25 @@ router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 # Separate router: a rate card is not a metric, and it is not tenant data. Deliberately
 # unauthenticated — it contains published vendor prices and nothing about any workspace.
 pricing_router = APIRouter(prefix="/api/pricing", tags=["pricing"])
+
+
+# Same reasoning as the rate card: a published catalogue, not tenant data, and the portal
+# should read it rather than keep a second copy that drifts (#30).
+coverage_router = APIRouter(prefix="/api/coverage", tags=["coverage"])
+
+
+@coverage_router.get("")
+def instrumentation_coverage():
+    """What ProveKit can auto-instrument, served so the portal stops maintaining a copy (#30).
+
+    Deliberately the catalogue only. The *local* answer — which of these are installed and
+    actually instrumented — depends on the user's virtualenv, on a machine this server has
+    never seen, and is what `provekit doctor` reports. Inferring "you aren't instrumenting
+    langchain" from an absence of langchain spans would be a guess: a project that simply
+    doesn't use langchain looks identical.
+    """
+    return {"libraries": doctor.coverage_catalog(),
+            "local_answer": "provekit doctor"}
 
 
 @pricing_router.get("")

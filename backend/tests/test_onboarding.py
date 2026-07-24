@@ -312,16 +312,22 @@ def test_local_coverage_splits_installed_from_instrumented(monkeypatch):
     assert gap[0] == doctor.WARN and "langchain" in gap[2] and "trace-all" in gap[3]
 
 
-@pytest.mark.skipif(not (FRONTEND / "components" / "EmptyState.tsx").exists(),
-                    reason="frontend not checked out")
-def test_portal_coverage_table_matches_doctor():
-    """The portal renders the same catalogue. It can't import Python, so it holds a copy —
-    and a copy that drifts would advertise instrumentation ProveKit doesn't ship."""
+def test_the_portal_reads_the_coverage_catalogue_rather_than_copying_it():
+    """#30 — the portal used to hold a hand-maintained copy of the catalogue, and this test
+    existed only to notice when it drifted. It is served by GET /api/coverage now, so the
+    stronger assertion is that no second copy exists to drift."""
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        body = client.get("/api/coverage").json()
+    served = [(r["library"], r["instrumentor"], r["extra"]) for r in body["libraries"]]
+    assert served == [tuple(row) for row in doctor._COVERAGE]
+    # The local answer is the CLI's job — the server has never seen the user's virtualenv.
+    assert body["local_answer"] == "provekit doctor"
+
     src = (FRONTEND / "components" / "EmptyState.tsx").read_text()
-    found = re.findall(
-        r'\{\s*library:\s*"([^"]+)",\s*instrumentor:\s*"([^"]+)",\s*extra:\s*"([^"]+)"\s*\}', src)
-    assert found, "COVERAGE table not found in EmptyState.tsx"
-    assert found == [tuple(row) for row in doctor._COVERAGE]
+    dupes = re.findall(r'\{\s*library:\s*"([^"]+)",\s*instrumentor:', src)
+    assert not dupes, f"the portal has re-introduced a copy of the catalogue: {dupes}"
 
 
 def test_the_sample_project_seeds_the_flow_the_landing_page_shows(db, user, seeding_on):

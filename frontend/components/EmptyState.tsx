@@ -23,22 +23,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { API_BASE, ApiKey, getProjectId } from "@/lib/api";
 
-// What ProveKit can auto-instrument. Mirrors provekit/doctor.py `_COVERAGE`, which is the
-// source of truth; test_onboarding.py fails if the two drift. The portal cannot compute the
-// *local* answer — these libraries live in the user's virtualenv, on a machine this server has
-// never seen — so it shows the catalogue and points at `provekit doctor` for the local scan.
-export const COVERAGE: { library: string; instrumentor: string; extra: string }[] = [
-  { library: "openai", instrumentor: "openinference.instrumentation.openai", extra: "provekit[trace]" },
-  { library: "anthropic", instrumentor: "openinference.instrumentation.anthropic", extra: "provekit[trace]" },
-  { library: "langchain", instrumentor: "openinference.instrumentation.langchain", extra: "provekit[trace-all]" },
-  { library: "llama_index", instrumentor: "openinference.instrumentation.llama_index", extra: "provekit[trace-all]" },
-  { library: "crewai", instrumentor: "openinference.instrumentation.crewai", extra: "provekit[trace-all]" },
-  { library: "litellm", instrumentor: "openinference.instrumentation.litellm", extra: "provekit[trace-all]" },
-  { library: "groq", instrumentor: "openinference.instrumentation.groq", extra: "provekit[trace-all]" },
-  { library: "mistralai", instrumentor: "openinference.instrumentation.mistralai", extra: "provekit[trace-all]" },
-  { library: "httpx", instrumentor: "opentelemetry.instrumentation.httpx", extra: "provekit[http]" },
-  { library: "requests", instrumentor: "opentelemetry.instrumentation.requests", extra: "provekit[http]" },
-];
+// What ProveKit can auto-instrument, fetched from GET /api/coverage rather than duplicated
+// here (#30). A second copy is a second thing to keep true, and this one had a test whose only
+// job was to notice when it drifted. The portal still cannot compute the *local* answer — these
+// libraries live in the user's virtualenv, on a machine the server has never seen — so it shows
+// the catalogue and points at `provekit doctor` for the local scan.
+interface CoverageRow { library: string; instrumentor: string; extra: string }
 
 // ---------------------------------------------------------------- diagnosis
 
@@ -199,6 +189,7 @@ interface Retention { stored_spans: number; pruned_total: number }
 export default function EmptyState({ origin }: { origin: string }) {
   const [signals, setSignals] = useState<IngestSignals>({ keys: null, storedSpans: null, prunedTotal: null });
   const [showCoverage, setShowCoverage] = useState(false);
+  const [coverage, setCoverage] = useState<CoverageRow[]>([]);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -211,6 +202,9 @@ export default function EmptyState({ origin }: { origin: string }) {
           prunedTotal: ret ? ret.pruned_total : null,
         });
       });
+    get<{ libraries: CoverageRow[] }>("/api/coverage").then((c) => {
+      if (live && c?.libraries) setCoverage(c.libraries);
+    });
     return () => { live = false; };
   }, []);
 
@@ -288,7 +282,7 @@ def run_agent(question: str) -> str:
       <div style={panel}>
         <button onClick={() => setShowCoverage((v) => !v)}
           style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", padding: 0, fontSize: 14, fontWeight: 600 }}>
-          {showCoverage ? "▾" : "▸"} What ProveKit auto-instruments ({COVERAGE.length} libraries)
+          {showCoverage ? "▾" : "▸"} What ProveKit auto-instruments ({coverage.length} libraries)
         </button>
         <p className="muted" style={{ margin: "6px 0 0", fontSize: 12.5, lineHeight: 1.6 }}>
           A library you call whose instrumentor isn&apos;t installed produces no span at all — the
@@ -305,7 +299,7 @@ def run_agent(question: str) -> str:
                 </tr>
               </thead>
               <tbody>
-                {COVERAGE.map((c) => (
+                {coverage.map((c) => (
                   <tr key={c.library}>
                     <td style={td}><code style={code}>{c.library}</code></td>
                     <td style={td}><code style={code}>pip install &quot;{c.extra}&quot;</code></td>

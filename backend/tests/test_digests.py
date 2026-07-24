@@ -141,3 +141,120 @@ def test_preview_shows_the_content_without_sending_or_rescheduling():
         again = [d for d in c.get("/api/digests").json() if d["id"] == made["id"]][0]
         assert again["last_sent_at"] is None     # preview must not consume the window
         c.delete(f"/api/digests/{made['id']}")
+
+
+# ---- delivery ------------------------------------------------------------------------------
+# `send()` promises never to raise: it runs inside the scheduler's loop, so one broken
+# destination must not stop everyone else's digest going out. That promise was untested.
+
+def _digest(db, **kw):
+    d = Digest(workspace_id=ingest_workspace_id(), cadence="weekly", last_sent_at=None, **kw)
+    db.add(d); db.commit(); db.refresh(d)
+    return d
+
+
+def test_a_webhook_digest_is_delivered_and_marked_sent(monkeypatch):
+    seen = {}
+
+    def _fake(url, body):
+        seen["url"], seen["body"] = url, body
+        return True
+
+    monkeypatch.setattr("provekit.services.notify.send_webhook", _fake)
+    db = SessionLocal()
+    try:
+        d = _digest(db, webhook_url="https://hooks.example.com/x")
+        assert digests.send(db, d) is True
+        assert d.last_status == "sent"
+        assert d.last_sent_at is not None
+    finally:
+        db.close()
+    assert seen["url"] == "https://hooks.example.com/x"
+    assert "[ProveKit]" in seen["body"]
+
+
+def test_an_email_digest_is_delivered(monkeypatch):
+    sent = []
+    monkeypatch.setattr("provekit.services.email.send",
+                        lambda to, subject, body: sent.append((to, subject)))
+    db = SessionLocal()
+    try:
+        d = _digest(db, email="ops@example.com")
+        assert digests.send(db, d) is True
+        assert d.last_status == "sent"
+    finally:
+        db.close()
+    assert sent and sent[0][0] == "ops@example.com"
+    assert "ProveKit digest" in sent[0][1]
+
+
+def test_a_refused_webhook_is_recorded_as_failed_but_still_rescheduled(monkeypatch):
+    """The stamp moves even on failure. Without it a permanently broken destination is retried
+    on every scheduler pass instead of once per window — a dead URL becomes a hot loop."""
+    monkeypatch.setattr("provekit.services.notify.send_webhook", lambda url, body: False)
+    db = SessionLocal()
+    try:
+        d = _digest(db, webhook_url="https://hooks.example.com/dead")
+        assert digests.send(db, d) is False
+        assert d.last_status == "delivery failed"
+        assert d.last_sent_at is not None
+    finally:
+        db.close()
+
+
+def test_a_destination_that_raises_does_not_escape_send(monkeypatch):
+    """The whole point of the guard: one exploding destination inside run_due() must not
+    abandon the digests queued behind it."""
+    def _boom(url, body):
+        raise RuntimeError("connection reset")
+
+    monkeypatch.setattr("provekit.services.notify.send_webhook", _boom)
+    db = SessionLocal()
+    try:
+        d = _digest(db, webhook_url="https://hooks.example.com/boom")
+        assert digests.send(db, d) is False              # returned, not raised
+        assert "RuntimeError" in d.last_status and "connection reset" in d.last_status
+        assert d.last_sent_at is not None
+    finally:
+        db.close()
+
+
+def test_a_digest_for_a_deleted_project_disables_itself():
+    """A digest outliving its project would fail forever. It turns itself off and says why."""
+    db = SessionLocal()
+    try:
+        d = Digest(workspace_id=10_000_000, cadence="weekly", email="x@y.co", last_sent_at=None)
+        db.add(d); db.commit(); db.refresh(d)
+        assert digests.send(db, d) is False
+        assert d.enabled is False
+        assert "no longer exists" in d.last_status
+    finally:
+        db.close()
+
+
+def test_run_due_sends_what_is_due_and_leaves_a_fresh_digest_alone(monkeypatch):
+    """Asserted as a post-condition, not as "this call sent N".
+
+    `main.py` starts `_send_digests_forever()` in the app lifespan, and any test in the suite
+    that opens a TestClient leaves that loop running — so a digest can be delivered by the
+    scheduler between two lines of this test. A count is therefore not a stable number, while
+    "nothing due is left unsent, and nothing inside its window is sent again" is true no matter
+    who did the sending.
+    """
+    monkeypatch.setattr("provekit.services.notify.send_webhook", lambda url, body: True)
+    db = SessionLocal()
+    try:
+        pending = _digest(db, webhook_url="https://hooks.example.com/pending")
+        fresh = _digest(db, webhook_url="https://hooks.example.com/fresh")
+        fresh.last_sent_at = datetime.now(timezone.utc)      # weekly cadence, just sent
+        db.commit()
+        stamp = fresh.last_sent_at
+
+        digests.run_due(db)
+
+        db.refresh(pending); db.refresh(fresh)
+        assert pending.last_sent_at is not None, "a due digest was left unsent"
+        assert pending.last_status == "sent"
+        assert fresh.last_sent_at == stamp, "a digest inside its window was sent again"
+    finally:
+        db.close()

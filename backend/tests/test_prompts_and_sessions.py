@@ -164,3 +164,118 @@ def test_listing_prompts_exposes_label_and_traffic():
     assert by_version[2]["label"] == "production"
     assert by_version[1]["label"] == ""
     assert (by_version[1]["traffic"], by_version[2]["traffic"]) == (30.0, 70.0)
+
+
+# ---- labels and splits over HTTP ------------------------------------------------------------
+# The resolution *logic* was unit-tested; the routes that set a label or move a split were not,
+# and those are the two operations that decide what production actually serves.
+
+def _mk(c, name, n=2):
+    """n saved versions of one prompt; returns their version numbers, newest last."""
+    out = []
+    for i in range(n):
+        r = c.post("/api/prompts", json={"name": name, "model": "gpt-4o",
+                                                    "messages": [{"role": "user",
+                                                                  "content": f"v{i}"}],
+                                                    "params": {}})
+        assert r.status_code == 200, r.text
+        out.append(r.json()["version"])
+    return out
+
+
+def test_a_label_moves_rather_than_being_added_twice():
+    """Two versions both labelled `production` would make the runtime fetch ambiguous, and the
+    ambiguity would only show up as traffic mysteriously split."""
+    with _client() as c:
+        v1, v2 = _mk(c, "lbl-move")
+        assert c.post("/api/prompts/lbl-move/label",
+                      params={"version": v1}, json={"label": "production"}).status_code == 200
+        assert c.post("/api/prompts/lbl-move/label",
+                      params={"version": v2}, json={"label": "production"}).status_code == 200
+
+        rows = c.get("/api/prompts").json()
+        labelled = [p for p in rows if p["name"] == "lbl-move" and p.get("label") == "production"]
+    assert len(labelled) == 1, "the label was duplicated instead of moved"
+    assert labelled[0]["version"] == v2
+
+
+def test_an_unknown_label_is_refused_with_the_allowed_set():
+    with _client() as c:
+        v1, _ = _mk(c, "lbl-bad")
+        r = c.post("/api/prompts/lbl-bad/label", params={"version": v1}, json={"label": "prodction"})
+    assert r.status_code == 422
+    assert "label must be one of" in r.json()["detail"]
+
+
+def test_labelling_a_version_that_does_not_exist_is_a_404():
+    with _client() as c:
+        _mk(c, "lbl-missing", n=1)
+        r = c.post("/api/prompts/lbl-missing/label", params={"version": 999}, json={"label": "production"})
+    assert r.status_code == 404
+
+
+def test_a_split_is_set_and_reported_back():
+    with _client() as c:
+        v1, v2 = _mk(c, "split-ok")
+        r = c.post("/api/prompts/split-ok/split", json={"weights": {str(v1): 0.7, str(v2): 0.3}})
+        assert r.status_code == 200, r.text
+        weights = {int(k): v for k, v in r.json()["weights"].items()}
+    assert weights == {v1: 0.7, v2: 0.3}
+
+
+def test_a_split_naming_an_unknown_version_is_refused():
+    """Silently ignoring the unknown key would leave a split that looks configured and serves
+    something else entirely."""
+    with _client() as c:
+        v1, _ = _mk(c, "split-unknown")
+        r = c.post("/api/prompts/split-unknown/split", json={"weights": {str(v1): 0.5, "999": 0.5}})
+    assert r.status_code == 422
+    assert "unknown version" in r.json()["detail"]
+
+
+def test_a_one_sided_split_is_refused_over_http_and_leaves_no_trace():
+    """The rollback matters as much as the 422: a refused split must not half-apply, or the
+    prompt is left serving weights nobody chose."""
+    with _client() as c:
+        v1, v2 = _mk(c, "split-onesided")
+        assert c.post("/api/prompts/split-onesided/split",
+                      json={"weights": {str(v1): 1.0}}).status_code == 422
+        rows = [p for p in c.get("/api/prompts").json()
+                if p["name"] == "split-onesided"]
+    assert all((p.get("traffic") or 0) == 0 for p in rows), "a refused split was partly applied"
+    assert v2 in [p["version"] for p in rows]
+
+
+def test_a_split_on_a_name_that_does_not_exist_is_a_404():
+    with _client() as c:
+        r = c.post("/api/prompts/no-such-prompt-at-all/split", json={"weights": {"1": 0.5}})
+    assert r.status_code == 404
+
+
+# ---- the runtime fetch (key-authed) ---------------------------------------------------------
+
+def test_the_runtime_fetch_serves_a_labelled_version_and_says_so():
+    """`served_by` is echoed so the caller can stamp it on the span — a split whose outcome is
+    not attached to the run leaves two populations nobody can separate afterwards."""
+    with _client() as c:
+        assert c.post("/api/auth/register",
+                      json={"email": "pfetch@ex.com", "password": "pw12345678"}).status_code == 200
+        key = c.post("/api/workspace/ingest-key").json()["ingest_key"]
+        v1, v2 = _mk(c, "rt-fetch")
+        c.post("/api/prompts/rt-fetch/label", params={"version": v1}, json={"label": "production"})
+
+        kh = {"Authorization": f"Bearer {key}"}
+        body = c.get("/v1/prompts/rt-fetch", params={"label": "production"}, headers=kh).json()
+        assert body["version"] == v1
+        assert body["served_by"] == "label:production"
+
+        latest = c.get("/v1/prompts/rt-fetch", headers=kh).json()
+        assert latest["version"] == v2
+        assert latest["served_by"] == f"latest:{v2}"
+
+        missing = c.get("/v1/prompts/rt-fetch", params={"label": "staging"}, headers=kh)
+        assert missing.status_code == 404
+        assert "staging" in missing.json()["detail"]
+
+        gone = c.get("/v1/prompts/not-a-prompt", headers=kh)
+    assert gone.status_code == 404

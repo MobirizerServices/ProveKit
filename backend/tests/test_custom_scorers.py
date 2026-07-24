@@ -184,3 +184,121 @@ def test_a_disabled_scorer_is_not_resolved():
         assert custom_scorers.resolve(db, pid, ["off_rule"]) == ["off_rule"]
     finally:
         db.close()
+
+
+# ---- the kinds that were validated but never actually run ------------------------------------
+
+@pytest.mark.parametrize("kind,cfg,output,expected", [
+    ("contains",      {"value": "policy"},                 "per the policy, yes",   1.0),
+    ("contains",      {"value": "policy"},                 "no mention",            0.0),
+    ("not_contains",  {"value": "sorry"},                   "here you go",          1.0),
+    ("not_contains",  {"value": "sorry"},                   "sorry, I can't",       0.0),
+    ("equals",        {"value": "yes"},                     "  yes  ",              1.0),
+    ("equals",        {"value": "yes"},                     "yes please",           0.0),
+    ("regex",         {"pattern": r"\d{3}-\d{4}"},          "call 555-0199",        1.0),
+    ("regex",         {"pattern": r"\d{3}-\d{4}"},          "call me",              0.0),
+    ("length_between", {"min": 3, "max": 10},               "hello",                1.0),
+    ("length_between", {"min": 3, "max": 10},               "hi",                   0.0),
+    ("length_between", {"min": 3, "max": 10},               "x" * 40,               0.0),
+])
+def test_each_kind_scores_what_it_says_it_scores(kind, cfg, output, expected):
+    assert custom_scorers.evaluate(kind, custom_scorers.validate(kind, cfg), output) == expected
+
+
+def test_case_insensitive_by_default_and_sensitive_on_request():
+    cfg = custom_scorers.validate("contains", {"value": "Policy"})
+    assert custom_scorers.evaluate("contains", cfg, "the policy") == 1.0
+    strict = custom_scorers.validate("contains", {"value": "Policy", "case_sensitive": True})
+    assert custom_scorers.evaluate("contains", strict, "the policy") == 0.0
+    assert custom_scorers.evaluate("contains", strict, "the Policy") == 1.0
+
+
+def test_a_json_path_rule_reads_into_the_document():
+    cfg = custom_scorers.validate("json_path", {"path": "result.status", "equals": "ok"})
+    assert custom_scorers.evaluate("json_path", cfg, '{"result": {"status": "ok"}}') == 1.0
+    assert custom_scorers.evaluate("json_path", cfg, '{"result": {"status": "bad"}}') == 0.0
+    # present-at-all, when no `equals` is configured
+    any_cfg = custom_scorers.validate("json_path", {"path": "result.status"})
+    assert custom_scorers.evaluate("json_path", any_cfg, '{"result": {"status": "x"}}') == 1.0
+
+
+def test_a_json_path_rule_indexes_into_a_list():
+    cfg = custom_scorers.validate("json_path", {"path": "items.1.id", "equals": "b"})
+    assert custom_scorers.evaluate("json_path", cfg, '{"items": [{"id":"a"},{"id":"b"}]}') == 1.0
+
+
+def test_a_rule_that_cannot_apply_returns_nothing_rather_than_zero():
+    """The distinction the whole design rests on: an ungradeable row scored 0.0 drags an
+    experiment mean exactly as hard as a real failure, while looking identical to one."""
+    cfg = custom_scorers.validate("json_path", {"path": "result.status"})
+    assert custom_scorers.evaluate("json_path", cfg, "this is prose, not JSON") is None
+    # a path that simply isn't there IS a judgement — the output was gradeable and missed
+    assert custom_scorers.evaluate("json_path", cfg, '{"other": 1}') == 0.0
+
+
+def test_an_unknown_kind_evaluates_to_nothing():
+    assert custom_scorers.evaluate("telepathy", {}, "anything") is None
+
+
+def test_a_pattern_that_stopped_compiling_declines_instead_of_raising():
+    """Rules are validated at creation, but a stored row predates whatever rule tightened last.
+    It must decline rather than take down the evaluation run it is part of."""
+    assert custom_scorers.evaluate("regex", {"pattern": "([unclosed"}, "text") is None
+
+
+def test_the_regex_kind_is_truncated_too_not_just_contains():
+    """The existing truncation test covers `contains`. `regex` is the kind that actually needs
+    it — `re` has no timeout, so bounding the input is the only defence available."""
+    cfg = custom_scorers.validate("regex", {"pattern": "needle"})
+    far_past_the_limit = ("x" * (custom_scorers.MAX_INPUT + 500)) + "needle"
+    assert custom_scorers.evaluate("regex", cfg, far_past_the_limit) == 0.0
+
+
+def test_a_compiled_rule_never_raises_into_the_run():
+    """`compile_row` is handed to run_scorers. One bad rule must cost its own score, not the
+    whole evaluation."""
+    class _Row:
+        name, kind, config = "boom", "length_between", {"min": "not-a-number", "max": 5}
+
+    scorer = custom_scorers.compile_row(_Row())
+    assert scorer.__name__ == "boom"
+    assert scorer("anything") is None
+
+
+def test_resolve_mixes_builtins_and_project_rules(tmp_path):
+    """A built-in name passes through untouched; a project's own name becomes its callable."""
+    db = SessionLocal()
+    try:
+        from conftest import ingest_workspace_id
+        ws = ingest_workspace_id()
+        name = f"cites_{uuid.uuid4().hex[:6]}"
+        from provekit.models import CustomScorer
+        db.add(CustomScorer(workspace_id=ws, name=name, kind="contains",
+                            config={"value": "policy"}, enabled=True))
+        db.commit()
+
+        out = custom_scorers.resolve(db, ws, ["json_valid", name])
+        assert out[0] == "json_valid", "a built-in must pass through by name"
+        assert callable(out[1]) and out[1]("per the policy") == 1.0
+
+        # a name this project never defined stays a name — resolution is not a lookup failure
+        assert custom_scorers.resolve(db, ws, ["nothing_defined"]) == ["nothing_defined"]
+        assert custom_scorers.resolve(db, ws, []) == []
+    finally:
+        db.close()
+
+
+def test_a_disabled_rule_is_not_resolved():
+    """Disabling is how you stop a misfiring scorer without losing its definition."""
+    db = SessionLocal()
+    try:
+        from conftest import ingest_workspace_id
+        from provekit.models import CustomScorer
+        ws = ingest_workspace_id()
+        name = f"off_{uuid.uuid4().hex[:6]}"
+        db.add(CustomScorer(workspace_id=ws, name=name, kind="contains",
+                            config={"value": "x"}, enabled=False))
+        db.commit()
+        assert custom_scorers.resolve(db, ws, [name]) == [name]
+    finally:
+        db.close()

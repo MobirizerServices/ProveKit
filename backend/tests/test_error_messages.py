@@ -16,6 +16,8 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+from fake_provider import openai_connection
+
 from provekit.main import app
 from provekit.services import errors
 
@@ -54,7 +56,7 @@ _BUILDER_ARGS = {
     "bad_alert_metric": ("cpu", {"error_rate", "trace_count"}),
     "bad_comparator": ("eq",),
     "bad_webhook": ("Link-local / metadata addresses are not allowed",),
-    "bad_provider": ("cohere", {"openai", "mock"}),
+    "bad_provider": ("cohere", {"openai", "anthropic"}),
     "provider_key_required": ("openai",),
     "span_no_messages": ("abc",),
     "too_many_edits": (12, 8),
@@ -252,7 +254,8 @@ def test_a_run_with_no_model_says_how_to_choose_one():
     d = _detail(r)
     assert "GET /api/connections" in d and "model connection" in d
 
-    r = c.post("/api/playground/run", json={"model": "gpt-4o", "messages": [], "provider": "mock"})
+    r = c.post("/api/playground/run", json={"model": "gpt-4o", "messages": [],
+                                            "connection_id": openai_connection(c)})
     assert r.status_code == 422 and "role" in _detail(r)
 
 
@@ -265,7 +268,8 @@ def test_prompt_and_dataset_errors_say_what_to_fix():
     assert r.status_code == 404 and "GET /api/prompts" in _detail(r)
 
     r = c.post("/api/playground/experiment",
-               json={"dataset_id": 98765, "model": "mock-1", "provider": "mock",
+               json={"dataset_id": 98765, "model": "gpt-4o",
+                     "connection_id": openai_connection(c),
                      "messages": [{"role": "user", "content": "{{input}}"}]})
     assert r.status_code == 404
     assert "GET /api/datasets" in _detail(r) and errors.DOCS_BASE in _detail(r)
@@ -273,7 +277,7 @@ def test_prompt_and_dataset_errors_say_what_to_fix():
 
 def test_multi_replay_edit_validation_is_specific_per_edit():
     c = _client()
-    base = {"origin_trace_id": "t-missing", "provider": "mock"}
+    base = {"origin_trace_id": "t-missing", "connection_id": openai_connection(c)}
 
     r = c.post("/api/replay/multi", json={**base, "edits": []})
     assert r.status_code == 422 and "identical branch" in _detail(r)
@@ -302,7 +306,8 @@ def test_multi_replay_edit_validation_is_specific_per_edit():
 def test_replay_of_an_unknown_trace_says_where_to_get_the_id():
     c = _client()
     r = c.post("/api/replay", json={"origin_trace_id": "no-such-trace", "fork_span_id": "s1",
-                                    "model": "mock-1", "provider": "mock",
+                                    "model": "gpt-4o",
+                                    "connection_id": openai_connection(c),
                                     "messages": [{"role": "user", "content": "hi"}]})
     assert r.status_code == 404
     d = _detail(r)

@@ -110,7 +110,6 @@ def test_ingest_offloads_and_the_trace_view_inflates(offloading):
 
 def test_offload_runs_after_redaction(offloading):
     """Offloading first would write the unmasked payload to a store redaction can never reach."""
-    row = {"request": {"input": "x"}, "result": {"text": "y"}}
     # offload_row only handles what it is given; the ingest path calls it after scrub_run, and
     # this pins the ordering contract in the one place a reader will look for it.
     import inspect

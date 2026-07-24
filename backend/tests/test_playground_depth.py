@@ -13,6 +13,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from fake_provider import openai_connection
+
 from provekit.database import SessionLocal
 from provekit.main import app
 from provekit.models import ProviderConnection, Run
@@ -21,7 +23,8 @@ from provekit.routers.playground import _args_equal
 
 def _ws_id(c: TestClient, label: str) -> int:
     """The workspace the playground endpoints will actually run in for this client."""
-    conn = c.post("/api/connections", json={"provider": "mock", "label": label}).json()
+    conn = c.post("/api/connections",
+                  json={"provider": "openai", "label": label, "key": "sk-test-0000"}).json()
     db = SessionLocal()
     try:
         return db.get(ProviderConnection, conn["id"]).workspace_id
@@ -71,14 +74,14 @@ def _seed_two_llm(ws_id: int, tid: str) -> str:
     ])
 
 
-def test_two_prompts_edited_in_one_run():
+def test_two_prompts_edited_in_one_run(fake_provider):
     """#57: edit the planner and the summariser and get ONE branch. The summariser must run with
     the text the user typed for it — not with the planner's edit threaded over its old prompt,
     which is what a second, separate replay would have produced."""
     with TestClient(app, base_url="https://testserver") as c:
         tid = _seed_two_llm(_ws_id(c, "multi-two"), "multi2" + "0" * 26)
         r = c.post("/api/replay/multi", json={
-            "origin_trace_id": tid, "provider": "mock",
+            "origin_trace_id": tid, "connection_id": openai_connection(c),
             "edits": [
                 {"span_id": "p", "kind": "llm", "model": "gpt-4o",
                  "messages": [{"role": "user", "content": "plan the trip by TRAIN"}]},
@@ -101,7 +104,7 @@ def test_two_prompts_edited_in_one_run():
                    for k, v in rows.items() if k in ("planner", "summariser"))
 
 
-def test_second_edit_does_not_hide_divergence_from_the_first():
+def test_second_edit_does_not_hide_divergence_from_the_first(fake_provider):
     """Two edits mean two taint sources. Editing the summariser must not launder the fact that
     its prompt still quotes a tool result the planner edit invalidated."""
     with TestClient(app, base_url="https://testserver") as c:
@@ -118,7 +121,7 @@ def test_second_edit_does_not_hide_divergence_from_the_first():
                  result={"text": "bring an umbrella", "meta": {}}),
         ])
         r = c.post("/api/replay/multi", json={
-            "origin_trace_id": tid, "provider": "mock",
+            "origin_trace_id": tid, "connection_id": openai_connection(c),
             "edits": [
                 {"span_id": "p", "kind": "llm", "model": "gpt-4o",
                  "messages": [{"role": "user", "content": "which city? answer TOKYO"}]},
@@ -140,7 +143,7 @@ def test_second_edit_does_not_hide_divergence_from_the_first():
         assert meta.get("replay_input_tainted") is True
 
 
-def test_clean_second_edit_stays_reliable_when_nothing_diverges():
+def test_clean_second_edit_stays_reliable_when_nothing_diverges(fake_provider):
     """The counterweight to the test above: if the second edit drops the invalidated text, the
     branch is clean and must not be badged unreliable out of caution."""
     with TestClient(app, base_url="https://testserver") as c:
@@ -154,7 +157,7 @@ def test_clean_second_edit_stays_reliable_when_nothing_diverges():
                  result={"text": "walk everywhere", "meta": {}}),
         ])
         r = c.post("/api/replay/multi", json={
-            "origin_trace_id": tid, "provider": "mock",
+            "origin_trace_id": tid, "connection_id": openai_connection(c),
             "edits": [
                 {"span_id": "p", "kind": "llm", "model": "gpt-4o",
                  "messages": [{"role": "user", "content": "which city? answer TOKYO"}]},
@@ -179,14 +182,14 @@ def _seed_tool_flow(ws_id: int, tid: str) -> str:
     ])
 
 
-def test_changed_tool_arguments_diverge_and_invent_nothing():
+def test_changed_tool_arguments_diverge_and_invent_nothing(fake_provider):
     """#63 + the vcr.py rule: the moment a tool's arguments change, its recorded response is
     evidence of nothing. It must be badged diverged, the taint must reach the call that reads
     it, and no substitute tool result may be invented."""
     with TestClient(app, base_url="https://testserver") as c:
         tid = _seed_tool_flow(_ws_id(c, "tool-changed"), "tooledit" + "0" * 24)
         r = c.post("/api/replay/multi", json={
-            "origin_trace_id": tid, "provider": "mock",
+            "origin_trace_id": tid, "connection_id": openai_connection(c),
             "edits": [{"span_id": "t", "kind": "tool",
                        "arguments": {"city": "TOKYO", "unit": "c"}}]})
         assert r.status_code == 200, r.text
@@ -201,14 +204,14 @@ def test_changed_tool_arguments_diverge_and_invent_nothing():
         assert rows["get_weather"].result["text"] == "12C and raining"
 
 
-def test_unchanged_tool_arguments_serve_the_recording():
+def test_unchanged_tool_arguments_serve_the_recording(fake_provider):
     """The other half of the rule: re-submitting the same arguments is a cassette hit, so the
     recorded response still stands. Key order and whitespace must not count as a change — a round
     trip through the portal's editor re-serialises the payload."""
     with TestClient(app, base_url="https://testserver") as c:
         tid = _seed_tool_flow(_ws_id(c, "tool-same"), "toolsame" + "0" * 24)
         r = c.post("/api/replay/multi", json={
-            "origin_trace_id": tid, "provider": "mock",
+            "origin_trace_id": tid, "connection_id": openai_connection(c),
             "edits": [{"span_id": "t", "kind": "tool",
                        "arguments": '{"unit":"c",  "city":"PARIS"}'}]})   # reordered, respaced
         assert r.status_code == 200, r.text
@@ -218,7 +221,7 @@ def test_unchanged_tool_arguments_serve_the_recording():
         assert d["reliable"] is True
 
 
-def test_pinned_tool_arguments_stop_an_upstream_taint_cascade():
+def test_pinned_tool_arguments_stop_an_upstream_taint_cascade(fake_provider):
     """Editing a tool's arguments back to the recorded ones is the user asserting 'assume the
     tool still saw this'. The tool is a function of its arguments, so the recording is valid
     evidence for them again and the cascade from the upstream edit stops there."""
@@ -234,13 +237,13 @@ def test_pinned_tool_arguments_stop_an_upstream_taint_cascade():
         ])
         # without the tool edit the tool diverges (this is the behaviour #194 established)
         base = c.post("/api/replay/multi", json={
-            "origin_trace_id": tid, "provider": "mock",
+            "origin_trace_id": tid, "connection_id": openai_connection(c),
             "edits": [{"span_id": "p", "kind": "llm", "model": "gpt-4o",
                        "messages": [{"role": "user", "content": "which city? answer TOKYO"}]}]}).json()
         assert _states(base["new_trace_id"])["get_weather"] == "diverged"
 
         pinned = c.post("/api/replay/multi", json={
-            "origin_trace_id": tid, "provider": "mock",
+            "origin_trace_id": tid, "connection_id": openai_connection(c),
             "edits": [{"span_id": "p", "kind": "llm", "model": "gpt-4o",
                        "messages": [{"role": "user", "content": "which city? answer TOKYO"}]},
                       {"span_id": "t", "kind": "tool", "arguments": {"city": "PARIS"}}]}).json()
@@ -261,10 +264,10 @@ def test_tool_only_edit_needs_no_provider_connection():
 
 
 # ---- validation / accounting ----
-def test_multi_replay_validation():
+def test_multi_replay_validation(fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
         tid = _seed_two_llm(_ws_id(c, "multi-valid"), "multivalid" + "0" * 22)
-        base = {"origin_trace_id": tid, "provider": "mock"}
+        base = {"origin_trace_id": tid, "connection_id": openai_connection(c)}
         one = {"span_id": "p", "kind": "llm", "messages": [{"role": "user", "content": "hi"}]}
 
         assert c.post("/api/replay/multi", json={**base, "edits": []}).status_code == 422
@@ -280,10 +283,10 @@ def test_multi_replay_validation():
         assert c.post("/api/replay/multi", json={
             **base, "edits": [{**one, "span_id": "nope"}]}).status_code == 404
         assert c.post("/api/replay/multi", json={
-            "origin_trace_id": "missing", "provider": "mock", "edits": [one]}).status_code == 404
+            "origin_trace_id": "missing", "connection_id": openai_connection(c), "edits": [one]}).status_code == 404
 
 
-def test_multi_replay_meters_spend_and_the_cap_stops_it(monkeypatch):
+def test_multi_replay_meters_spend_and_the_cap_stops_it(monkeypatch, fake_provider):
     """Metering is per live call, not per request: N edits are N provider calls, and a cap that
     is only checked at admission is a cap one request walks straight past."""
     from provekit.config import get_settings
@@ -299,7 +302,7 @@ def test_multi_replay_meters_spend_and_the_cap_stops_it(monkeypatch):
 
         seen: list[float] = []
         monkeypatch.setattr(pg.limits, "record_spend", lambda ws_id, usd: seen.append(usd))
-        r = c.post("/api/replay/multi", json={"origin_trace_id": tid, "provider": "mock",
+        r = c.post("/api/replay/multi", json={"origin_trace_id": tid, "connection_id": openai_connection(c),
                                               "edits": edits})
         assert r.status_code == 200, r.text
         assert len(seen) == 2          # one metered call per LLM edit
@@ -318,7 +321,7 @@ def test_multi_replay_meters_spend_and_the_cap_stops_it(monkeypatch):
 
         monkeypatch.setattr(pg, "complete", counting)
         try:
-            r2 = c.post("/api/replay/multi", json={"origin_trace_id": tid, "provider": "mock",
+            r2 = c.post("/api/replay/multi", json={"origin_trace_id": tid, "connection_id": openai_connection(c),
                                                    "edits": edits})
             assert r2.status_code == 402, r2.text
             # the first call was made and billed; the cap then refused the second mid-run, which

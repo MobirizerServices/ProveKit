@@ -232,7 +232,7 @@ def create_sample_project(db: Session, user: User) -> Workspace:
     for kw in sample_rows():
         db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw), **kw))
     db.add(Flow(workspace_id=ws.id, name="Customer Support Agent",
-                description="Sample flow — open it in the Studio, then ▷ Test with Mock.",
+                description="Sample flow — open it in the Studio and test it against a model connection.",
                 graph=sample_flow_graph()))
     db.commit()
     return ws

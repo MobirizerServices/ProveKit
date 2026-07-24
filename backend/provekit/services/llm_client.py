@@ -4,10 +4,9 @@ capability behind the playground and replay harness. Normalizes a neutral
 
 Providers: openai | anthropic | openai_compatible (any OpenAI-shaped base_url).
 
-The offline `mock` provider is NOT part of the product: it exists only so the test suite can
-exercise the playground, flow and replay paths without a key or network. It is unreachable in
-a running instance and only honoured when ALLOW_MOCK_PROVIDER is set (tests/conftest.py does
-that). Everywhere else, "mock" is an unknown provider like any other.
+There is no keyless provider: every completion goes out with the caller's own credentials.
+Tests fake the socket (tests/fake_provider.py) rather than the provider, so the path under
+test is the same one production takes.
 
 Two shapes, one contract: `complete()` returns the whole result at once, `stream_complete()`
 yields it incrementally and ends with the same dict. Callers that need a value (replay,
@@ -16,7 +15,6 @@ experiments) use the former; the playground uses the latter so a re-run reads as
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import AsyncIterator, Iterator
 
 import httpx
@@ -26,12 +24,6 @@ _TIMEOUT = 60.0
 
 class LLMError(Exception):
     """A provider call failed (auth, rate limit, bad request, upstream error)."""
-
-
-def mock_allowed() -> bool:
-    """True only when the test-only offline provider is enabled. A running product never sets
-    ALLOW_MOCK_PROVIDER, so `mock` is rejected there exactly like any other unknown provider."""
-    return os.environ.get("ALLOW_MOCK_PROVIDER", "").strip().lower() in ("1", "true", "yes")
 
 
 def _params(params: dict | None) -> dict:
@@ -50,8 +42,6 @@ async def complete(provider: str, model: str, messages: list[dict], params: dict
     """Run a chat completion. Returns {output, usage:{input_tokens,output_tokens}, finish_reason}.
     Raises LLMError on any failure. `messages` is [{role, content}, …]."""
     provider = (provider or "").lower()
-    if provider == "mock" and mock_allowed():
-        return _mock(model, messages)
     if provider in ("openai", "openai_compatible"):
         return await _openai(model, messages, params, api_key,
                              base_url or "https://api.openai.com/v1")
@@ -59,19 +49,6 @@ async def complete(provider: str, model: str, messages: list[dict], params: dict
         return await _anthropic(model, messages, params, api_key)
     raise LLMError(f"unknown provider '{provider}'")
 
-
-def _mock(model: str, messages: list[dict]) -> dict:
-    """Offline echo model — lets the playground work with no key, and keeps demos/tests hermetic.
-    Deterministically transforms the last user message so edits visibly change the output."""
-    last = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
-    if not last and messages:
-        last = messages[-1].get("content", "")
-    text = f"[mock:{model}] " + " ".join(str(last).split()[:60]).strip()
-    if not text.strip().endswith((".", "!", "?")):
-        text += "."
-    itok = sum(len(str(m.get("content", "")).split()) for m in messages)
-    return {"output": text, "usage": {"input_tokens": itok, "output_tokens": len(text.split())},
-            "finish_reason": "stop"}
 
 
 async def _openai(model, messages, params, api_key, base_url) -> dict:
@@ -162,10 +139,7 @@ async def stream_complete(provider: str, model: str, messages: list[dict],
     """Run a chat completion incrementally. Yields delta events then one final `done` event
     carrying the same fields `complete()` returns. Raises LLMError on any failure."""
     provider = (provider or "").lower()
-    if provider == "mock" and mock_allowed():
-        for ev in _mock_stream(model, messages):
-            yield ev
-    elif provider in ("openai", "openai_compatible"):
+    if provider in ("openai", "openai_compatible"):
         async for ev in _openai_stream(model, messages, params, api_key,
                                        base_url or "https://api.openai.com/v1"):
             yield ev
@@ -175,14 +149,6 @@ async def stream_complete(provider: str, model: str, messages: list[dict],
     else:
         raise LLMError(f"unknown provider '{provider}'")
 
-
-def _mock_stream(model: str, messages: list[dict]) -> Iterator[dict]:
-    """Chunk the offline echo model word by word so the UI's streaming path is exercised with
-    no key and no network."""
-    r = _mock(model, messages)
-    for i, w in enumerate(r["output"].split(" ")):
-        yield {"type": "delta", "text": w if i == 0 else " " + w}
-    yield {"type": "done", **r}
 
 
 async def _openai_stream(model, messages, params, api_key, base_url) -> AsyncIterator[dict]:
@@ -274,15 +240,8 @@ async def _anthropic_stream(model, messages, params, api_key) -> AsyncIterator[d
 
 async def judge(provider: str, model: str, question: str, expected: str, output: str,
                 *, api_key: str = "", base_url: str = "") -> float:
-    """Model-graded score in [0,1] for how well `output` matches `expected`. For the mock
-    provider it's a deterministic heuristic (no call); for real providers it grades via the model
-    and parses the number. Never raises — returns 0.0 on any failure."""
-    if (provider or "").lower() == "mock" and mock_allowed():
-        exp = (expected or "").strip().lower()
-        out = (output or "").strip().lower()
-        if not exp:
-            return 1.0 if out else 0.0
-        return 1.0 if exp in out else (0.5 if any(w in out for w in exp.split()) else 0.0)
+    """Model-graded score in [0,1] for how well `output` matches `expected`: grades via the
+    model and parses the number. Never raises — returns 0.0 on any failure."""
     messages = [
         {"role": "system", "content": "You are a strict grader. Score how well the answer matches "
          "the expected answer, from 0.0 (wrong) to 1.0 (perfect). Reply with ONLY the number."},

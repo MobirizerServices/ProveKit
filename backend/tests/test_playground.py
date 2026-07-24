@@ -1,10 +1,13 @@
-"""Interactive debugging: provider connections (sealed BYO keys), the mock re-run path, the
-OpenAI/Anthropic request shaping (mocked httpx — no real network), and the replay harness."""
+"""Interactive debugging: provider connections (sealed BYO keys), the re-run path against a
+real connection, OpenAI/Anthropic request shaping (mocked httpx — no real network), and the
+replay harness."""
 import functools
 import json
 
 import anyio
 from fastapi.testclient import TestClient
+
+from fake_provider import openai_connection
 
 from provekit.database import SessionLocal
 from provekit.main import app
@@ -38,11 +41,9 @@ def test_connections_crud_and_masking():
         assert all(x["id"] != cid for x in c.get("/api/connections").json())
 
 
-def test_mock_provider_is_unavailable_in_production(monkeypatch):
-    """The offline mock provider is test-only. With ALLOW_MOCK_PROVIDER unset — i.e. a running
-    product — it can neither be created as a connection nor named on a run: `mock` is an unknown
-    provider like any other, so the only way to run anything is a real configured key."""
-    monkeypatch.delenv("ALLOW_MOCK_PROVIDER", raising=False)
+def test_there_is_no_keyless_provider():
+    """Every run goes through a provider key. `mock` is not a provider: it can neither be stored
+    as a connection nor named on a run, so there is no path that answers without a real key."""
     with TestClient(app, base_url="https://testserver") as c:
         assert c.post("/api/connections", json={"provider": "mock", "label": "x"}).status_code == 422
         assert c.post("/api/playground/run", json={
@@ -56,36 +57,30 @@ def test_connection_validation():
         assert c.post("/api/connections", json={"provider": "openai"}).status_code == 422  # no key
         assert c.post("/api/connections",
                       json={"provider": "openai_compatible", "key": "k"}).status_code == 422  # no base_url
-        # mock needs no key
-        assert c.post("/api/connections", json={"provider": "mock", "label": "m"}).status_code == 200
+        # every supported provider requires a key of its own
+        assert c.post("/api/connections", json={"provider": "mock", "label": "m"}).status_code == 422
 
 
-def test_playground_run_mock():
+def test_playground_run(fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
-        # keyless mock provider (no stored connection needed)
-        r = c.post("/api/playground/run", json={"provider": "mock", "model": "gpt-4o",
+        cid = openai_connection(c, "run")
+        r = c.post("/api/playground/run", json={"connection_id": cid, "model": "gpt-4o",
                    "messages": [{"role": "user", "content": "hello world please"}]})
         assert r.status_code == 200, r.text
         d = r.json()
-        assert d["output"].startswith("[mock:gpt-4o]")
+        assert d["output"].startswith("[echo:gpt-4o]")
         assert d["usage"]["output_tokens"] > 0
-        assert "latency_ms" in d and d["provider"] == "mock"
+        assert "latency_ms" in d and d["provider"] == "openai"
 
         # editing the prompt changes the output (the whole point of the playground)
-        r2 = c.post("/api/playground/run", json={"provider": "mock", "model": "gpt-4o",
+        r2 = c.post("/api/playground/run", json={"connection_id": cid, "model": "gpt-4o",
                     "messages": [{"role": "user", "content": "a totally different question"}]})
         assert r2.json()["output"] != d["output"]
 
-        # via a stored mock connection
-        mc = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
-        r3 = c.post("/api/playground/run", json={"connection_id": mc["id"], "model": "x",
-                    "messages": [{"role": "user", "content": "hi there"}]})
-        assert r3.status_code == 200
-
-        # a run needs either a connection or provider=mock
+        # a run needs a connection, and it needs messages
         assert c.post("/api/playground/run", json={"model": "x",
                       "messages": [{"role": "user", "content": "hi"}]}).status_code == 422
-        assert c.post("/api/playground/run", json={"provider": "mock", "model": "x",
+        assert c.post("/api/playground/run", json={"connection_id": cid, "model": "x",
                       "messages": []}).status_code == 422
 
 
@@ -190,17 +185,17 @@ def _seed_replay_trace(ws_id: int) -> str:
     return tid
 
 
-def test_replay_reconstructed_threads_downstream():
+def test_replay_reconstructed_threads_downstream(fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
         # a connection pins the exact current_workspace the replay will run in
-        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        conn = c.post("/api/connections", json={"provider": "openai", "label": "m", "key": "sk-test-0000"}).json()
         db = SessionLocal()
         ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
         db.close()
         tid = _seed_replay_trace(ws_id)
 
         r = c.post("/api/replay", json={
-            "origin_trace_id": tid, "fork_span_id": "f", "provider": "mock", "model": "gpt-4o",
+            "origin_trace_id": tid, "fork_span_id": "f", "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "Analyze the docs MORE carefully."}]})
         assert r.status_code == 200, r.text
         d = r.json()
@@ -218,14 +213,14 @@ def test_replay_reconstructed_threads_downstream():
         assert "ANALYSIS_ONE" not in decide.request["input"]   # threaded away
 
 
-def test_replay_threading_survives_message_shaped_output():
+def test_replay_threading_survives_message_shaped_output(fake_provider):
     """The fork's captured output can itself be message-shaped JSON (e.g. a reconstructed single
     [{"role":...,"content":...}] from indexed OpenInference attributes, or any dialect whose
     completion attribute is naturally an array) — the threading substitution must use the CLEAN
     text as its key, not the raw JSON blob, or it will never match the plain-text substring a
     downstream span's input actually contains."""
     with TestClient(app, base_url="https://testserver") as c:
-        conn = c.post("/api/connections", json={"provider": "mock", "label": "m2"}).json()
+        conn = c.post("/api/connections", json={"provider": "openai", "label": "m2", "key": "sk-test-0000"}).json()
         db = SessionLocal()
         ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
         tid = "repmsg" + "0" * 26
@@ -244,7 +239,7 @@ def test_replay_threading_survives_message_shaped_output():
         db.commit(); db.close()
 
         r = c.post("/api/replay", json={
-            "origin_trace_id": tid, "fork_span_id": "f", "provider": "mock", "model": "gpt-4o",
+            "origin_trace_id": tid, "fork_span_id": "f", "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "Analyze MORE carefully."}]})
         assert r.status_code == 200, r.text
         d = r.json()
@@ -257,17 +252,17 @@ def test_replay_threading_survives_message_shaped_output():
         assert states == {"root": "unchanged", "analyze": "live", "decide": "live"}
 
 
-def test_replay_missing_trace_404():
+def test_replay_missing_trace_404(fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
         r = c.post("/api/replay", json={"origin_trace_id": "nope", "fork_span_id": "x",
-                   "provider": "mock", "model": "gpt-4o",
+                   "connection_id": openai_connection(c), "model": "gpt-4o",
                    "messages": [{"role": "user", "content": "hi"}]})
         assert r.status_code == 404
 
 
-def test_replay_webhook(monkeypatch):
+def test_replay_webhook(monkeypatch, fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
-        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        conn = c.post("/api/connections", json={"provider": "openai", "label": "m", "key": "sk-test-0000"}).json()
         db = SessionLocal()
         ws = db.get(Workspace, db.get(ProviderConnection, conn["id"]).workspace_id)
         ws.replay_url = "https://hook.example/replay"; db.commit(); db.close()
@@ -291,13 +286,13 @@ def test_replay_webhook(monkeypatch):
         assert (run.result.get("meta") or {}).get("replay_of") == "orig123"
 
 
-def test_replay_webhook_never_reuses_customer_supplied_trace_id(monkeypatch):
+def test_replay_webhook_never_reuses_customer_supplied_trace_id(monkeypatch, fake_provider):
     """We literally send the customer's replay endpoint our `origin_trace_id` in the request
     payload — if their harness naively echoes it back as the trace_id in the OTLP it exports
     (a plausible integration bug, not a hypothetical), the new branch must NOT be inserted under
     that id, or it would merge into and corrupt the original trace's span set."""
     with TestClient(app, base_url="https://testserver") as c:
-        conn = c.post("/api/connections", json={"provider": "mock", "label": "m3"}).json()
+        conn = c.post("/api/connections", json={"provider": "openai", "label": "m3", "key": "sk-test-0000"}).json()
         db = SessionLocal()
         ws = db.get(Workspace, db.get(ProviderConnection, conn["id"]).workspace_id)
         ws_id = ws.id
@@ -366,21 +361,21 @@ def test_fill_both_placeholders():
     assert r == [{"role": "user", "content": "Q: real input Expected: right answer"}]
 
 
-def test_playground_experiment_over_dataset():
+def test_playground_experiment_over_dataset(fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
-        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        conn = c.post("/api/connections", json={"provider": "openai", "label": "m", "key": "sk-test-0000"}).json()
         db = SessionLocal()
         ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
         ds = Dataset(workspace_id=ws_id, name="golden")
         db.add(ds); db.commit(); db.refresh(ds)
         db.add_all([
-            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="ping", expected="[mock:gpt-4o] ping."),
+            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="ping", expected="[echo:gpt-4o] ping."),
             DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="hello", expected="wrong"),
         ])
         db.commit(); dsid = ds.id; db.close()
 
         r = c.post("/api/playground/experiment", json={
-            "dataset_id": dsid, "provider": "mock", "model": "gpt-4o",
+            "dataset_id": dsid, "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "{{input}}"}],
             "scorers": ["exact_match", "contains"]})
         assert r.status_code == 200, r.text
@@ -392,16 +387,8 @@ def test_playground_experiment_over_dataset():
 
         # missing/empty dataset → 404
         assert c.post("/api/playground/experiment", json={
-            "dataset_id": 999999, "provider": "mock", "model": "gpt-4o",
+            "dataset_id": 999999, "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "{{input}}"}]}).status_code == 404
-
-
-def test_llm_judge_mock_heuristic():
-    def j(exp, out):
-        return anyio.run(functools.partial(llm_client.judge, "mock", "m", "q", exp, out))
-    assert j("cat", "the cat sat") == 1.0        # expected substring present
-    assert j("cat", "a dog barks") == 0.0        # no overlap
-    assert j("big cat", "a small cat") == 0.5    # partial word overlap
 
 
 def test_llm_judge_real_provider_parses_number(monkeypatch):
@@ -413,20 +400,20 @@ def test_llm_judge_real_provider_parses_number(monkeypatch):
     assert score == 0.8
 
 
-def test_experiment_with_llm_judge():
+def test_experiment_with_llm_judge(fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
-        conn = c.post("/api/connections", json={"provider": "mock", "label": "m"}).json()
+        conn = c.post("/api/connections", json={"provider": "openai", "label": "m", "key": "sk-test-0000"}).json()
         db = SessionLocal()
         ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
         ds = Dataset(workspace_id=ws_id, name="judged")
         db.add(ds); db.commit(); db.refresh(ds)
         db.add_all([
-            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="ping", expected="[mock:gpt-4o] ping."),
+            DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="ping", expected="[echo:gpt-4o] ping."),
             DatasetItem(workspace_id=ws_id, dataset_id=ds.id, input="x", expected="totally unrelated"),
         ])
         db.commit(); dsid = ds.id; db.close()
         r = c.post("/api/playground/experiment", json={
-            "dataset_id": dsid, "provider": "mock", "model": "gpt-4o",
+            "dataset_id": dsid, "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "{{input}}"}],
             "scorers": ["exact_match", "llm_judge"]})
         assert r.status_code == 200, r.text
@@ -555,19 +542,19 @@ def _seed_tool_chain(ws_id: int) -> str:
     return tid
 
 
-def test_divergence_propagates_past_a_tool():
+def test_divergence_propagates_past_a_tool(fake_provider):
     """A tool whose input changed cannot be trusted to have returned its recorded output — and
     neither can anything reading that output. Badging those spans 'recorded' presents a
     confidently wrong run as a faithful one."""
     with TestClient(app, base_url="https://testserver") as c:
-        conn = c.post("/api/connections", json={"provider": "mock", "label": "tool-fidelity"}).json()
+        conn = c.post("/api/connections", json={"provider": "openai", "label": "tool-fidelity", "key": "sk-test-0000"}).json()
         db = SessionLocal()
         ws_id = db.get(ProviderConnection, conn["id"]).workspace_id
         db.close()
         tid = _seed_tool_chain(ws_id)
 
         r = c.post("/api/replay", json={
-            "origin_trace_id": tid, "fork_span_id": "f", "provider": "mock", "model": "gpt-4o",
+            "origin_trace_id": tid, "fork_span_id": "f", "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "which city? answer TOKYO"}]})
         assert r.status_code == 200, r.text
         d = r.json()

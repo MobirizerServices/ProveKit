@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from provekit.config import get_settings
+from fake_provider import openai_connection
 from provekit.main import app
 from provekit.routers import playground as pg
 from provekit.services import limits, llm_client
@@ -24,10 +25,10 @@ def _frames(text: str) -> list[dict]:
     return out
 
 
-def test_stream_mock_run_emits_deltas_then_done():
+def test_stream_run_emits_deltas_then_done(fake_provider):
     with TestClient(app, base_url="https://testserver") as c:
         r = c.post("/api/playground/run/stream", json={
-            "provider": "mock", "model": "gpt-4o",
+            "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "hello world please"}]})
         assert r.status_code == 200, r.text
         assert r.headers["content-type"].startswith("text/event-stream")
@@ -40,15 +41,15 @@ def test_stream_mock_run_emits_deltas_then_done():
 
         done = evs[-1]
         assert done["output"] == "".join(d["text"] for d in deltas)   # concatenates to the answer
-        assert done["output"].startswith("[mock:gpt-4o]")
+        assert done["output"].startswith("[echo:gpt-4o]")
         assert done["usage"]["output_tokens"] > 0
-        assert done["provider"] == "mock" and done["model"] == "gpt-4o" and "latency_ms" in done
+        assert done["provider"] == "openai" and done["model"] == "gpt-4o" and "latency_ms" in done
 
 
-def test_stream_matches_the_non_streaming_endpoint():
+def test_stream_matches_the_non_streaming_endpoint(fake_provider):
     """Same input, same answer — the streamed path must not be a second, divergent implementation."""
     with TestClient(app, base_url="https://testserver") as c:
-        body = {"provider": "mock", "model": "gpt-4o",
+        body = {"connection_id": openai_connection(c), "model": "gpt-4o",
                 "messages": [{"role": "user", "content": "compare these two paths"}]}
         plain = c.post("/api/playground/run", json=body).json()
         streamed = _frames(c.post("/api/playground/run/stream", json=body).text)[-1]
@@ -72,7 +73,7 @@ def test_frames_are_emitted_as_they_are_produced(monkeypatch):
 
     async def go():
         return [(time.monotonic(), f) async for f in pg._run_events(
-            1, "gpt-4o", "mock", [{"role": "user", "content": "count"}], {}, "", "")]
+            1, "gpt-4o", "openai", [{"role": "user", "content": "count"}], {}, "", "")]
 
     got = anyio.run(go)
     assert len(got) == 4
@@ -80,11 +81,11 @@ def test_frames_are_emitted_as_they_are_produced(monkeypatch):
     assert got[0][1].startswith("data: ") and got[0][1].endswith("\n\n")
 
 
-def test_stream_validation_is_a_status_not_a_frame():
+def test_stream_validation_is_a_status_not_a_frame(fake_provider):
     """Rejections happen before the response starts, so a client still gets a real status code."""
     with TestClient(app, base_url="https://testserver") as c:
         assert c.post("/api/playground/run/stream", json={
-            "provider": "mock", "model": "x", "messages": []}).status_code == 422
+            "connection_id": openai_connection(c), "model": "x", "messages": []}).status_code == 422
         # neither a connection nor provider=mock
         assert c.post("/api/playground/run/stream", json={
             "model": "x", "messages": [{"role": "user", "content": "hi"}]}).status_code == 422
@@ -93,7 +94,7 @@ def test_stream_validation_is_a_status_not_a_frame():
             "messages": [{"role": "user", "content": "hi"}]}).status_code == 404
 
 
-def test_stream_respects_the_spend_cap(monkeypatch):
+def test_stream_respects_the_spend_cap(monkeypatch, fake_provider):
     """A streamed re-run must not be a way around the monthly cap."""
     get_settings.cache_clear()
     monkeypatch.setenv("PLAYGROUND_MONTHLY_USD_CAP", "0.01")
@@ -101,7 +102,7 @@ def test_stream_respects_the_spend_cap(monkeypatch):
     limits._window.cache_clear()
     try:
         with TestClient(app, base_url="https://testserver") as c:
-            body = {"provider": "mock", "model": "gpt-4o",
+            body = {"connection_id": openai_connection(c), "model": "gpt-4o",
                     "messages": [{"role": "user", "content": "spend something"}]}
             assert c.post("/api/playground/run/stream", json=body).status_code == 200
             # bill the project past the cap and re-ask — the stream must be refused outright
@@ -114,7 +115,7 @@ def test_stream_respects_the_spend_cap(monkeypatch):
         limits._window.cache_clear()
 
 
-def test_stream_records_spend(monkeypatch):
+def test_stream_records_spend(monkeypatch, fake_provider):
     spent = []
     monkeypatch.setattr("provekit.routers.playground.limits.record_spend",
                         lambda ws_id, usd: spent.append((ws_id, usd)))
@@ -123,7 +124,7 @@ def test_stream_records_spend(monkeypatch):
                         lambda model, i, o: 0.001 * ((i or 0) + (o or 0)))
     with TestClient(app, base_url="https://testserver") as c:
         r = c.post("/api/playground/run/stream", json={
-            "provider": "mock", "model": "gpt-4o",
+            "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "bill me for this run"}]})
         assert r.status_code == 200
     assert spent and spent[-1][1] > 0
@@ -314,7 +315,7 @@ def test_stream_still_caps_max_tokens(monkeypatch):
     assert _FakeStream.last["json"]["max_tokens"] == 4096
 
 
-def test_endpoint_surfaces_a_mid_stream_provider_failure(monkeypatch):
+def test_endpoint_surfaces_a_mid_stream_provider_failure(monkeypatch, fake_provider):
     """The response is already a 200 by the time tokens flow, so the failure has to arrive as an
     error frame — and the partial tokens must still be billed."""
     async def boom(*a, **k):
@@ -330,7 +331,7 @@ def test_endpoint_surfaces_a_mid_stream_provider_failure(monkeypatch):
 
     with TestClient(app, base_url="https://testserver") as c:
         r = c.post("/api/playground/run/stream", json={
-            "provider": "mock", "model": "gpt-4o",
+            "connection_id": openai_connection(c), "model": "gpt-4o",
             "messages": [{"role": "user", "content": "hi"}]})
         assert r.status_code == 200
         evs = _frames(r.text)

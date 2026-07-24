@@ -160,6 +160,20 @@ export interface ExperimentTriage {
   scorers: Record<string, TriageScorer>;
 }
 
+// The human-review work list (#40): which traces would teach us the most if labelled, in order.
+export interface ReviewItem {
+  trace_id: string; label: string; status: string; model: string; duration_ms: number;
+  created_at: string; reason: string;
+  judge: { name: string; score: number; verdict: string } | null;
+}
+export interface ReviewQueue {
+  summary: {
+    awaiting: number; human_labelled: number; judge_scored: number; paired: number;
+    min_pairs: number; pairs_needed: number; scanned: number; scan_limit: number;
+  };
+  items: ReviewItem[];
+}
+
 export interface Evaluator { name: string; category: string; description: string }
 // Judge-vs-human calibration over stored feedback — real agreement/kappa, or a caution when
 // too few traces carry both a human label and a judge score to say anything honest.
@@ -332,6 +346,7 @@ export const api = {
   // experiments
   experiments: (dataset_id?: number) => j<Experiment[]>(`/api/experiments${dataset_id != null ? `?dataset_id=${dataset_id}` : ""}`),
   judgeCalibration: () => j<Calibration>("/api/experiments/judge-calibration"),
+  reviewQueue: (limit = 50) => j<ReviewQueue>(`/api/review/queue?limit=${limit}`),
   experiment: (id: number) => j<Experiment>(`/api/experiments/${id}`),
   compareExperiments: (a: number, b: number) => j<ExperimentComparison>(`/api/experiments/${a}/compare/${b}`),
   triageExperiments: (a: number, b: number) => j<ExperimentTriage>(`/api/experiments/${a}/triage/${b}`),

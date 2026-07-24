@@ -29,6 +29,7 @@ const NAV: NavGroup[] = [
     { href: "/experiments", label: "Experiments", icon: "flask" },
     { href: "/evaluations", label: "Evaluations", icon: "shield" },
     { href: "/evaluators", label: "Evaluators", icon: "spark" },
+    { href: "/review", label: "Review queue", icon: "chat" },
   ] },
   { items: [
     { href: "/prompts", label: "Prompts", icon: "cmd" },

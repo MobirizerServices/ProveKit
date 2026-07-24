@@ -24,7 +24,8 @@
     "/shared/[token]": 210,
     "/signup": 120,
     "/terms": 121,
-    "/traces": 224,
+    "/traces": 227,
     "/verify": 116
-  }
+  },
+  "$tracesKbComment": "Raised 224 -> 227 when the waterfall legend landed: the route measured 223.8 against a 224 ceiling, which passes but leaves 0.2 kB \u2014 close enough that ordinary chunk-splitting variance would fail CI on an unrelated change. Raised in the commit that caused the growth, per the note at the top."
 }

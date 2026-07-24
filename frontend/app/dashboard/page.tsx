@@ -8,6 +8,7 @@ import TrendChart from "@/components/TrendChart";
 import AlertsPanel from "@/components/AlertsPanel";
 import { CardGridSkeleton, Skeleton, SkeletonStyles } from "@/components/Skeleton";
 import ConsoleShell from "@/components/ConsoleShell";
+import GettingStarted from "@/components/GettingStarted";
 
 const WINDOWS = [
   { label: "1h", hours: 1 }, { label: "24h", hours: 24 }, { label: "7d", hours: 168 },
@@ -55,6 +56,8 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
+
+        <GettingStarted traceCount={m ? m.trace_count : null} />
 
         {!m ? (
           <>

@@ -2429,3 +2429,55 @@ svg.pk-wires path { fill: none; stroke: #453e5c; stroke-width: 1.6; stroke-dasha
 }
 .pk-empty-action:hover { filter: brightness(1.08); }
 .pk-empty-note { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+
+/* ── first-run checklist (components/GettingStarted.tsx) ─────────────────────────────────
+   Sits on Overview until all three steps are true, then removes itself. Every state is read
+   from the server on each load rather than remembered in local storage — a stored "done" flag
+   goes stale the moment a key is rotated or retention prunes the last trace, and a checklist
+   that lies about your setup is worse than no checklist. */
+.gs {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+  padding: 16px 18px; margin-bottom: 16px;
+}
+.gs-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.gs-head h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+.gs-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.gs-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.gs-step {
+  display: grid; grid-template-columns: 20px 1fr auto; align-items: start; gap: 10px;
+  padding: 9px 6px; border-radius: 8px;
+}
+.gs-step + .gs-step { border-top: 1px solid var(--border); }
+.gs-tick {
+  width: 17px; height: 17px; margin-top: 1px; border-radius: 999px;
+  border: 1px solid var(--border); display: grid; place-items: center;
+  font-size: 10.5px; line-height: 1; color: transparent;
+}
+.gs-step.done .gs-tick { background: var(--green); border-color: var(--green); color: #06210f; }
+.gs-body { display: grid; gap: 2px; min-width: 0; }
+.gs-title { font-size: 13.5px; font-weight: 600; }
+.gs-step.done .gs-title { color: var(--text-dim); font-weight: 500; }
+.gs-detail { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.gs-action {
+  align-self: center; white-space: nowrap;
+  font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: none;
+}
+.gs-action:hover { text-decoration: underline; }
+.gs-code {
+  margin: 12px 0 0; padding: 11px 13px; overflow-x: auto;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  font-size: 12px; line-height: 1.65; color: var(--text-dim);
+}
+@media (max-width: 640px) {
+  /* The action link wraps under the text rather than squeezing the step title to two words. */
+  .gs-step { grid-template-columns: 20px 1fr; }
+  .gs-action { grid-column: 2; justify-self: start; margin-top: 4px; }
+}
+
+/* Waterfall legend — see components/TraceDetail.tsx. Deliberately quiet: it explains the row
+   badges for a first-time reader and must not compete with the trace it sits above. */
+.wf-legend { font-size: 10.5px; line-height: 1.5; color: var(--muted); }
+.wf-legend b { font-weight: 600; color: var(--text-dim); font-size: 10px; letter-spacing: .04em; }
+.wf-legend-fail { color: var(--red); opacity: .85; }
+@media (max-width: 900px) { .wf-legend { display: none; } }   /* no room; the badges still read */

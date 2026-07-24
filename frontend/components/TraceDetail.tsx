@@ -858,6 +858,15 @@ function Tree({ spans, focusSpan }: { spans: TraceSpan[]; focusSpan?: string | n
     <div>
       {/* toolbar: latency-heat toggle (mirrors the flow graph), with a legend when on */}
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        {/* What the badges mean, next to the badges. The waterfall is the screen people spend
+            their time on, and it labels every row AGENT / LLM / TOOL / STEP without ever saying
+            what those are — obvious once you know, and a wall the first time. Left-aligned and
+            small: a legend that competes with the trace is worse than none. */}
+        <span className="wf-legend" style={{ marginRight: "auto" }}>
+          <b>LLM</b> a model call · <b>TOOL</b> something your agent called out to ·
+          {" "}<b>STEP</b> a stage of the run · <b>AGENT</b> the whole run
+          <span className="wf-legend-fail"> · red = this span failed</span>
+        </span>
         {heat && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "var(--muted)" }}>
             <span>fast</span>

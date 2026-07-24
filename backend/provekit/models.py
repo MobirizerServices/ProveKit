@@ -76,6 +76,42 @@ class WorkspaceMember(Base):
     __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_member"),)
 
 
+class UsageRecord(Base):
+    """A durable, per-month usage ledger (#80).
+
+    The counters in services/limits are deliberately fast and disposable — Redis keys with a
+    35-day TTL, or process memory when Redis isn't configured. They are the right tool for
+    *enforcing* a quota on the hot path and the wrong one for *billing*: a restart loses an
+    in-memory count, the TTL drops the history, and neither can be queried for "what did this
+    account use in March".
+
+    So the two are separated by role. Counters gate; this row is the record. It is an upsert per
+    (account, project, month) rather than an append-per-batch, because a billing ledger that
+    grows with ingest volume becomes the largest table in the database.
+    """
+    __tablename__ = "usage_records"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    #: The account billed — the project owner, matching how quotas are already scoped.
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    workspace_id: Mapped[int] = _ws_fk()
+    period: Mapped[str] = mapped_column(String(7), index=True)          # YYYY-MM, UTC
+    spans: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    #: Priced from the reported usage split at ingest time, at the rates in force then — the
+    #: same estimate the trace list shows, so a bill and a trace can never disagree.
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    #: How many model calls reported usage at all. Without it a low cost is ambiguous between
+    #: "cheap" and "nobody reported tokens", which is not a distinction to guess at on an invoice.
+    priced_calls: Mapped[int] = mapped_column(Integer, default=0)
+    unpriced_calls: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "workspace_id", "period", name="uq_usage_period"),
+    )
+
+
 class ProjectInvite(Base):
     """An invitation to a project for someone who has no account yet (#73).
 

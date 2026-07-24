@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import Feedback, RetentionEvent, Run, SpanNote, Workspace, _now, iso_utc
-from ..services import apikey, deploy, errors, limits, mentions, otel, pricing, redact, share, spool
+from ..services import apikey, deploy, errors, limits, mentions, otel, pricing, redact, share, spool, usage
 from ..services import payloads
 from ..services import search as search_svc
 from ..services.auth import get_current_user
@@ -72,7 +72,10 @@ async def ingest_traces(request: Request, db: Session = Depends(get_db),
     if stored:
         # Count what actually landed, not what was sent: a retried batch is deduped (#184) and
         # charging for the retry would make the quota depend on network luck.
-        limits.record_spans(ws.owner_user_id, stored)
+        limits.record_spans(ws.owner_user_id, len(stored))
+        # The counter above gates the quota; this is the durable ledger a bill is read from
+        # (#80). Same input, different lifetimes — see services/usage.py.
+        usage.record(db, user_id=ws.owner_user_id, workspace_id=ws.id, rows=stored)
         _prune_runs(db, ws)           # enforce retention so the table doesn't grow forever
     return {"partialSuccess": {}}
 
@@ -111,7 +114,8 @@ def drain_spool(limit: int = 200) -> int:
             spool.release(path)
             cleared += 1
             if stored:
-                limits.record_spans(ws.owner_user_id, stored)
+                limits.record_spans(ws.owner_user_id, len(stored))
+                usage.record(db, user_id=ws.owner_user_id, workspace_id=ws.id, rows=stored)
         except Exception:
             # Still broken. Leave it staged and stop the pass — if the database is down, the
             # next entry will fail the same way and hammering it helps nobody.
@@ -125,8 +129,11 @@ def drain_spool(limit: int = 200) -> int:
     return cleared
 
 
-def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
-    """Store spans we haven't seen before; return how many landed.
+def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> list[dict]:
+    """Store spans we haven't seen before; return the ones that landed.
+
+    The rows (not just a count) because usage metering prices what was *actually stored* — a
+    deduped retry must not bill twice (#80).
 
     An OTLP exporter retries on 5xx and replays the *whole* batch, so the same span arrives
     more than once in normal operation. A duplicate is not an error to report back — the
@@ -137,7 +144,7 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
     may legitimately reuse one and both must be kept.
     """
     if not rows:
-        return 0
+        return []
     tids = {kw["trace_id"] for kw in rows if kw.get("span_id")}
     seen = set()
     if tids:
@@ -152,18 +159,18 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
             seen.add(key)             # a batch can also repeat a span within itself
         fresh.append(kw)
     if not fresh:
-        return 0
+        return []
     for kw in fresh:
         db.add(Run(workspace_id=ws.id, search_text=search_svc.text_for(kw),
                      **payloads.offload_row(kw)))
     try:
         db.commit()
-        return len(fresh)
+        return fresh
     except IntegrityError:
         # Concurrent retries of the same batch raced past the filter above. Re-apply row by
         # row so the spans that genuinely are new still land instead of the batch being lost.
         db.rollback()
-        stored = 0
+        landed: list[dict] = []
         for kw in fresh:
             try:
                 with db.begin_nested():
@@ -171,9 +178,9 @@ def _persist_spans(db: Session, ws: Workspace, rows: list[dict]) -> int:
                      **payloads.offload_row(kw)))
             except IntegrityError:
                 continue              # the other request stored it; nothing to do
-            stored += 1
+            landed.append(kw)
         db.commit()
-        return stored
+        return landed
 
 
 def _prune_runs(db: Session, ws: Workspace) -> None:

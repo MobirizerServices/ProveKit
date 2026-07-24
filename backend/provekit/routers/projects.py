@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import ProjectInvite, Run, User, Workspace, WorkspaceMember, _now, iso_utc
-from ..services import audit, errors, invites, limits, roles, tenant
+from ..services import audit, errors, invites, limits, roles, tenant, usage
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
 
@@ -56,7 +56,19 @@ def project_usage(user: User = Depends(get_current_user), db: Session = Depends(
     pinned at 100% on a self-hosted instance with no quotas configured.
     """
     owned = db.query(Workspace).filter(Workspace.owner_user_id == user.id).count()
-    return limits.usage_summary(user.id, owned)
+    summary = limits.usage_summary(user.id, owned)
+    # The counters above gate the quota; the ledger below is what a bill is read from (#80).
+    # Both are reported because they answer different questions and may legitimately differ:
+    # a counter is a live rate with a TTL, the ledger is what actually landed and persists.
+    summary["metered"] = usage.for_period(db, user.id)
+    return summary
+
+
+@router.get("/usage/history")
+def usage_history(months: int = 12, user: User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    """Per-month usage, newest first — the history a TTL'd counter could never provide (#80)."""
+    return {"months": usage.history(db, user.id, max(1, min(int(months or 12), 36)))}
 
 
 @router.get("")

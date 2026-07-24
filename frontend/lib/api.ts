@@ -48,6 +48,14 @@ export interface QuotaLine { used: number; limit: number | null; pct: number | n
 export interface Usage {
   period: string; spans: QuotaLine; projects: QuotaLine;
   playground_usd: { limit: number | null }; approximate: boolean;
+  // The durable ledger a bill is read from (#80). The quota lines above come from TTL'd
+  // counters and answer a different question, so the two may legitimately differ.
+  metered?: Metered;
+}
+export interface Metered {
+  period: string; spans: number; input_tokens: number; output_tokens: number; tokens: number;
+  cost_usd: number; priced_calls: number; unpriced_calls: number; usage_coverage: number | null;
+  projects?: (Metered & { workspace_id: number })[];
 }
 export interface Member { user_id: number; email: string; name: string; role: string; }
 // An invitation to someone who has no account yet (#73): visible, expiring, revocable.
@@ -409,6 +417,7 @@ export const api = {
   invites: (id: number) => j<Invite[]>(`/api/projects/${id}/invites`),
   revokeInvite: (pid: number, inviteId: number) =>
     j(`/api/projects/${pid}/invites/${inviteId}`, { method: "DELETE" }),
+  usageHistory: (months = 12) => j<{ months: Metered[] }>(`/api/projects/usage/history?months=${months}`),
   suspendProject: (id: number, suspended: boolean, reason = "") =>
     j<{ id: number; name: string; suspended_at: string | null; suspended_reason: string }>(
       `/api/projects/${id}/suspend`, { method: "POST", body: JSON.stringify({ suspended, reason }) }),

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, getProjectId, Invite, Member, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
+import { api, getProjectId, Invite, Member, Metered, Project, QuotaLine, setProjectId, Usage } from "@/lib/api";
 import ConsoleShell from "@/components/ConsoleShell";
 import PageHero from "@/components/PageHero";
 import ModelConnections from "@/components/ModelConnections";
@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [invite, setInvite] = useState("");
   const [retention, setRetention] = useState(0);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [history, setHistory] = useState<Metered[]>([]);
   const [redact, setRedact] = useState(false);
   const [replayUrl, setReplayUrl] = useState("");
   const [err, setErr] = useState("");
@@ -50,6 +51,7 @@ export default function SettingsPage() {
     setRename(p?.name || "");
     setRetention(p?.retention ?? 0);
     api.usage().then(setUsage).catch(() => {});
+    api.usageHistory(12).then((h) => setHistory(h.months)).catch(() => setHistory([]));
     setRedact(p?.redact_pii ?? false);
     setReplayUrl(p?.replay_url ?? "");
   }, [sel, projects]);
@@ -287,6 +289,47 @@ export default function SettingsPage() {
                         {usage.approximate && <p className="set2-help">Approximate: counters are per-process without Redis configured.</p>}
                       </>
                     ) : <p className="muted" style={{ fontSize: 13 }}>No quotas configured — this workspace is on an unlimited plan.</p>}
+
+                    {usage?.metered && (
+                      <>
+                        <div className="set2-h" style={{ fontSize: 13, margin: "22px 0 8px" }}>
+                          Metered this period ({usage.metered.period})
+                        </div>
+                        <p className="set2-help" style={{ marginTop: 0 }}>
+                          Recorded durably as spans land, priced at the rates in force then — the same
+                          estimate a trace shows. The quota meters above come from short-lived counters
+                          and answer a different question, so the two can differ.
+                        </p>
+                        <div className="ses-stats" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginTop: 10 }}>
+                          <UTile label="Spans" value={usage.metered.spans.toLocaleString()} />
+                          <UTile label="Tokens" value={usage.metered.tokens.toLocaleString()}
+                            sub={`${usage.metered.input_tokens.toLocaleString()} in · ${usage.metered.output_tokens.toLocaleString()} out`} />
+                          <UTile label="Cost" value={`$${usage.metered.cost_usd.toFixed(4)}`} sub="priced at ingest" />
+                          <UTile label="Usage coverage"
+                            value={usage.metered.usage_coverage == null ? "—" : `${Math.round(usage.metered.usage_coverage * 100)}%`}
+                            sub={`${usage.metered.unpriced_calls} call${usage.metered.unpriced_calls === 1 ? "" : "s"} reported none`} />
+                        </div>
+                      </>
+                    )}
+
+                    {history.length > 1 && (
+                      <>
+                        <div className="set2-h" style={{ fontSize: 13, margin: "22px 0 8px" }}>History</div>
+                        <table className="dset-table">
+                          <thead><tr><th>Period</th><th>Spans</th><th>Tokens</th><th style={{ textAlign: "right" }}>Cost</th></tr></thead>
+                          <tbody>
+                            {history.map((m) => (
+                              <tr key={m.period}>
+                                <td>{m.period}</td>
+                                <td>{m.spans.toLocaleString()}</td>
+                                <td>{m.tokens.toLocaleString()}</td>
+                                <td style={{ textAlign: "right" }}>${m.cost_usd.toFixed(4)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </>
+                    )}
                   </>
                 )}
 
@@ -302,6 +345,16 @@ export default function SettingsPage() {
         </div>
       </div>
     </ConsoleShell>
+  );
+}
+
+function UTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="ses-tile">
+      <div className="ses-tile-label">{label}</div>
+      <div className="ses-tile-value" style={{ fontSize: 21 }}>{value}</div>
+      {sub && <div className="ses-tile-sub">{sub}</div>}
+    </div>
   );
 }
 

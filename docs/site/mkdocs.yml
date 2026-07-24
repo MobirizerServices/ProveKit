@@ -86,10 +86,10 @@ validation:
     not_found: info
     unrecognized_links: info
     absolute_links: info
-    # Should be `warn` — a broken same-page anchor is a real defect. It is `info` only because
-    # docs/ADMIN.md ships two stale ones today (#revoking-actually-revoking and
-    # #impersonation--read-only-view-as-tenant, both renamed headings). Fix those and flip this.
-    anchors: info
+    # A broken same-page anchor is a real defect: the link looks live and goes nowhere. The four
+    # stale ones (renamed headings in ADMIN, DEBUGGING and EXPORT) are fixed, so this is a gate
+    # now rather than a note — the next renamed heading fails the build instead of rotting.
+    anchors: warn
 
 nav:
   - Start here:

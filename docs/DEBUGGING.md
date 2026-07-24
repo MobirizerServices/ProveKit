@@ -8,7 +8,7 @@ This guide covers the five things you can do. For the design/architecture, see
 [design/INTERACTIVE_DEBUGGING.md](design/INTERACTIVE_DEBUGGING.md).
 
 > Only want to **read** a run rather than re-run it? Jump to
-> [§5 Step through a trace](#5-step-through-a-trace--walk-the-run-one-span-at-a-time). It needs no
+> [§5 Step through a trace](#5-step-through-a-trace-walk-the-run-one-span-at-a-time). It needs no
 > API key, no model connection and no configuration — it reads what was already captured.
 
 ---

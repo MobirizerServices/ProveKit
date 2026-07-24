@@ -23,7 +23,7 @@ A request passes `require_superuser` if **either** is true:
 2. the user's email appears in the **`SUPERUSER_EMAILS`** config (a comma-separated list).
 
 The check is an `or`, which has a consequence worth reading twice — see
-[Revoking](#revoking-actually-revoking) below.
+[Revoking](#revoking) below.
 
 Everyone else gets `403`. The **Admin** link only appears in the nav for superusers (the
 `is_superuser` field on `GET /api/auth/me`), and the page renders "You don't have access to the
@@ -83,7 +83,7 @@ count and check whether that project has a retention override.
 ## API
 
 All of these require a superuser session cookie (see also
-[Impersonation](#impersonation--read-only-view-as-tenant) below).
+[Impersonation](#impersonation-read-only-view-as-tenant) below).
 
 | Endpoint | Returns |
 |---|---|

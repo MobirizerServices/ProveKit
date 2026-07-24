@@ -18,7 +18,7 @@ payloads costs**.
 | On-demand streaming export (`services/export.py`, `routers/export.py`) | written and unit-tested |
 | Routes reachable over HTTP | **pending wiring** — see below |
 | Scheduled export to an HTTP destination | **shipped.** [Endpoints](#scheduled-export) |
-| Scheduled export to S3 / GCS | **not shipped.** [What's left](#scheduled-export--whats-still-missing) |
+| Scheduled export to S3 / GCS | **not shipped.** [What's left](#scheduled-export-whats-still-missing) |
 
 ### Wiring
 

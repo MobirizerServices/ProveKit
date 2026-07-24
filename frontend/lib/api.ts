@@ -42,7 +42,7 @@ export interface Feedback {
 // can't shift the window and make a row repeat or vanish the way an offset would.
 export interface TraceQuery { status?: string; window_hours?: number; limit?: number; q?: string; cursor?: number; }
 
-export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; replay_url?: string; created_at: string; }
+export interface Project { id: number; name: string; role: string; is_default: boolean; member_count: number; retention?: number; redact_pii?: boolean; replay_url?: string; suspended_at?: string | null; suspended_reason?: string; created_at: string; }
 export interface QuotaLine { used: number; limit: number | null; pct: number | null; }
 // `limit: null` means unlimited — render that, not a meter pinned at 100%.
 export interface Usage {
@@ -401,6 +401,9 @@ export const api = {
   createProject: (name: string) => j<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name }) }),
   renameProject: (id: number, name: string) => j<{ id: number; name: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   updateProject: (id: number, patch: { name?: string; retention?: number; redact_pii?: boolean; replay_url?: string }) => j<{ id: number; name: string; retention: number; redact_pii: boolean; replay_url: string }>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  suspendProject: (id: number, suspended: boolean, reason = "") =>
+    j<{ id: number; name: string; suspended_at: string | null; suspended_reason: string }>(
+      `/api/projects/${id}/suspend`, { method: "POST", body: JSON.stringify({ suspended, reason }) }),
   deleteProject: (id: number) => j(`/api/projects/${id}`, { method: "DELETE" }),
   members: (id: number) => j<Member[]>(`/api/projects/${id}/members`),
   addMember: (id: number, email: string, role = "member") => j<Member>(`/api/projects/${id}/members`, { method: "POST", body: JSON.stringify({ email, role }) }),

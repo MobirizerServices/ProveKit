@@ -41,10 +41,12 @@ def current_workspace(request: Request, user=Depends(get_current_user),
             ws = db.get(Workspace, int(pid))
             if ws:
                 _guard_viewer(request, member.role)
+                _guard_suspended(request, ws)
                 return ws
     ws = get_or_create_default_workspace(db, user)
     member = is_member(db, ws.id, user.id)
     _guard_viewer(request, member.role if member else None)
+    _guard_suspended(request, ws)
     return ws
 
 
@@ -68,6 +70,31 @@ def _guard_viewer(request: Request, role: str | None) -> None:
                                  "Ask an owner for member access to make changes.")
 
 
+def _guard_suspended(request: Request, ws: Workspace) -> None:
+    """Refuse a write to a suspended project (#82).
+
+    Here for the same reason as `_guard_viewer`: this is the one place a request's project is
+    actually resolved, so it is the only place the decision can be made against the project the
+    write would really land in.
+
+    Reads are deliberately still served. Suspension exists to stop a project *accumulating*
+    data, not to hold it hostage — an owner being wound down needs to export, and a state that
+    hid the data would push them to hard-delete before they had a copy.
+
+    Project-level routes (suspend, delete) resolve the workspace through `_require_owner`
+    instead, so lifting a suspension and deleting a suspended project both still work.
+    """
+    from fastapi import HTTPException
+
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if ws is not None and ws.suspended_at:
+        reason = f" ({ws.suspended_reason})" if ws.suspended_reason else ""
+        raise HTTPException(403, f"This project is suspended{reason}, so it isn't accepting new "
+                                 "data or changes. Its existing data is still readable and "
+                                 "exportable. An owner can lift the suspension in Settings.")
+
+
 def workspace_from_key(db: Session, request, authorization: str | None) -> Workspace:
     """Resolve the workspace from a Bearer project key (exporters, the SDK, the MCP server),
     falling back to the session cookie for interactive/local use. Shared by every key-authed
@@ -78,10 +105,15 @@ def workspace_from_key(db: Session, request, authorization: str | None) -> Works
     if authorization and authorization.lower().startswith("bearer "):
         key = authorization[7:].strip()
         ws = apikey.resolve_workspace(db, key)
+        if not ws:
+            ws = (db.query(Workspace)
+                  .filter(Workspace.ingest_key_hash == deploy.hash_key(key)).first())
         if ws:
-            return ws
-        ws = db.query(Workspace).filter(Workspace.ingest_key_hash == deploy.hash_key(key)).first()
-        if ws:
+            # A key is how data *arrives*, so a suspended project has to be refused here too —
+            # otherwise suspension would stop the portal and not the firehose it exists to stop.
+            _guard_suspended(request, ws)
             return ws
         raise HTTPException(403, "Invalid ingest key")
-    return get_or_create_default_workspace(db, get_current_user(request, db))
+    ws = get_or_create_default_workspace(db, get_current_user(request, db))
+    _guard_suspended(request, ws)
+    return ws

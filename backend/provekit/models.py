@@ -59,6 +59,11 @@ class Workspace(Base):
     # Optional endpoint ProveKit POSTs a fork override to for exact (webhook-mode) replay — the
     # customer re-runs their real agent and returns OTLP. Empty → reconstructed replay only.
     replay_url: Mapped[str] = mapped_column(String(500), default="")
+    #: Suspension is a read-only state, not a soft delete (#82): a suspended project still
+    #: serves its data so an owner can export it, but refuses ingest and mutation so it stops
+    #: accumulating more.
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    suspended_reason: Mapped[str] = mapped_column(String(300), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

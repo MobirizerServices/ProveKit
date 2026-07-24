@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const [redact, setRedact] = useState(false);
   const [replayUrl, setReplayUrl] = useState("");
   const [err, setErr] = useState("");
+  const [deleted, setDeleted] = useState("");
 
   const load = useCallback(() => {
     api.projects().then((ps) => {
@@ -63,9 +64,19 @@ export default function SettingsPage() {
   });
   const doRename = () => wrap(async () => { if (sel) { await api.renameProject(sel, rename.trim()); load(); } });
   const saveSettings = () => wrap(async () => { if (sel) { await api.updateProject(sel, { retention, redact_pii: redact, replay_url: replayUrl.trim() }); load(); } });
+  const doSuspend = (on: boolean) => wrap(async () => {
+    if (!sel) return;
+    const reason = on ? (prompt("Reason (optional) — shown to anyone whose write is refused:") ?? "") : "";
+    await api.suspendProject(sel, on, reason);
+    load();
+  });
   const doDelete = () => wrap(async () => {
     if (sel && confirm("Delete this project and all its traces, datasets, and keys? This cannot be undone.")) {
-      await api.deleteProject(sel);
+      const r = await api.deleteProject(sel) as { removed?: Record<string, number>; verified_empty?: boolean };
+      const rows = Object.values(r?.removed || {}).reduce((a, b) => a + b, 0);
+      setDeleted(r?.verified_empty === false
+        ? "Project deleted, but some rows could not be removed — check the server log."
+        : `Project deleted — ${rows.toLocaleString()} row${rows === 1 ? "" : "s"} removed and verified gone.`);
       if (String(sel) === getProjectId()) setProjectId(null);
       setSel(null); load();
     }
@@ -81,6 +92,7 @@ export default function SettingsPage() {
           status={current ? `${current.name} · ${current.role}${current.is_default ? " · default" : ""}` : undefined} />
 
         {err && <div className="auth-err" style={{ marginBottom: 14 }}>{err}</div>}
+        {deleted && <div className="set2-note">{deleted}</div>}
 
         <div className="set2">
           {/* LEFT — project picker + settings nav */}
@@ -158,6 +170,24 @@ export default function SettingsPage() {
                         <button className="btn btn-sm" onClick={saveSettings} disabled={!isOwner}>Save</button>
                       </div>
                     </div>
+
+                    {isOwner && (
+                      <div className="set2-toggle-row" style={{ marginTop: 6 }}>
+                        <div>
+                          <div className="set2-toggle-label">
+                            Suspend project
+                            {current.suspended_at && <span className="set2-susp">suspended</span>}
+                          </div>
+                          <p className="set2-help" style={{ margin: 0 }}>
+                            Stops this project accepting new traces or changes. Existing data stays
+                            readable and exportable, so you can get it out before deciding to delete.
+                            {current.suspended_reason ? ` Reason: ${current.suspended_reason}` : ""}
+                          </p>
+                        </div>
+                        <button className={`au2-toggle ${current.suspended_at ? "on" : ""}`}
+                          onClick={() => doSuspend(!current.suspended_at)}><span className="au2-toggle-knob" /></button>
+                      </div>
+                    )}
 
                     {isOwner && (
                       <div className="set2-danger">

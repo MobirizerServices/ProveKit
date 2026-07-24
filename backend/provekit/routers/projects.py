@@ -1,18 +1,20 @@
 """Projects (workspaces) — a user can own/belong to several, each an isolated tenant with
 its own keys, traces, datasets, experiments, and members. The active project is chosen by
 the client via the `X-Project-Id` header (see services.workspace.current_workspace)."""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import (Alert, ApiKey, Dataset, DatasetItem, Experiment, ExperimentResult,
-                      Feedback, Flow, FlowRun, FlowVersion, Run, User, Workspace,
-                      WorkspaceMember, iso_utc)
-from ..services import audit, errors, limits, roles
+from ..models import Run, User, Workspace, WorkspaceMember, _now, iso_utc
+from ..services import audit, errors, limits, roles, tenant
 from ..services.auth import get_current_user
 from ..services.workspace import get_or_create_default_workspace, is_member
+
+log = logging.getLogger("provekit.projects")
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -68,7 +70,9 @@ def list_projects(user: User = Depends(get_current_user), db: Session = Depends(
                   .group_by(WorkspaceMember.workspace_id).all())
     return [{"id": w.id, "name": w.name, "role": role, "is_default": w.id == default.id,
              "member_count": counts.get(w.id, 1), "retention": w.retention,
-             "redact_pii": w.redact_pii, "replay_url": w.replay_url, "created_at": iso_utc(w.created_at)}
+             "redact_pii": w.redact_pii, "replay_url": w.replay_url,
+             "suspended_at": iso_utc(w.suspended_at), "suspended_reason": w.suspended_reason or "",
+             "created_at": iso_utc(w.created_at)}
             for w, role in rows]
 
 
@@ -112,22 +116,56 @@ def update_project(pid: int, data: _ProjectPatch, request: Request,
             "replay_url": ws.replay_url}
 
 
+class _SuspendIn(BaseModel):
+    suspended: bool = True
+    reason: str = ""
+
+
+@router.post("/{pid}/suspend")
+def suspend_project(pid: int, data: _SuspendIn, request: Request,
+                    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Stop a project taking new data without destroying what it has (#82).
+
+    Deliberately read-only rather than a soft delete: an owner being wound down still needs to
+    export, and a state that hid the data would push them to hard-delete before they had it.
+    """
+    ws = _require_owner(db, pid, user)
+    ws.suspended_at = _now() if data.suspended else None
+    ws.suspended_reason = (data.reason or "")[:300] if data.suspended else ""
+    db.commit(); db.refresh(ws)
+    audit.record(db, user, audit.PROJECT_UPDATE, workspace_id=ws.id, target_type="project",
+                 target_id=ws.id, target_label=ws.name,
+                 detail={"suspended": bool(data.suspended), "reason": ws.suspended_reason},
+                 request=request)
+    return {"id": ws.id, "name": ws.name, "suspended_at": iso_utc(ws.suspended_at),
+            "suspended_reason": ws.suspended_reason}
+
+
 @router.delete("/{pid}")
 def delete_project(pid: int, request: Request, user: User = Depends(get_current_user),
                    db: Session = Depends(get_db)):
+    """Delete a project and everything in it, and say what was removed (#82).
+
+    The tables are discovered from the mapper rather than listed here — see services/tenant.py.
+    A hand-written list drifted twice, most recently leaving thirteen tenant-scoped tables
+    behind including the sealed provider keys, while the UI reported the project deleted.
+    """
     ws = _require_owner(db, pid, user)
     name, span_count = ws.name, db.query(Run).filter(Run.workspace_id == ws.id).count()
-    # Remove all tenant-scoped data before the project row (SQLite won't cascade for us).
-    for model in (ExperimentResult, Experiment, DatasetItem, Dataset, Feedback, Alert, Run, ApiKey,
-                  FlowRun, FlowVersion, Flow, WorkspaceMember):
-        db.query(model).filter(model.workspace_id == ws.id).delete(synchronize_session=False)
+    removed = tenant.purge(db, ws.id)
     db.delete(ws)
     db.commit()
+    # Verify rather than assume: the whole point of this endpoint is that the data is gone.
+    left = tenant.remaining(db, pid)
+    if left:
+        log.error("tenant purge left rows behind for workspace %s: %s", pid, left)
     # workspace_id is left null: the project it pointed at no longer exists, and an FK to a
     # deleted row is exactly what would make this record disappear with its subject.
     audit.record(db, user, audit.PROJECT_DELETE, target_type="project", target_id=pid,
-                 target_label=name, detail={"spans_deleted": span_count}, request=request)
-    return {"ok": True}
+                 target_label=name,
+                 detail={"spans_deleted": span_count, "removed": removed,
+                         "verified_empty": not left}, request=request)
+    return {"ok": True, "removed": removed, "verified_empty": not left, "remaining": left}
 
 
 # ---- members ----

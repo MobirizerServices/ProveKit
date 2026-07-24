@@ -160,6 +160,33 @@ def _span_to_otlp(span) -> dict:
     return out
 
 
+@contextlib.contextmanager
+def _no_self_trace():
+    """Don't instrument ProveKit's own HTTP calls.
+
+    `provekit[http]` instruments httpx, and the SDK talks to the portal over httpx — so
+    exporting a batch, fetching a prompt and posting a score were each captured as spans, which
+    were then exported, which produced more spans. They arrive parentless, so they land in the
+    trace list as top-level runs named "GET" and "POST" carrying no model, no tokens and no
+    input: in a first real run of the demo agent, 19 of 24 traces were this noise.
+
+    It is worse than clutter. Those rows are counted: they drag the error rate and p95 toward
+    the latency of ProveKit's own API, and they push real runs off the first page of a list
+    people scan by eye.
+
+    Best-effort by design — the helper only exists once an instrumentation package is
+    installed, and tracing must never be the thing that breaks a customer's process, so a
+    missing import degrades to "no suppression" rather than raising.
+    """
+    try:
+        from opentelemetry.instrumentation.utils import suppress_instrumentation
+    except Exception:                                     # noqa: BLE001 — optional dependency
+        yield
+        return
+    with suppress_instrumentation():
+        yield
+
+
 class _ProveKitExporter:
     """A minimal OTel SpanExporter that ships spans to ProveKit's /v1/traces as OTLP-JSON.
 
@@ -179,8 +206,9 @@ class _ProveKitExporter:
         by never looking — silently drops exactly the spans the retry path exists for.
         """
         import httpx
-        r = httpx.post(self._url, json=body, headers=self._headers, timeout=5,
-                       follow_redirects=False)
+        with _no_self_trace():
+            r = httpx.post(self._url, json=body, headers=self._headers, timeout=5,
+                           follow_redirects=False)
         if r.status_code >= 400:
             log.debug("provekit trace export rejected: HTTP %s", r.status_code)
             return False
@@ -453,9 +481,10 @@ def get_prompt(name: str, *, label: str = "", key: str = "", default=None) -> di
         return default
     try:
         import httpx
-        r = httpx.get(f"{endpoint}/v1/prompts/{name}",
-                      params={"label": label, "key": key},
-                      headers={"Authorization": f"Bearer {api_key}"}, timeout=5)
+        with _no_self_trace():
+            r = httpx.get(f"{endpoint}/v1/prompts/{name}",
+                          params={"label": label, "key": key},
+                          headers={"Authorization": f"Bearer {api_key}"}, timeout=5)
         if r.status_code >= 400:
             log.debug("provekit: prompt %r fetch returned %s", name, r.status_code)
             return default
@@ -499,8 +528,10 @@ def score(name: str, *, score: float | None = None, value: str | None = None,
     body = {"name": name, "score": score, "value": value, "comment": comment, "source": "sdk"}
     try:
         import httpx
-        httpx.post(f"{_endpoint}/v1/traces/{trace_id}/feedback", json=body,
-                   headers={"Authorization": f"Bearer {_api_key}"}, timeout=5, follow_redirects=False)
+        with _no_self_trace():
+            httpx.post(f"{_endpoint}/v1/traces/{trace_id}/feedback", json=body,
+                       headers={"Authorization": f"Bearer {_api_key}"}, timeout=5,
+                       follow_redirects=False)
         return True
     except Exception as exc:  # never let a feedback post surface into the user's app
         log.debug("provekit score post failed: %s", exc)

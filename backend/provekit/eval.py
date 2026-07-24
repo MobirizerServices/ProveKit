@@ -18,6 +18,8 @@ import json
 
 import httpx
 
+from .trace import _no_self_trace
+
 from . import scorers as _scorers
 from . import trace as _trace
 
@@ -25,24 +27,40 @@ _TIMEOUT = 60
 
 
 def _get(endpoint, headers, path):
-    r = httpx.get(f"{endpoint}{path}", headers=headers, timeout=_TIMEOUT, follow_redirects=False)
+    with _no_self_trace():
+        r = httpx.get(f"{endpoint}{path}", headers=headers, timeout=_TIMEOUT, follow_redirects=False)
     r.raise_for_status()
     return r.json()
 
 
 def _post(endpoint, headers, path, body):
-    r = httpx.post(f"{endpoint}{path}", headers=headers, json=body, timeout=_TIMEOUT, follow_redirects=False)
+    with _no_self_trace():
+        r = httpx.post(f"{endpoint}{path}", headers=headers, json=body, timeout=_TIMEOUT,
+                       follow_redirects=False)
     r.raise_for_status()
     return r.json()
 
 
 def _resolve_dataset_id(endpoint, headers, dataset) -> int:
+    """Accept an id or a name — and an id that arrived as a string.
+
+    The id is a number everywhere it is shown (the portal, `provekit datasets list`), and the
+    two places it is most often read from — an environment variable and a CLI argument — hand
+    it back as text. `evaluate("2", …)` then fell through to the name lookup and reported
+    `dataset '2' not found`, which is true and completely misleading: the dataset exists, and
+    nothing in the message suggests the type is what is wrong.
+    """
     if isinstance(dataset, int):
         return dataset
+    if isinstance(dataset, str) and dataset.strip().isdigit():
+        return int(dataset.strip())
+    names = []
     for d in _get(endpoint, headers, "/v1/datasets"):
         if d.get("name") == dataset:
             return d["id"]
-    raise ValueError(f"dataset {dataset!r} not found")
+        names.append(d.get("name"))
+    raise ValueError(
+        f"dataset {dataset!r} not found — this project has: {', '.join(map(str, names)) or 'none'}")
 
 
 def evaluate(dataset, target, scorers, *, name: str = "experiment") -> dict:

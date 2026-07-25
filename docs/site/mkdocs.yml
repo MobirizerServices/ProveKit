@@ -9,8 +9,9 @@
 # Build it:   mkdocs build --strict -f docs/site/mkdocs.yml
 # Serve it:   mkdocs serve -f docs/site/mkdocs.yml     # http://127.0.0.1:8000
 #
-# NOTHING IS DEPLOYED. There is no provekit docs site on the internet; CI builds this to catch
-# a broken build, and stops there. See docs/site/README.md for what publishing would take.
+# Deployed at https://provekit.online/docs — the `docs` service in compose.prod.yml builds this
+# with `docs/site/Dockerfile` (MkDocs -> nginx) and Caddy routes /docs/* to it. CI still builds
+# it with --strict on every push so a broken docs build is caught before it ships.
 
 site_name: ProveKit docs
 site_description: Drop-in tracing, debugging and evaluation for AI agents.
@@ -23,10 +24,19 @@ docs_dir: ..
 # already in .gitignore, so rendered HTML cannot be committed by accident.
 site_dir: ../../build/docs-site
 
-# This directory holds the scaffold, not documentation. Excluding it keeps mkdocs.yml and the
-# hook out of the rendered site; docs/site/README.md is read on GitHub, not published.
+# Kept out of the PUBLIC site. These are real files and stay in the repo — readable on GitHub —
+# but they are internal planning, not user documentation: go-to-market plans and the working
+# roadmaps we track features against. A visitor to provekit.online/docs wants to learn the
+# product, not read our launch checklist. They are dropped from the nav below too, so a strict
+# build doesn't warn about excluded-but-linked pages.
 exclude_docs: |
   site/
+  launch/
+  LANDING_ROADMAP.md
+  UI_ROADMAP_200.md
+  AGENTFLOW_50.md
+  ROADMAP.md
+  design/
 
 theme:
   name: material
@@ -128,15 +138,10 @@ nav:
       - Adding an instrumentor: CONTRIBUTING_INSTRUMENTORS.md
       - Custom span renderers: CUSTOM_RENDERERS.md
       - Terraform provider (prototype): TERRAFORM.md
-  - Design & planning:
-      - Interactive debugging: design/INTERACTIVE_DEBUGGING.md
-      - Roadmap (100): ROADMAP_100.md
-      - Roadmap (original): ROADMAP.md
-      - Landing roadmap: LANDING_ROADMAP.md
-      - UI roadmap (200): UI_ROADMAP_200.md
-      - Agent flow (50): AGENTFLOW_50.md
-      - Launch kit: launch/LAUNCH_KIT.md
-      - Launch plan: launch/LAUNCH.md
+  - Project:
+      # The one planning doc worth publishing: what is shipped and what is not. The rest
+      # (launch plans, UI/agent-flow roadmaps) are excluded above — internal, not for users.
+      - Roadmap: ROADMAP_100.md
 
 hooks:
   - hooks/version_stamp.py

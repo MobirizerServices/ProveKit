@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
-const DOCS = "https://github.com/MobirizerServices/ProveKit/tree/main/docs";
+const DOCS = "/docs/";   // the on-domain MkDocs site (served by Caddy → docs container)
 const REPO = "https://github.com/MobirizerServices/ProveKit";
 
 export default function Landing() {
@@ -40,7 +40,7 @@ export default function Landing() {
             <Link href="/traces">Live sandbox</Link>
             <a href="#teams">Solutions</a>
             <a href="#pricing">Pricing</a>
-            <a href={DOCS} target="_blank" rel="noreferrer">Docs</a>
+            <a href={DOCS}>Docs</a>
             <a href="#trust">Trust center</a>
           </nav>
           <div className="pk-header-cta">
@@ -58,7 +58,7 @@ export default function Landing() {
           <Link href="/traces">Live sandbox</Link>
           <a href="#teams">Solutions</a>
           <a href="#pricing">Pricing</a>
-          <a href={DOCS} target="_blank" rel="noreferrer">Docs</a>
+          <a href={DOCS}>Docs</a>
           <a href="#trust">Trust center</a>
           <Link href={authed ? "/traces" : "/login"}>{authed ? "Workspace" : "Sign in"}</Link>
           <Link href={start}>{startLabel}</Link>

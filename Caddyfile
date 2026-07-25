@@ -1,5 +1,11 @@
 # ProveKit reverse proxy. Set DOMAIN (e.g. provekit.example.com) — Caddy auto-provisions
-# TLS via Let's Encrypt. /api and /v1 go to the backend; everything else to the frontend.
+# TLS via Let's Encrypt.
+#
+# Routing, in explicit handle blocks so precedence is unambiguous rather than resting on
+# directive order:
+#   /api, /v1, /healthz  → backend  (the JSON API and OTLP ingest)
+#   /docs, /docs/*       → docs     (the static MkDocs site)
+#   everything else      → frontend (the Next.js portal + marketing site)
 {$DOMAIN} {
 	encode zstd gzip
 
@@ -11,7 +17,20 @@
 	}
 
 	@api path /api/* /v1/* /healthz
-	reverse_proxy @api backend:8000
+	handle @api {
+		reverse_proxy backend:8000
+	}
 
-	reverse_proxy frontend:3000
+	# The docs container serves the site at its own root, so strip the /docs prefix before
+	# proxying. `redir /docs /docs/` handles the bare path — handle_path only matches /docs/*,
+	# and the site's own links are all relative, so once you're inside /docs/ everything
+	# resolves without the prefix leaking into a link.
+	redir /docs /docs/
+	handle_path /docs/* {
+		reverse_proxy docs:80
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
 }

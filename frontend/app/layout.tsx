@@ -14,9 +14,12 @@ const mono = Geist_Mono({
   variable: "--font-mono",
 });
 
+// Leads with what it concretely is, matching the hero. This is the text a shared link shows
+// in a preview card — the same 5-second test the eyebrow had to pass.
 const DESC =
-  "Design, trace, replay, and evaluate every agent decision in one reliability workspace — " +
-  "without stitching together five different tools. OpenTelemetry native, self-host ready.";
+  "Tracing, replay and evals for AI agents. See every call your agent makes, replay a run to " +
+  "reproduce a bug, and score changes before they ship — in one place. OpenTelemetry native, " +
+  "self-host ready.";
 
 export const metadata: Metadata = {
   // Prod resolves OG/Twitter image URLs against this — set NEXT_PUBLIC_SITE_URL in deploy.
@@ -54,8 +57,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "ProveKit — Build agents. Prove they work.",
-    description:
-      "The evidence layer for production AI. Trace → replay → evaluate every agent decision in one reliability workspace.",
+    description: DESC,   // one description, concrete, everywhere — no second abstract copy
   },
   alternates: { canonical: "/" },
 };

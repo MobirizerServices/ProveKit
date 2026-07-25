@@ -12,6 +12,11 @@ FROM python:3.12-slim AS build
 RUN pip install --no-cache-dir "mkdocs-material>=9,<10"
 WORKDIR /w
 COPY docs/ ./docs/
+# The version-stamp hook reads the release number from backend/pyproject.toml at
+# <root>/backend/pyproject.toml (relative to docs/site/hooks/). Without it the hook logs a
+# warning, and under --strict a warning is a build failure — so ship it the one file it needs,
+# not the whole backend. Keeps the site correctly version-stamped.
+COPY backend/pyproject.toml ./backend/pyproject.toml
 # -d /site overrides mkdocs.yml's site_dir (which points into the repo's gitignored build/).
 RUN mkdocs build --strict -f docs/site/mkdocs.yml -d /site
 

@@ -32,7 +32,7 @@ jobs:
           echo "::error::docs/openapi.json is out of date — run 'python scripts/export_openapi.py' and commit the result."
       - name: Upload the regenerated spec
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openapi.json
           path: docs/openapi.json

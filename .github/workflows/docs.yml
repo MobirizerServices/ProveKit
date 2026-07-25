@@ -36,7 +36,7 @@ jobs:
       - name: Upload the rendered site
         # An artifact, not a deployment: reviewers can download and open it locally. Rendered
         # HTML is never committed — a checked-in copy of the docs starts drifting immediately.
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docs-site
           path: build/docs-site

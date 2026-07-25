@@ -68,6 +68,11 @@ theme:
 plugins:
   # The one thing a markdown tree in a repo cannot give you: full-text search over every guide.
   - search
+  # Downloads Google Fonts (and any other external asset) at BUILD time and rewrites the links
+  # to local copies, so the served site makes zero third-party requests. The docs then load —
+  # and look right — behind a corporate proxy, in a region that blocks Google, and without
+  # telling Google who read them. Build-time cost only; the runtime image is still just nginx.
+  - privacy
 
 markdown_extensions:
   - admonition

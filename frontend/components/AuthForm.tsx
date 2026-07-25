@@ -85,9 +85,12 @@ export default function AuthForm({ initial }: { initial: "login" | "signup" }) {
             </label>
           )}
           <label className="split-field">
-            <span>Work email</span>
+            {/* "Work email" + "you@company.com" read as "businesses only" and quietly turned
+                away the solo dev trying it on a side project — who is exactly the first user
+                a self-serve tool wants. Any email is fine. */}
+            <span>Email</span>
             <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email" autoFocus placeholder="you@company.com" />
+              autoComplete="email" autoFocus placeholder="you@example.com" />
           </label>
           <label className="split-field">
             <span>Password</span>

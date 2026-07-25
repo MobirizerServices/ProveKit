@@ -88,14 +88,18 @@ export default function Landing() {
               <span className="pk-kicker-tag"><i className="pk-dot" />AI reliability workspace</span>
               <span>Trace → Replay → Evaluate</span>
             </div>
-            <div className="pk-hero-eyebrow"><i />The evidence layer for production AI</div>
+            {/* Concrete, not poetic. "The evidence layer for production AI" made a stranger
+                read the whole hero to learn it is tracing — the 5-second test failed. This
+                names the category in the first line the eye lands on; the headline keeps the
+                voice, the lede keeps the detail. */}
+            <div className="pk-hero-eyebrow"><i />Tracing, replay &amp; evals for AI agents</div>
             <h1>
               Build agents.<br />
               <span className="pk-grad">Prove they work.</span>
             </h1>
             <p className="pk-lede">
-              Design, trace, replay, and evaluate every agent decision in one reliability
-              workspace—without stitching together five different tools.
+              See every call your agent makes, replay a run to reproduce a bug, and score changes
+              before they ship — in one place, instead of stitching together five different tools.
             </p>
             <div className="pk-btns">
               <Link href={start} className="pk-btn pk-btn-primary">{startLabel} <Arrow /></Link>

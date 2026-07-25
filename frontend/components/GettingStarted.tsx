@@ -47,36 +47,32 @@ export default function GettingStarted({ traceCount }: { traceCount: number | nu
   // the panel does not even render for them. A boolean flips at most once.
   const seenATrace = traceCount == null ? null : traceCount > 0;
 
-  // Fetched narrowly, and in the order that lets us stop early.
+  // Fetched in parallel, not in sequence.
   //
-  // Overview previously made two requests; a naive version of this panel made three more, on
-  // every load, for every account — including the overwhelming majority for whom it renders
-  // nothing at all. An onboarding checklist that taxes people who finished onboarding is a bad
-  // trade, and it is a permanent one.
+  // An earlier version chained these three requests to stop early once a project was clearly
+  // done. But the projects that stop early are the ones that render *nothing* — latency there
+  // is invisible. The projects that pay the full chain are exactly the ones that DO render the
+  // checklist, and three serial round-trips made it pop in a beat after the dashboard, or look
+  // absent on a fast glance (which is how it read in the new-user audit). Firing all three at
+  // once means the checklist appears with the page, not after it.
   //
-  // So: an experiment existing settles the last step on its own, and a trace that arrived
-  // settles the first (a run cannot arrive without a working key). An established project
-  // therefore costs one request and then renders null. Only a project that still has something
-  // left to do pays for the rest.
+  // This runs at most once per mount (seenATrace flips once, never on the 10s metrics poll), so
+  // the extra request for a done project is a one-time cost, not the every-poll tax the earlier
+  // rewrite removed.
   useEffect(() => {
     let live = true;
     if (seenATrace == null) return;
 
-    (async () => {
-      const exps = await api.experiments().catch(() => [] as Experiment[]);
+    Promise.all([
+      api.experiments().catch(() => [] as Experiment[]),
+      api.datasets().catch(() => [] as Dataset[]),
+      api.apiKeys().catch(() => [] as ApiKey[]),
+    ]).then(([exps, ds, k]) => {
       if (!live) return;
-      if ((exps?.length ?? 0) > 0) {
-        setScored(true);
-        if (seenATrace) { setKeys([]); return; }             // all three done — stop here
-      } else {
-        const ds = await api.datasets().catch(() => [] as Dataset[]);
-        if (!live) return;
-        setScored((ds?.length ?? 0) > 0);
-      }
-      // Only needed to show the key count, and only on a panel that will actually render.
-      const k = await api.apiKeys().catch(() => [] as ApiKey[]);
-      if (live) setKeys(k);
-    })();
+      // "Score a run" is done once either an experiment or a dataset exists.
+      setScored((exps?.length ?? 0) > 0 || (ds?.length ?? 0) > 0);
+      setKeys(k);
+    });
 
     return () => { live = false; };
   }, [seenATrace]);
